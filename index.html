@@ -6,6 +6,41 @@
 <title>FamOfi Registry</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script>
+// ── Firebase config — paste your values here ──────────────────────────────────
+var firebaseConfig = {
+  apiKey: "AIzaSyBJtmNQV6dUYQ7qBesXrl0zPrlHP2zjngo",
+  authDomain: "famofi-empresas.firebaseapp.com",
+  projectId: "famofi-empresas",
+  storageBucket: "famofi-empresas.firebasestorage.app",
+  messagingSenderId: "960254126953",
+  appId: "1:960254126953:web:dbeb3be6f02c97288e6bf8"
+};
+firebase.initializeApp(firebaseConfig);
+var _db = firebase.firestore();
+var _REF = _db.collection("famofi").doc("main");
+
+window._fbSave = function(d) {
+  return _REF.set({ payload: JSON.stringify(d) }).catch(function(e) {
+    localStorage.setItem("fm_data", JSON.stringify(d));
+  });
+};
+window._fbSubscribe = function(cb) {
+  return _REF.onSnapshot(function(snap) {
+    if (snap.exists) { try { cb(JSON.parse(snap.data().payload)); } catch(e) {} }
+  }, function() {});
+};
+window._fbLoad = function() {
+  return _REF.get().then(function(snap) {
+    if (snap.exists) return JSON.parse(snap.data().payload);
+    return null;
+  }).catch(function() { return null; });
+};
+// Signal ready
+window._fbReady = true;
+</script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -151,29 +186,7 @@ textarea.inp{resize:vertical;min-height:60px}
 </div>
 
 <script>
-// ── Firebase (optional) ───────────────────────────────────────────────────────
-(function(){
-  var s=document.createElement('script');
-  s.type='module';
-  s.textContent=[
-    'import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";',
-    'import{getFirestore,doc,onSnapshot,setDoc,getDoc}from"https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";',
-    var cfg={
-  apiKey:"AIzaSyBJtmNQV6dUYQ7qBesXrl0zPrlHP2zjngo",
-  authDomain:"famofi-empresas.firebaseapp.com",
-  projectId:"famofi-empresas",
-  storageBucket:"famofi-empresas.firebasestorage.app",
-  messagingSenderId:"960254126953",
-  appId:"1:960254126953:web:dbeb3be6f02c97288e6bf8"
-};
-    'var app=initializeApp(cfg);var db=getFirestore(app);var REF=doc(db,"famofi","main");',
-    'window._fbSave=async function(d){try{await setDoc(REF,{payload:JSON.stringify(d)});}catch(e){localStorage.setItem("fm_data",JSON.stringify(d));}};',
-    'window._fbSubscribe=function(cb){return onSnapshot(REF,function(snap){if(snap.exists()){try{cb(JSON.parse(snap.data().payload));}catch(e){}}},function(){});};',
-    'window._fbLoad=async function(){try{var s=await getDoc(REF);if(s.exists())return JSON.parse(s.data().payload);}catch(e){}return null;};',
-    'window.dispatchEvent(new Event("firebase-ready"));'
-  ].join('');
-  document.head.appendChild(s);
-})();
+// ── Firebase ──────────────────────────────────────────────────────────────────
 
 // ── i18n ──────────────────────────────────────────────────────────────────────
 var T={
@@ -331,7 +344,6 @@ function applyLoaded(d){
 }
 
 function bootstrap(){
-  var fbLoad=window._fbLoad;
   var doStart=function(loaded){
     if(loaded){ applyLoaded(loaded); }
     else {
@@ -346,15 +358,30 @@ function bootstrap(){
     document.getElementById('app').style.display='flex';
     render();
   };
-  if(fbLoad){
-    fbLoad().then(doStart).catch(function(){doStart(null);});
-  } else { doStart(null); }
+
+  // Try Firebase with a 5s timeout fallback
+  var done=false;
+  function finish(loaded){
+    if(done) return;
+    done=true;
+    doStart(loaded);
+  }
+
+  setTimeout(function(){ finish(null); }, 5000); // fallback
+
+  if(window._fbLoad){
+    window._fbLoad().then(function(d){ finish(d); }).catch(function(){ finish(null); });
+  } else {
+    finish(null);
+  }
 }
 
-window.addEventListener('firebase-ready',bootstrap);
-setTimeout(function(){
-  if(document.getElementById('loading').style.display!=='none') bootstrap();
-},4000);
+// Start — works whether DOM is ready or not
+if(document.readyState==='loading'){
+  window.addEventListener('DOMContentLoaded',bootstrap);
+} else {
+  bootstrap();
+}
 
 // ── Router ────────────────────────────────────────────────────────────────────
 var page='overview';
