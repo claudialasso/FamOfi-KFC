@@ -7,9 +7,11 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <script>
-// ── Firebase config — paste your values here ──────────────────────────────────
+// ── Firebase config ───────────────────────────────────────────────────────────
 var firebaseConfig = {
   apiKey: "AIzaSyBJtmNQV6dUYQ7qBesXrl0zPrlHP2zjngo",
   authDomain: "famofi-empresas.firebaseapp.com",
@@ -19,27 +21,11 @@ var firebaseConfig = {
   appId: "1:960254126953:web:dbeb3be6f02c97288e6bf8"
 };
 firebase.initializeApp(firebaseConfig);
-var _db = firebase.firestore();
-var _REF = _db.collection("famofi").doc("main");
-
-window._fbSave = function(d) {
-  return _REF.set({ payload: JSON.stringify(d) }).catch(function(e) {
-    localStorage.setItem("fm_data", JSON.stringify(d));
-  });
-};
-window._fbSubscribe = function(cb) {
-  return _REF.onSnapshot(function(snap) {
-    if (snap.exists) { try { cb(JSON.parse(snap.data().payload)); } catch(e) {} }
-  }, function() {});
-};
-window._fbLoad = function() {
-  return _REF.get().then(function(snap) {
-    if (snap.exists) return JSON.parse(snap.data().payload);
-    return null;
-  }).catch(function() { return null; });
-};
-// Signal ready
-window._fbReady = true;
+var _auth = firebase.auth();
+var _db   = firebase.firestore();
+var _storage = firebase.storage();
+var _REF  = _db.collection('famofi').doc('main');
+var _ROLES_REF = _db.collection('famofi').doc('roles');
 </script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -58,10 +44,29 @@ window._fbReady = true;
   --shadow-md:0 4px 20px rgba(79,110,247,.12);
 }
 body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.55;min-height:100vh}
-#app{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+
+/* ── Login ── */
+#login-screen{position:fixed;inset:0;background:linear-gradient(135deg,#1e2340 0%,#3a57e8 100%);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px}
+.login-card{background:#fff;border-radius:20px;padding:40px 36px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
+.login-logo{font-size:22px;font-weight:800;color:var(--accent);margin-bottom:6px}
+.login-logo span{color:var(--text2);font-weight:400}
+.login-subtitle{font-size:13px;color:var(--text3);margin-bottom:28px}
+.login-field{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
+.login-field label{font-size:12px;font-weight:600;color:var(--text2)}
+.login-field input{padding:11px 13px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:14px;font-family:inherit;outline:none;transition:border .15s}
+.login-field input:focus{border-color:var(--accent)}
+.login-btn{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);font-size:15px;font-weight:700;cursor:pointer;margin-top:8px;transition:background .15s}
+.login-btn:hover{background:var(--accent2)}
+.login-error{background:var(--red-bg);color:var(--red);padding:10px 13px;border-radius:var(--radius-sm);font-size:13px;margin-top:10px;display:none}
+.login-role-badge{text-align:center;margin-top:16px;font-size:12px;color:var(--text3)}
+
+/* ── Loading ── */
 #loading{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;gap:16px}
 .spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
+
+/* ── App ── */
+#app{display:flex;flex-direction:column;height:100vh;overflow:hidden;display:none}
 header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 20px;display:flex;align-items:center;justify-content:space-between;height:56px;flex-shrink:0;gap:10px;box-shadow:var(--shadow)}
 .logo{font-weight:700;font-size:16px;color:var(--accent);white-space:nowrap}
 .logo span{color:var(--text2);font-weight:400}
@@ -71,14 +76,22 @@ nav button:hover{background:var(--accent-bg);color:var(--accent)}
 nav button.active{background:var(--accent);color:#fff}
 .hdr-right{display:flex;gap:8px;align-items:center}
 #sync-dot{width:8px;height:8px;border-radius:50%;background:var(--teal);transition:background .3s}
+.user-badge{font-size:11px;font-weight:600;padding:3px 10px;border-radius:20px;background:var(--accent-bg);color:var(--accent)}
+.admin-badge{background:var(--purple-bg);color:var(--purple)}
 .lang-btn{background:none;border:1.5px solid var(--border);padding:4px 12px;border-radius:20px;cursor:pointer;font-size:12px;font-weight:600;color:var(--text2);font-family:inherit}
-.lang-btn:hover{border-color:var(--accent);color:var(--accent)}
+.logout-btn{background:none;border:1.5px solid var(--border);padding:4px 12px;border-radius:20px;cursor:pointer;font-size:12px;color:var(--text2);font-family:inherit}
+.logout-btn:hover{border-color:var(--red);color:var(--red)}
 main{flex:1;overflow-y:auto;padding:24px}
+
+/* ── Read-only banner ── */
+.readonly-banner{background:var(--amber-bg);border:1px solid var(--amber);border-radius:var(--radius-sm);padding:8px 14px;font-size:12px;color:var(--amber);margin-bottom:16px;display:flex;align-items:center;gap:8px}
+
+/* ── Cards & layout ── */
 .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 22px;box-shadow:var(--shadow)}
 .kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:22px}
 .kpi{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow)}
 .kpi-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;font-weight:600}
-.kpi-val{font-size:26px;font-weight:700;color:var(--text)}
+.kpi-val{font-size:26px;font-weight:700}
 .kpi-sub{font-size:11px;color:var(--text3);margin-top:3px}
 .charts-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:22px}
 .chart-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow)}
@@ -86,10 +99,14 @@ main{flex:1;overflow-y:auto;padding:24px}
 .chart-wrap{position:relative;height:160px}
 .toolbar{display:flex;gap:8px;margin-bottom:14px;align-items:center;flex-wrap:wrap}
 .search-wrap{position:relative;flex:1;min-width:160px}
-.search-wrap input{width:100%;padding:8px 12px 8px 34px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--surface);color:var(--text);outline:none;font-family:inherit;transition:border .15s}
+.search-wrap input{width:100%;padding:8px 12px 8px 34px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--surface);color:var(--text);outline:none;font-family:inherit}
 .search-wrap input:focus{border-color:var(--accent)}
 .si{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--text3);pointer-events:none}
 select.filter{padding:8px 12px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--surface);color:var(--text);outline:none;cursor:pointer;font-family:inherit}
+.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px}
+.section-title{font-size:18px;font-weight:700}
+
+/* ── Buttons ── */
 .btn{padding:8px 16px;border-radius:var(--radius-sm);font-size:13px;cursor:pointer;font-family:inherit;font-weight:600;transition:all .15s;border:none}
 .btn-primary{background:var(--accent);color:#fff}
 .btn-primary:hover{background:var(--accent2)}
@@ -100,11 +117,17 @@ select.filter{padding:8px 12px;border:1.5px solid var(--border);border-radius:va
 .btn-danger:hover{background:var(--red-bg)}
 .btn-teal{background:none;border:1.5px solid #6ee7b7;color:var(--teal)}
 .btn-teal:hover{background:var(--teal-bg)}
+.btn-purple{background:none;border:1.5px solid #c4b5fd;color:var(--purple)}
+.btn-purple:hover{background:var(--purple-bg)}
+
+/* ── Tables ── */
 table{width:100%;border-collapse:collapse}
 th{text-align:left;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;padding:9px 12px;border-bottom:2px solid var(--border)}
 td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle}
 tr:last-child td{border-bottom:none}
 tbody tr:hover td{background:var(--accent-bg)}
+
+/* ── Badges ── */
 .badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600}
 .badge-active{background:var(--teal-bg);color:var(--teal)}
 .badge-dormant{background:var(--amber-bg);color:var(--amber)}
@@ -112,9 +135,11 @@ tbody tr:hover td{background:var(--accent-bg)}
 .badge-jur{background:var(--accent-bg);color:var(--accent)}
 .badge-inv{background:var(--coral-bg);color:var(--coral)}
 .badge-fund{background:var(--purple-bg);color:var(--purple)}
+
+/* ── Modal ── */
 .overlay{position:fixed;inset:0;background:rgba(30,35,64,.45);z-index:200;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(2px)}
 .modal{background:var(--surface);border-radius:var(--radius);width:100%;max-width:760px;max-height:93vh;overflow-y:auto;box-shadow:var(--shadow-md)}
-.modal-lg{max-width:900px}
+.modal-lg{max-width:920px}
 .modal-header{padding:16px 22px 14px;border-bottom:1px solid var(--border);display:flex;align-items:flex-start;justify-content:space-between;gap:10px;position:sticky;top:0;background:var(--surface);z-index:1}
 .modal-title{font-size:16px;font-weight:700}
 .modal-subtitle{font-size:12px;color:var(--text3);margin-top:2px}
@@ -127,6 +152,8 @@ tbody tr:hover td{background:var(--accent-bg)}
 .tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:700;background:var(--accent-bg)}
 .tab-panel{display:none}
 .tab-panel.active{display:block}
+
+/* ── Forms ── */
 .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
 .form-group{display:flex;flex-direction:column;gap:5px}
 .form-group.full{grid-column:1/-1}
@@ -136,8 +163,8 @@ input.inp:focus,select.inp:focus,textarea.inp:focus{border-color:var(--accent)}
 textarea.inp{resize:vertical;min-height:60px}
 .fsec{margin-bottom:18px}
 .fsec-title{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid var(--border)}
-.section-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px}
-.section-title{font-size:18px;font-weight:700}
+
+/* ── Misc ── */
 .ownership-bar{background:var(--bg);border-radius:4px;height:5px;margin-top:3px;overflow:hidden}
 .ownership-fill{background:var(--accent);height:100%;border-radius:4px}
 .bank-sensitive{filter:blur(4px);cursor:pointer;transition:filter .2s;user-select:none;font-family:monospace}
@@ -154,40 +181,85 @@ textarea.inp{resize:vertical;min-height:60px}
 .dr:last-child{border-bottom:none}
 .dr-lbl{font-size:12px;color:var(--text3);font-weight:500}
 .dr-val{font-size:13px}
+.sh-form-row{display:grid;grid-template-columns:auto 1fr 72px 90px auto;gap:6px;align-items:center;margin-bottom:7px;padding:6px 8px;background:var(--bg);border-radius:var(--radius-xs);border:1px solid var(--border)}
+.sh-form-row input,.sh-form-row select{padding:5px 8px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-size:12px;font-family:inherit;color:var(--text);background:var(--surface);outline:none;width:100%}
+.inv-field-row{display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:center;margin-bottom:7px}
+
+/* ── Org chart ── */
 .org-card{border-radius:var(--radius-sm);padding:10px 14px;min-width:130px;max-width:170px;text-align:center;cursor:pointer;transition:all .15s;box-shadow:var(--shadow);display:inline-block;margin:4px}
 .org-card:hover{box-shadow:var(--shadow-md);transform:translateY(-2px)}
 .org-card-name{font-size:12px;font-weight:700;margin-bottom:2px}
 .org-card-sub{font-size:10px;color:var(--text3)}
-.import-area{width:100%;min-height:100px;padding:10px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:monospace;color:var(--text);background:var(--bg);outline:none;resize:vertical}
+
+/* ── Network export ── */
+.net-toolbar{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;align-items:center}
+
+/* ── Import table ── */
+.import-table-wrap{overflow-x:auto;margin-top:12px;max-height:320px;overflow-y:auto}
+.import-table{width:100%;border-collapse:collapse;font-size:12px}
+.import-table th{background:var(--accent-bg);color:var(--accent);font-size:11px;font-weight:700;padding:6px 8px;border:1px solid var(--border);white-space:nowrap}
+.import-table td{padding:4px 6px;border:1px solid var(--border)}
+.import-table input{width:100%;border:none;outline:none;font-size:12px;font-family:inherit;background:transparent;color:var(--text)}
+.import-table tr.skip{opacity:.4}
+.import-table td.skip-cell{text-align:center;width:36px}
+
+/* ── Documents ── */
+.doc-row{display:flex;align-items:center;gap:10px;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:8px}
+.doc-icon{font-size:20px;flex-shrink:0}
+.doc-name{flex:1;font-weight:500;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.doc-meta{font-size:11px;color:var(--text3)}
+.drop-upload{border:2px dashed var(--border2);border-radius:var(--radius);padding:20px;text-align:center;cursor:pointer;transition:all .15s;margin-bottom:12px}
+.drop-upload:hover{border-color:var(--accent);background:var(--accent-bg)}
+
+/* ── Import hint ── */
 .import-hint{background:var(--accent-bg);border-radius:var(--radius-sm);padding:11px 14px;font-size:12px;color:var(--accent);margin-bottom:12px;border-left:3px solid var(--accent);line-height:1.6}
 .imp-ok{background:var(--teal-bg);color:var(--teal);padding:9px 14px;border-radius:var(--radius-sm);font-size:13px;margin-top:8px}
 .imp-err{background:var(--red-bg);color:var(--red);padding:9px 14px;border-radius:var(--radius-sm);font-size:13px;margin-top:8px}
 .drop-zone{border:2px dashed var(--border2);border-radius:var(--radius);padding:22px;text-align:center;cursor:pointer;transition:all .15s;margin-bottom:12px}
 .drop-zone:hover{border-color:var(--accent);background:var(--accent-bg)}
-.inv-field-row{display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:center;margin-bottom:7px}
-.sh-form-row{display:grid;grid-template-columns:auto 1fr 72px 90px auto;gap:6px;align-items:center;margin-bottom:7px;padding:6px 8px;background:var(--bg);border-radius:var(--radius-xs);border:1px solid var(--border)}
-.sh-form-row input,.sh-form-row select{padding:5px 8px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-size:12px;font-family:inherit;color:var(--text);background:var(--surface);outline:none;width:100%}
+
+/* ── Col map ── */
+.col-map{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;margin-bottom:6px;font-size:12px}
+.col-map select{padding:5px 8px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-size:12px;font-family:inherit;color:var(--text);background:var(--surface);outline:none}
+
 @media(max-width:700px){.kpi-grid{grid-template-columns:1fr 1fr}.charts-row{grid-template-columns:1fr}.form-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
-<div id="loading"><div class="spinner"></div><div style="color:var(--text2);font-size:13px">Loading FamOfi…</div></div>
-<div id="app" style="display:none">
+
+<!-- Login -->
+<div id="login-screen">
+  <div class="login-card">
+    <div class="login-logo">FamOfi <span>Registry</span></div>
+    <div class="login-subtitle">Secure access — authorized users only</div>
+    <div class="login-field"><label>Email</label><input type="email" id="li-email" placeholder="your@email.com" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="login-field"><label>Password</label><input type="password" id="li-pass" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <button class="login-btn" onclick="doLogin()">Sign In</button>
+    <div class="login-error" id="li-err"></div>
+    <div class="login-role-badge">🔒 Private system — FamOfi</div>
+  </div>
+</div>
+
+<!-- Loading -->
+<div id="loading" style="display:none"><div class="spinner"></div><div style="color:var(--text2);font-size:13px">Loading FamOfi…</div></div>
+
+<!-- App -->
+<div id="app">
   <header>
     <div class="logo">FamOfi <span>Registry</span></div>
     <nav id="nav"></nav>
     <div class="hdr-right">
       <div id="sync-dot" title="Sync"></div>
-      <button class="btn btn-outline btn-sm" onclick="openImport()">⬆ Import</button>
+      <span id="user-badge" class="user-badge"></span>
+      <button class="btn btn-outline btn-sm" id="import-btn" onclick="openImport()">⬆ Import</button>
       <button class="lang-btn" id="langBtn" onclick="toggleLang()">ES</button>
+      <button class="logout-btn" onclick="doLogout()">Sign out</button>
     </div>
   </header>
   <main id="main"></main>
 </div>
 
 <script>
-// ── Firebase ──────────────────────────────────────────────────────────────────
-
 // ── i18n ──────────────────────────────────────────────────────────────────────
 var T={
   en:{overview:'Overview',companies:'Companies',shareholders:'Shareholders',investments:'Investments',network:'Network',
@@ -204,76 +276,94 @@ var T={
     totalCompanies:'Total Companies',activeCompanies:'Active',jurisdictions:'Jurisdictions',totalShareholders:'Shareholders',totalInvestments:'Investments',
     byJurisdiction:'By Jurisdiction',byStatus:'By Status',byPurpose:'By Purpose',byFund:'By Family Fund',byType:'By Investment Type',
     noData:'No data yet.',holdingIn:'Holdings in',companies2:'companies',pct:'avg',
-    customFields:'Custom Fields',banking:'Banking',details:'Details',subsidiaries:'Subsidiaries',orgChart:'Org Chart',
-    confirmDelete:'Delete this company? This cannot be undone.',
+    customFields:'Custom Fields',banking:'Banking',details:'Details',subsidiaries:'Subsidiaries',orgChart:'Org Chart',documents:'Documents',
+    confirmDelete:'Delete this company? Cannot be undone.',
     noCompanies:'No companies yet.',noShareholders:'No shareholders recorded.',
     allShareholders:'All Shareholders',searchShareholder:'Search shareholder…',
     notes:'Notes',importTitle:'Import Companies',networkTitle:'Ownership Network',
-    editCompany:'Edit',removeBank:'Remove',
+    editCompany:'Edit',delete:'Delete',
     invName:'Investment Name',invFund:'Family Fund',invFamily:'Family',invType:'Investment Type',
     invCommit:'Total Commitment',invCalls:'Capital Calls',invDist:'Distributions',invMV:'Market Value',
     invStatus:'Status',invNotes:'Notes',invCompany:'Company',
     addInvestment:'+ Add Investment',allFunds:'All Funds',allTypes:'All Types',
     individual:'Individual',company:'Company',ownerType:'Owner Type',
-    parentOf:'Parent of',ownedBy:'Owned by',banking2:'Banking',
-    dateHelp:'E.g.: 2015, Mar 2015, 15/03/2015',
-    editShareholder:'Edit Shareholder',
-    delete:'Delete'
+    ownedBy:'Owned by',dateHelp:'E.g.: 2015, Mar 2015, 15/03/2015',
+    editShareholder:'Edit Shareholder',readOnly:'View-only access',
+    uploadDoc:'Upload Document',noDocuments:'No documents uploaded yet.',
+    downloadChart:'Download Chart (PNG)',printChart:'Print Chart',
   },
   es:{overview:'Resumen',companies:'Empresas',shareholders:'Accionistas',investments:'Inversiones',network:'Red',
     addCompany:'+ Agregar Empresa',search:'Buscar…',allJurisdictions:'Todas las Jurisdicciones',allStatus:'Todos los Estados',
-    name:'Razón Social',jurisdiction:'Jurisdicción',purpose:'Propósito',yearFounded:'Año / Fecha de Constitución',
+    name:'Razón Social',jurisdiction:'Jurisdicción',purpose:'Propósito',yearFounded:'Año / Fecha',
     fiscalId:'ID Fiscal',ein:'EIN',irs:'Clasificación IRS',
     director:'Director',registeredAgent:'Agente Registrado',address:'Dirección',
     status:'Estado',tags:'Etiquetas',active:'Activa',dormant:'Inactiva',liquidation:'En Liquidación',
-    bankName:'Banco',accountNo:'# Cuenta',routing:'Routing / ABA',swift:'SWIFT',bankAddress:'Dir. Banco',currency:'Moneda',accountType:'Tipo de Cuenta',
+    bankName:'Banco',accountNo:'# Cuenta',routing:'Routing / ABA',swift:'SWIFT',bankAddress:'Dir. Banco',currency:'Moneda',accountType:'Tipo',
     shareholders2:'Accionistas',ownership:'% Participación',shareClass:'Clase',type:'Tipo',
     addShareholder:'+ Accionista',addBank:'+ Cuenta',addField:'+ Campo',
     fieldName:'Campo',fieldValue:'Valor',save:'Guardar',cancel:'Cancelar',
     export:'Exportar CSV',exportPDF:'Imprimir / PDF',
     totalCompanies:'Total Empresas',activeCompanies:'Activas',jurisdictions:'Jurisdicciones',totalShareholders:'Accionistas',totalInvestments:'Inversiones',
-    byJurisdiction:'Por Jurisdicción',byStatus:'Por Estado',byPurpose:'Por Propósito',byFund:'Por Fondo Familiar',byType:'Por Tipo de Inversión',
+    byJurisdiction:'Por Jurisdicción',byStatus:'Por Estado',byPurpose:'Por Propósito',byFund:'Por Fondo Familiar',byType:'Por Tipo',
     noData:'Sin datos.',holdingIn:'Participación en',companies2:'empresas',pct:'promedio',
-    customFields:'Campos',banking:'Banca',details:'Datos',subsidiaries:'Subsidiarias',orgChart:'Organigrama',
+    customFields:'Campos',banking:'Banca',details:'Datos',subsidiaries:'Subsidiarias',orgChart:'Organigrama',documents:'Documentos',
     confirmDelete:'¿Eliminar empresa? No se puede deshacer.',
     noCompanies:'Sin empresas.',noShareholders:'Sin accionistas.',
     allShareholders:'Todos los Accionistas',searchShareholder:'Buscar accionista…',
     notes:'Notas',importTitle:'Importar Empresas',networkTitle:'Red de Propiedad',
-    editCompany:'Editar',removeBank:'Quitar',
+    editCompany:'Editar',delete:'Eliminar',
     invName:'Nombre Inversión',invFund:'Fondo Familiar',invFamily:'Familia',invType:'Tipo de Inversión',
     invCommit:'Compromiso Total',invCalls:'Capital Calls',invDist:'Distribuciones',invMV:'Valor de Mercado',
     invStatus:'Estado',invNotes:'Notas',invCompany:'Empresa',
     addInvestment:'+ Agregar Inversión',allFunds:'Todos los Fondos',allTypes:'Todos los Tipos',
     individual:'Persona',company:'Empresa',ownerType:'Tipo de Propietario',
-    parentOf:'Propietaria de',ownedBy:'Propiedad de',banking2:'Banca',
-    dateHelp:'Ej: 2015, Mar 2015, 15/03/2015',
-    editShareholder:'Editar Accionista',
-    delete:'Eliminar'
+    ownedBy:'Propiedad de',dateHelp:'Ej: 2015, Mar 2015, 15/03/2015',
+    editShareholder:'Editar Accionista',readOnly:'Solo lectura',
+    uploadDoc:'Subir Documento',noDocuments:'Sin documentos subidos.',
+    downloadChart:'Descargar Gráfico (PNG)',printChart:'Imprimir Gráfico',
   }
 };
 var lang=localStorage.getItem('fm_lang')||'en';
 function t(k){return T[lang][k]||k;}
 function toggleLang(){lang=lang==='en'?'es':'en';localStorage.setItem('fm_lang',lang);document.getElementById('langBtn').textContent=lang==='en'?'ES':'EN';render();}
 
+// ── Auth state ────────────────────────────────────────────────────────────────
+var currentUser=null;
+var userRole='viewer'; // 'admin' or 'viewer'
+
+function doLogin(){
+  var email=document.getElementById('li-email').value.trim();
+  var pass=document.getElementById('li-pass').value;
+  var errEl=document.getElementById('li-err');
+  errEl.style.display='none';
+  if(!email||!pass){errEl.textContent='Please enter email and password.';errEl.style.display='block';return;}
+  _auth.signInWithEmailAndPassword(email,pass).catch(function(e){
+    errEl.textContent='Invalid email or password.';errEl.style.display='block';
+  });
+}
+function doLogout(){
+  _auth.signOut();
+}
+
 // ── Data ──────────────────────────────────────────────────────────────────────
 var data={companies:[],investments:[]};
 var _saveTimer=null;
+var _unsubscribe=null;
 
 function save(){
+  if(userRole!=='admin'){return;} // only admins can save
   setSyncDot('saving');
   clearTimeout(_saveTimer);
   _saveTimer=setTimeout(function(){
     localStorage.setItem('fm_data',JSON.stringify(data));
-    if(window._fbSave){
-      window._fbSave(data).then(function(){setSyncDot('ok');}).catch(function(){setSyncDot('error');});
-    } else { setSyncDot('ok'); }
+    _REF.set({payload:JSON.stringify(data)}).then(function(){setSyncDot('ok');}).catch(function(){setSyncDot('error');});
   },500);
 }
 function setSyncDot(s){
   var d=document.getElementById('sync-dot');if(!d)return;
-  if(s==='saving'){d.style.background='var(--amber)';d.title='Saving…';}
-  else if(s==='error'){d.style.background='var(--red)';d.title='Sync error';}
-  else{d.style.background='var(--teal)';d.title='Synced';}
+  if(s==='saving'){d.style.background='var(--amber)';}
+  else if(s==='error'){d.style.background='var(--red)';}
+  else{d.style.background='var(--teal)';}
 }
 function uid(){return '_'+Math.random().toString(36).slice(2,9);}
 function cname(id){var c=data.companies.find(function(x){return x.id===id;});return c?c.name:id;}
@@ -282,8 +372,7 @@ function getSubs(pid){return data.companies.filter(function(c){return c.sharehol
 function getParents(cid){return data.companies.filter(function(p){return getSubs(p.id).some(function(s){return s.id===cid;});});}
 function fmtD(n){return (n!=null&&n!=='') ? '$'+(+n).toLocaleString() : '—';}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-function q(id){return "'"+id+"'";}  // wraps an id in single quotes for onclick strings
-
+function q(id){return "'"+id+"'";}
 function sBadge(s){
   if(s==='active') return '<span class="badge badge-active">'+t('active')+'</span>';
   if(s==='dormant') return '<span class="badge badge-dormant">'+t('dormant')+'</span>';
@@ -293,36 +382,8 @@ function dr(label,val){
   if(!val&&val!==0) return '';
   return '<div class="dr"><div class="dr-lbl">'+label+'</div><div class="dr-val">'+val+'</div></div>';
 }
+function isAdmin(){return userRole==='admin';}
 
-// ── Seed ──────────────────────────────────────────────────────────────────────
-function seedData(){
-  var i1=uid(),i2=uid(),i3=uid(),i4=uid(),i5=uid();
-  data.companies=[
-    {id:i1,name:'FamOfi Holdings Ltd.',jurisdiction:'BVI',purpose:'Holding',yearFounded:'2010',fiscalId:'BVI-12345',ein:'',irs:'Foreign Corp',director:'Carlos Ochoa',agent:'Trident Trust',address:'Tortola, BVI',status:'active',tags:'Holding',notes:'',
-     shareholders:[{id:uid(),person:'Carlos Ochoa',pct:60,class:'Class A',type:'individual'},{id:uid(),person:'María Ochoa',pct:40,class:'Class A',type:'individual'}],
-     banking:[{id:uid(),bank:'HSBC Private Bank',account:'****4821',routing:'',swift:'HBUKGB4B',bankAddr:'London, UK',currency:'USD',type:'Checking'}],custom:[]},
-    {id:i2,name:'Grupo Operaciones SA',jurisdiction:'Uruguay',purpose:'Operating',yearFounded:'Mar 2015',fiscalId:'UY-98765',ein:'',irs:'',director:'Ana Martínez',agent:'',address:'Montevideo, Uruguay',status:'active',tags:'Operating',notes:'',
-     shareholders:[{id:uid(),person:i1,pct:100,class:'Common',type:'company'}],
-     banking:[{id:uid(),bank:'Banco Itaú',account:'****3300',routing:'',swift:'ITAUUYUU',bankAddr:'Montevideo',currency:'USD',type:'Checking'}],custom:[]},
-    {id:i3,name:'IP Assets Singapore Pte.',jurisdiction:'Singapore',purpose:'IP / Royalties',yearFounded:'15/06/2018',fiscalId:'SG-200812345N',ein:'',irs:'',director:'Carlos Ochoa',agent:'Tricor',address:'1 Raffles Quay, Singapore',status:'active',tags:'IP',notes:'',
-     shareholders:[{id:uid(),person:i1,pct:80,class:'Ordinary',type:'company'},{id:uid(),person:'Luis Ochoa',pct:20,class:'Ordinary',type:'individual'}],
-     banking:[],custom:[]},
-    {id:i4,name:'Real Estate Panama SA',jurisdiction:'Panama',purpose:'Real Estate',yearFounded:'2012',fiscalId:'PA-455123',ein:'',irs:'',director:'María Ochoa',agent:'',address:'Ciudad de Panamá',status:'dormant',tags:'Real Estate',notes:'',
-     shareholders:[{id:uid(),person:'Carlos Ochoa',pct:50,class:'Common',type:'individual'},{id:uid(),person:'María Ochoa',pct:50,class:'Common',type:'individual'}],
-     banking:[],custom:[]},
-    {id:i5,name:'US Operations LLC',jurisdiction:'USA',purpose:'Operating',yearFounded:'Jan 2020',fiscalId:'FL-L20000112345',ein:'87-1234567',irs:'Single Member LLC',director:'Luis Ochoa',agent:'Registered Agents Inc.',address:'Miami, FL, USA',status:'active',tags:'Operating',notes:'',
-     shareholders:[{id:uid(),person:i1,pct:100,class:'Units',type:'company'}],
-     banking:[{id:uid(),bank:'Bank of America',account:'****9910',routing:'026009593',swift:'BOFAUS3N',bankAddr:'Miami, FL',currency:'USD',type:'Checking'}],
-     custom:[{id:uid(),name:'State',value:'Florida'}]},
-  ];
-  data.investments=[
-    {id:uid(),companyId:i1,name:'Vanguard S&P 500 ETF',fund:'Ochoa Family Fund',family:'Ochoa',type:'Fund',commitment:500000,calls:320000,distributions:0,marketValue:450000,status:'active',notes:'Long-term holding',fields:[{id:uid(),name:'Ticker',value:'VOO'}]},
-    {id:uid(),companyId:i4,name:'Office Building Panama City',fund:'Real Estate Fund I',family:'Ochoa',type:'Real Estate',commitment:900000,calls:850000,distributions:50000,marketValue:1200000,status:'active',notes:'Fully leased',fields:[{id:uid(),name:'Area m2',value:'820'}]},
-    {id:uid(),companyId:i5,name:'Series A TechCo Inc.',fund:'Ochoa Family Fund',family:'Ochoa',type:'Equity',commitment:100000,calls:100000,distributions:0,marketValue:180000,status:'active',notes:'Board observer seat',fields:[]},
-  ];
-}
-
-// ── Bootstrap ─────────────────────────────────────────────────────────────────
 function applyLoaded(d){
   data=d;
   if(!data.investments) data.investments=[];
@@ -331,56 +392,74 @@ function applyLoaded(d){
     if(!c.banking) c.banking=[];
     if(!c.custom) c.custom=[];
     if(!c.yearFounded&&c.year) c.yearFounded=String(c.year);
+    if(!c.documents) c.documents=[];
   });
   data.investments.forEach(function(inv){
-    if(inv.commitment==null) inv.commitment=0;
-    if(inv.calls==null) inv.calls=0;
-    if(inv.distributions==null) inv.distributions=0;
-    if(inv.marketValue==null) inv.marketValue=0;
-    if(!inv.fund) inv.fund='';
-    if(!inv.family) inv.family='';
-    if(!inv.fields) inv.fields=[];
+    if(inv.commitment==null)inv.commitment=0;
+    if(inv.calls==null)inv.calls=0;
+    if(inv.distributions==null)inv.distributions=0;
+    if(inv.marketValue==null)inv.marketValue=0;
+    if(!inv.fund)inv.fund='';
+    if(!inv.family)inv.family='';
+    if(!inv.fields)inv.fields=[];
   });
 }
 
-function bootstrap(){
-  var doStart=function(loaded){
-    if(loaded){ applyLoaded(loaded); }
-    else {
+// ── Auth listener ─────────────────────────────────────────────────────────────
+_auth.onAuthStateChanged(function(user){
+  if(user){
+    currentUser=user;
+    document.getElementById('login-screen').style.display='none';
+    document.getElementById('loading').style.display='flex';
+    // Load role from Firestore
+    _ROLES_REF.get().then(function(snap){
+      var roles=(snap.exists&&snap.data())||{};
+      userRole=(roles[user.uid]||roles[user.email]||'viewer');
+      // Update badge
+      var badge=document.getElementById('user-badge');
+      if(badge){
+        badge.textContent=isAdmin()?'Admin':'Viewer';
+        badge.className='user-badge'+(isAdmin()?' admin-badge':'');
+      }
+      // Show/hide import button
+      var ib=document.getElementById('import-btn');
+      if(ib)ib.style.display=isAdmin()?'':'none';
+      // Load data
       var ls=localStorage.getItem('fm_data');
-      if(ls){try{applyLoaded(JSON.parse(ls));}catch(e){seedData();save();}}
-      else{seedData();save();}
-    }
-    if(window._fbSubscribe){
-      window._fbSubscribe(function(remote){applyLoaded(remote);render();});
-    }
-    document.getElementById('loading').style.display='none';
-    document.getElementById('app').style.display='flex';
-    render();
-  };
-
-  // Try Firebase with a 5s timeout fallback
-  var done=false;
-  function finish(loaded){
-    if(done) return;
-    done=true;
-    doStart(loaded);
-  }
-
-  setTimeout(function(){ finish(null); }, 5000); // fallback
-
-  if(window._fbLoad){
-    window._fbLoad().then(function(d){ finish(d); }).catch(function(){ finish(null); });
+      if(ls){try{applyLoaded(JSON.parse(ls));}catch(e){}}
+      _REF.get().then(function(s){
+        if(s.exists){try{applyLoaded(JSON.parse(s.data().payload));}catch(e){}}
+        startSubscription();
+        document.getElementById('loading').style.display='none';
+        document.getElementById('app').style.display='flex';
+        render();
+      }).catch(function(){
+        startSubscription();
+        document.getElementById('loading').style.display='none';
+        document.getElementById('app').style.display='flex';
+        render();
+      });
+    }).catch(function(){
+      userRole='viewer';
+      startSubscription();
+      document.getElementById('loading').style.display='none';
+      document.getElementById('app').style.display='flex';
+      render();
+    });
   } else {
-    finish(null);
+    currentUser=null;userRole='viewer';
+    if(_unsubscribe){_unsubscribe();_unsubscribe=null;}
+    document.getElementById('login-screen').style.display='flex';
+    document.getElementById('loading').style.display='none';
+    document.getElementById('app').style.display='none';
   }
-}
+});
 
-// Start — works whether DOM is ready or not
-if(document.readyState==='loading'){
-  window.addEventListener('DOMContentLoaded',bootstrap);
-} else {
-  bootstrap();
+function startSubscription(){
+  if(_unsubscribe) _unsubscribe();
+  _unsubscribe=_REF.onSnapshot(function(snap){
+    if(snap.exists){try{applyLoaded(JSON.parse(snap.data().payload));render();}catch(e){}}
+  },function(){});
 }
 
 // ── Router ────────────────────────────────────────────────────────────────────
@@ -394,7 +473,7 @@ var charts={};
 function destroyCharts(){Object.values(charts).forEach(function(c){try{c.destroy();}catch(e){}});charts={};}
 function mkChart(id,type,labels,values){
   var ctx=document.getElementById(id);if(!ctx)return;
-  if(charts[id]) charts[id].destroy();
+  if(charts[id])charts[id].destroy();
   charts[id]=new Chart(ctx,{type:type,
     data:{labels:labels,datasets:[{data:values,backgroundColor:COLORS.slice(0,labels.length),borderWidth:0,borderRadius:type==='bar'?5:0}]},
     options:{responsive:true,maintainAspectRatio:false,
@@ -407,29 +486,35 @@ function mkChart(id,type,labels,values){
 // ── Render ────────────────────────────────────────────────────────────────────
 function render(){
   var nav=document.getElementById('nav');
-  nav.innerHTML='';
-  pages.forEach(function(p){
-    var b=document.createElement('button');
-    b.textContent=t(p);
-    b.className=p===page?'active':'';
-    b.onclick=function(){go(p);};
-    nav.appendChild(b);
-  });
+  if(nav){
+    nav.innerHTML='';
+    pages.forEach(function(p){
+      var b=document.createElement('button');
+      b.textContent=t(p);b.className=p===page?'active':'';
+      b.onclick=function(){go(p);};nav.appendChild(b);
+    });
+  }
   destroyCharts();
-  var m=document.getElementById('main');
-  if(page==='overview')     {m.innerHTML=renderOverview();setTimeout(buildOvCharts,50);}
-  else if(page==='companies')    {m.innerHTML=renderCompanies();}
-  else if(page==='shareholders') {m.innerHTML=renderShareholders();}
-  else if(page==='investments')  {m.innerHTML=renderInvestments();setTimeout(buildInvCharts,50);}
-  else if(page==='network')      {m.innerHTML=renderNetwork();}
+  var m=document.getElementById('main');if(!m)return;
+  if(page==='overview'){m.innerHTML=renderOverview();setTimeout(buildOvCharts,50);}
+  else if(page==='companies'){m.innerHTML=renderCompanies();}
+  else if(page==='shareholders'){m.innerHTML=renderShareholders();}
+  else if(page==='investments'){m.innerHTML=renderInvestments();setTimeout(buildInvCharts,50);}
+  else if(page==='network'){m.innerHTML=renderNetwork();}
 }
 function renderPage(){
-  var m=document.getElementById('main');
+  var m=document.getElementById('main');if(!m)return;
   destroyCharts();
-  if(page==='companies')    {m.innerHTML=renderCompanies();}
-  else if(page==='shareholders') {m.innerHTML=renderShareholders();}
-  else if(page==='investments')  {m.innerHTML=renderInvestments();setTimeout(buildInvCharts,50);}
-  else if(page==='network')      {m.innerHTML=renderNetwork();}
+  if(page==='companies'){m.innerHTML=renderCompanies();}
+  else if(page==='shareholders'){m.innerHTML=renderShareholders();}
+  else if(page==='investments'){m.innerHTML=renderInvestments();setTimeout(buildInvCharts,50);}
+  else if(page==='network'){m.innerHTML=renderNetwork();}
+}
+
+// ── Read-only banner ──────────────────────────────────────────────────────────
+function roBanner(){
+  if(isAdmin()) return '';
+  return '<div class="readonly-banner">👁 '+t('readOnly')+' — '+lang==='en'?'You can view but not edit data.':'Puedes ver pero no editar datos.'+'</div>';
 }
 
 // ── Overview ──────────────────────────────────────────────────────────────────
@@ -439,7 +524,7 @@ function renderOverview(){
   var jurs=[...new Set(cs.map(function(c){return c.jurisdiction;}))].length;
   var shSet=new Set();cs.forEach(function(c){c.shareholders.forEach(function(s){if(s.type==='individual')shSet.add(s.person);});});
   var totalMV=inv.reduce(function(a,i){return a+(+i.marketValue||0);},0);
-  var h='';
+  var h=roBanner();
   h+='<div class="kpi-grid">';
   h+='<div class="kpi"><div class="kpi-label">'+t('totalCompanies')+'</div><div class="kpi-val">'+cs.length+'</div></div>';
   h+='<div class="kpi"><div class="kpi-label">'+t('activeCompanies')+'</div><div class="kpi-val">'+active+'</div><div class="kpi-sub">'+(cs.length-active)+' inactive</div></div>';
@@ -453,23 +538,17 @@ function renderOverview(){
   h+='<div class="chart-card"><div class="chart-title">'+t('byPurpose')+'</div><div class="chart-wrap"><canvas id="ch-purpose"></canvas></div></div>';
   h+='</div>';
   h+='<div class="card" style="padding:0"><table><thead><tr><th>'+t('name')+'</th><th>'+t('jurisdiction')+'</th><th>'+t('status')+'</th><th>'+t('shareholders2')+'</th><th>'+t('subsidiaries')+'</th><th>'+t('investments')+'</th></tr></thead><tbody>';
-  if(cs.length===0){
-    h+='<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text3)">'+t('noCompanies')+'</td></tr>';
-  } else {
-    cs.forEach(function(c){
-      var subs=getSubs(c.id).length;
-      var ic=inv.filter(function(i){return i.companyId===c.id;}).length;
-      var shList=c.shareholders.map(function(s){return '<span style="font-size:12px;color:var(--text2)">'+resolveOwner(s)+' <b style="color:var(--accent)">'+s.pct+'%</b></span>';}).join('<br>');
-      h+='<tr style="cursor:pointer" onclick="openCompany('+q(c.id)+')">';
-      h+='<td><strong>'+esc(c.name)+'</strong></td>';
-      h+='<td><span class="badge badge-jur">'+esc(c.jurisdiction)+'</span></td>';
-      h+='<td>'+sBadge(c.status)+'</td>';
-      h+='<td>'+(shList||'—')+'</td>';
-      h+='<td>'+(subs?'<span class="badge badge-active">'+subs+'</span>':'—')+'</td>';
-      h+='<td>'+(ic?'<span class="badge badge-inv">'+ic+'</span>':'—')+'</td>';
-      h+='</tr>';
-    });
-  }
+  if(cs.length===0){h+='<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text3)">'+t('noCompanies')+'</td></tr>';}
+  else{cs.forEach(function(c){
+    var subs=getSubs(c.id).length;
+    var ic=inv.filter(function(i){return i.companyId===c.id;}).length;
+    var shList=c.shareholders.map(function(s){return '<span style="font-size:12px;color:var(--text2)">'+esc(resolveOwner(s))+' <b style="color:var(--accent)">'+s.pct+'%</b></span>';}).join('<br>');
+    h+='<tr style="cursor:pointer" onclick="openCompany('+q(c.id)+')">';
+    h+='<td><strong>'+esc(c.name)+'</strong></td><td><span class="badge badge-jur">'+esc(c.jurisdiction)+'</span></td>';
+    h+='<td>'+sBadge(c.status)+'</td><td>'+(shList||'—')+'</td>';
+    h+='<td>'+(subs?'<span class="badge badge-active">'+subs+'</span>':'—')+'</td>';
+    h+='<td>'+(ic?'<span class="badge badge-inv">'+ic+'</span>':'—')+'</td></tr>';
+  });}
   h+='</tbody></table></div>';
   return h;
 }
@@ -483,7 +562,7 @@ function buildOvCharts(){
   mkChart('ch-purpose','bar',Object.keys(pm),Object.values(pm));
 }
 
-// ── Companies list ────────────────────────────────────────────────────────────
+// ── Companies ─────────────────────────────────────────────────────────────────
 var cSearch='',cJur='',cStatus='';
 function renderCompanies(){
   var jurs=[...new Set(data.companies.map(function(c){return c.jurisdiction;}))].sort();
@@ -492,34 +571,32 @@ function renderCompanies(){
     return(!q2||(c.name+c.director+c.jurisdiction).toLowerCase().includes(q2))
       &&(!cJur||c.jurisdiction===cJur)&&(!cStatus||c.status===cStatus);
   });
-  var h='<div class="section-header"><div class="section-title">'+t('companies')+' <span style="color:var(--text3);font-weight:400;font-size:14px">('+data.companies.length+')</span></div>';
+  var h=roBanner();
+  h+='<div class="section-header"><div class="section-title">'+t('companies')+' <span style="color:var(--text3);font-weight:400;font-size:14px">('+data.companies.length+')</span></div>';
   h+='<div style="display:flex;gap:8px"><button class="btn btn-teal btn-sm" onclick="exportAllCSV()">'+t('export')+'</button>';
-  h+='<button class="btn btn-primary" onclick="openCompanyForm(null)">'+t('addCompany')+'</button></div></div>';
-  h+='<div class="toolbar"><div class="search-wrap"><span class="si">⌕</span>';
-  h+='<input type="text" placeholder="'+t('search')+'" value="'+esc(cSearch)+'" oninput="cSearch=this.value;renderPage()"></div>';
+  if(isAdmin()) h+='<button class="btn btn-primary" onclick="openCompanyForm(null)">'+t('addCompany')+'</button>';
+  h+='</div></div>';
+  h+='<div class="toolbar"><div class="search-wrap"><span class="si">⌕</span><input type="text" placeholder="'+t('search')+'" value="'+esc(cSearch)+'" oninput="cSearch=this.value;renderPage()"></div>';
   h+='<select class="filter" onchange="cJur=this.value;renderPage()"><option value="">'+t('allJurisdictions')+'</option>';
   jurs.forEach(function(j){h+='<option value="'+esc(j)+'"'+(cJur===j?' selected':'')+'>'+esc(j)+'</option>';});
-  h+='</select>';
-  h+='<select class="filter" onchange="cStatus=this.value;renderPage()"><option value="">'+t('allStatus')+'</option>';
+  h+='</select><select class="filter" onchange="cStatus=this.value;renderPage()"><option value="">'+t('allStatus')+'</option>';
   h+='<option value="active">'+t('active')+'</option><option value="dormant">'+t('dormant')+'</option><option value="liquidation">'+t('liquidation')+'</option></select></div>';
   h+='<div class="card" style="padding:0"><table><thead><tr><th>'+t('name')+'</th><th>'+t('jurisdiction')+'</th><th>'+t('yearFounded')+'</th><th>'+t('director')+'</th><th>'+t('shareholders2')+'</th><th>'+t('status')+'</th><th></th></tr></thead><tbody>';
-  if(cs.length===0){
-    h+='<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text3)">'+t('noCompanies')+'</td></tr>';
-  } else {
-    cs.forEach(function(c){
-      var shList=c.shareholders.map(function(s){return '<div style="font-size:12px">'+resolveOwner(s)+' <b style="color:var(--accent)">'+s.pct+'%</b> <span style="font-size:10px">'+(s.type==='company'?'🏢':'👤')+'</span></div>';}).join('');
-      h+='<tr>';
-      h+='<td style="cursor:pointer;font-weight:600" onclick="openCompany('+q(c.id)+')">'+esc(c.name)+'</td>';
-      h+='<td><span class="badge badge-jur">'+esc(c.jurisdiction)+'</span></td>';
-      h+='<td style="color:var(--text2)">'+esc(c.yearFounded||c.year||'—')+'</td>';
-      h+='<td style="color:var(--text2)">'+esc(c.director||'—')+'</td>';
-      h+='<td>'+(shList||'—')+'</td>';
-      h+='<td>'+sBadge(c.status)+'</td>';
-      h+='<td style="white-space:nowrap"><button class="btn btn-outline btn-sm" onclick="openCompanyForm('+q(c.id)+')" style="margin-right:4px">'+t('editCompany')+'</button>';
-      h+='<button class="btn btn-danger btn-sm" onclick="delCompany('+q(c.id)+')">×</button></td>';
-      h+='</tr>';
-    });
-  }
+  if(cs.length===0){h+='<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text3)">'+t('noCompanies')+'</td></tr>';}
+  else{cs.forEach(function(c){
+    var shList=c.shareholders.map(function(s){return '<div style="font-size:12px">'+esc(resolveOwner(s))+' <b style="color:var(--accent)">'+s.pct+'%</b> '+(s.type==='company'?'🏢':'👤')+'</div>';}).join('');
+    h+='<tr><td style="cursor:pointer;font-weight:600" onclick="openCompany('+q(c.id)+')">'+esc(c.name)+'</td>';
+    h+='<td><span class="badge badge-jur">'+esc(c.jurisdiction)+'</span></td>';
+    h+='<td style="color:var(--text2)">'+esc(c.yearFounded||c.year||'—')+'</td>';
+    h+='<td style="color:var(--text2)">'+esc(c.director||'—')+'</td>';
+    h+='<td>'+(shList||'—')+'</td><td>'+sBadge(c.status)+'</td>';
+    h+='<td style="white-space:nowrap">';
+    if(isAdmin()){
+      h+='<button class="btn btn-outline btn-sm" onclick="openCompanyForm('+q(c.id)+')" style="margin-right:4px">'+t('editCompany')+'</button>';
+      h+='<button class="btn btn-danger btn-sm" onclick="delCompany('+q(c.id)+')">×</button>';
+    }
+    h+='</td></tr>';
+  });}
   h+='</tbody></table></div>';
   return h;
 }
@@ -527,20 +604,19 @@ function renderCompanies(){
 // ── Company detail ────────────────────────────────────────────────────────────
 function openCompany(id){
   var c=data.companies.find(function(x){return x.id===id;});if(!c)return;
-  var subs=getSubs(id);
-  var parents=getParents(id);
+  var subs=getSubs(id);var parents=getParents(id);
   var invs=data.investments.filter(function(i){return i.companyId===id;});
 
-  // Details panel
+  // Details
   var det='';
   if(parents.length){
     det+='<div style="margin-bottom:12px;padding:10px 14px;background:var(--purple-bg);border-radius:var(--radius-sm);border-left:3px solid var(--purple)">';
-    det+='<div style="font-size:11px;font-weight:700;color:var(--purple);text-transform:uppercase;margin-bottom:4px">'+t('ownedBy')+'</div>';
+    det+='<div style="font-size:11px;font-weight:700;color:var(--purple);margin-bottom:4px">'+t('ownedBy')+'</div>';
     parents.forEach(function(p,pi){
       var sh=c.shareholders.find(function(s){return s.type==='company'&&s.person===p.id;});
-      if(pi>0) det+=' · ';
+      if(pi>0)det+=' · ';
       det+='<span style="cursor:pointer;color:var(--purple);font-weight:600" onclick="closeModal();openCompany('+q(p.id)+')">'+esc(p.name)+'</span>';
-      if(sh) det+=' <span style="color:var(--text3)">'+sh.pct+'%</span>';
+      if(sh)det+=' <span style="color:var(--text3)">'+sh.pct+'%</span>';
     });
     det+='</div>';
   }
@@ -550,99 +626,95 @@ function openCompany(id){
     +dr(t('registeredAgent'),esc(c.agent))+dr(t('address'),esc(c.address))
     +dr(t('tags'),esc(c.tags))+dr(t('notes'),esc(c.notes));
 
-  // Shareholders panel
-  var shP='<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="btn btn-primary btn-sm" onclick="openAddSHForm('+q(id)+')">'+t('addShareholder')+'</button></div>';
+  // Shareholders
+  var shP='<div style="display:flex;justify-content:flex-end;margin-bottom:10px">';
+  if(isAdmin()) shP+='<button class="btn btn-primary btn-sm" onclick="openAddSHForm('+q(id)+')">'+t('addShareholder')+'</button>';
+  shP+='</div>';
   if(c.shareholders.length){
     shP+='<canvas id="sh-pie" style="max-height:170px;margin-bottom:16px"></canvas>';
     shP+='<table><thead><tr><th>'+t('ownerType')+'</th><th>'+t('shareholders2')+'</th><th>'+t('ownership')+'</th><th>'+t('shareClass')+'</th><th></th></tr></thead><tbody>';
     c.shareholders.forEach(function(s,si){
       shP+='<tr><td><span class="badge '+(s.type==='company'?'badge-jur':'badge-active')+'" style="font-size:10px">'+(s.type==='company'?'🏢':'👤')+' '+t(s.type)+'</span></td>';
-      if(s.type==='company'){
-        shP+='<td style="cursor:pointer;color:var(--accent);font-weight:600" onclick="closeModal();openCompany('+q(s.person)+')">'+esc(resolveOwner(s))+'</td>';
-      } else {
-        shP+='<td>'+esc(resolveOwner(s))+'</td>';
+      if(s.type==='company'){shP+='<td style="cursor:pointer;color:var(--accent);font-weight:600" onclick="closeModal();openCompany('+q(s.person)+')">'+esc(resolveOwner(s))+'</td>';}
+      else{shP+='<td>'+esc(resolveOwner(s))+'</td>';}
+      shP+='<td><div style="font-weight:600">'+s.pct+'%</div><div class="ownership-bar" style="width:100px"><div class="ownership-fill" style="width:'+s.pct+'%"></div></div></td>';
+      shP+='<td style="color:var(--text2)">'+esc(s.class||'—')+'</td><td style="white-space:nowrap">';
+      if(isAdmin()){
+        shP+='<button class="btn btn-outline btn-sm" onclick="openEditSHForm('+q(id)+','+si+')" style="margin-right:4px">'+t('editCompany')+'</button>';
+        shP+='<button class="btn btn-danger btn-sm" onclick="delShareholder('+q(id)+','+si+')">×</button>';
       }
-      shP+='<td><div style="font-weight:600">'+s.pct+'%</div><div class="ownership-bar" style="width:120px"><div class="ownership-fill" style="width:'+s.pct+'%"></div></div></td>';
-      shP+='<td style="color:var(--text2)">'+esc(s.class||'—')+'</td>';
-      shP+='<td style="white-space:nowrap"><button class="btn btn-outline btn-sm" onclick="openEditSHForm('+q(id)+','+si+')" style="margin-right:4px">'+t('editCompany')+'</button>';
-      shP+='<button class="btn btn-danger btn-sm" onclick="delShareholder('+q(id)+','+si+')">×</button></td></tr>';
+      shP+='</td></tr>';
     });
     shP+='</tbody></table>';
-  } else {
-    shP+='<div class="empty">'+t('noShareholders')+'</div>';
-  }
+  } else {shP+='<div class="empty">'+t('noShareholders')+'</div>';}
 
-  // Subsidiaries panel
+  // Subsidiaries
   var subP='';
   if(subs.length){
     subP+='<div style="font-size:12px;color:var(--text2);margin-bottom:12px;padding:8px 12px;background:var(--teal-bg);border-radius:var(--radius-sm)">';
-    var ownedMsg=lang==='en' ? esc(c.name)+' owns:' : esc(c.name)+' es propietaria de:';
-    subP+=ownedMsg;
+    subP+=esc(c.name)+(lang==='en'?' owns the following companies:':' es propietaria de:');
     subP+='</div><table><thead><tr><th>'+t('name')+'</th><th>'+t('jurisdiction')+'</th><th>'+t('ownership')+'</th><th>'+t('status')+'</th><th></th></tr></thead><tbody>';
     subs.forEach(function(s){
       var sh=s.shareholders.find(function(sh){return sh.type==='company'&&sh.person===id;});
       subP+='<tr><td style="font-weight:600;color:var(--accent);cursor:pointer" onclick="closeModal();openCompany('+q(s.id)+')">'+esc(s.name)+'</td>';
       subP+='<td><span class="badge badge-jur">'+esc(s.jurisdiction)+'</span></td>';
-      subP+='<td><strong>'+(sh?sh.pct+'%':'—')+'</strong></td>';
-      subP+='<td>'+sBadge(s.status)+'</td>';
-      subP+='<td><button class="btn btn-danger btn-sm" onclick="delSubLink('+q(s.id)+','+q(id)+')">×</button></td></tr>';
+      subP+='<td><strong>'+(sh?sh.pct+'%':'—')+'</strong></td><td>'+sBadge(s.status)+'</td><td>';
+      if(isAdmin()) subP+='<button class="btn btn-danger btn-sm" onclick="delSubLink('+q(s.id)+','+q(id)+')">×</button>';
+      subP+='</td></tr>';
     });
-    subP+='</tbody></table><div style="font-size:11px;color:var(--text3);margin-top:8px">× '+(lang==='en'?'removes link only':'quita el vínculo únicamente')+'</div>';
-  } else {
-    subP='<div class="empty">'+(lang==='en'?'No subsidiaries.':'Sin subsidiarias.')+'</div>';
-  }
+    subP+='</tbody></table><div style="font-size:11px;color:var(--text3);margin-top:8px">× '+(lang==='en'?'removes link only':'quita solo el vínculo')+'</div>';
+  } else {subP='<div class="empty">'+(lang==='en'?'No subsidiaries.':'Sin subsidiarias.')+'</div>';}
 
-  // Org chart panel
+  // Org chart (starts from shareholders)
   var orgP=buildOrgChart(id);
 
-  // Investments panel
-  var invP='<div style="display:flex;justify-content:flex-end;margin-bottom:12px"><button class="btn btn-primary btn-sm" onclick="openInvForm(null,'+q(id)+')">'+t('addInvestment')+'</button></div>';
+  // Investments
+  var invP='<div style="display:flex;justify-content:flex-end;margin-bottom:12px">';
+  if(isAdmin()) invP+='<button class="btn btn-primary btn-sm" onclick="openInvForm(null,'+q(id)+')">'+t('addInvestment')+'</button>';
+  invP+='</div>';
   if(invs.length){
     invs.forEach(function(inv){
-      invP+='<div class="inv-card">';
-      invP+='<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">';
+      invP+='<div class="inv-card"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">';
       invP+='<div><div style="font-weight:700;font-size:14px">'+esc(inv.name)+'</div>';
       invP+='<div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap">';
       if(inv.fund) invP+='<span class="badge badge-fund">'+esc(inv.fund)+'</span>';
       if(inv.type) invP+='<span class="badge badge-inv">'+esc(inv.type)+'</span>';
-      if(inv.family) invP+='<span style="font-size:11px;color:var(--text3)">'+esc(inv.family)+'</span>';
-      invP+='</div></div>';
-      invP+='<div style="text-align:right"><div style="font-weight:700;font-size:15px;color:var(--accent)">'+fmtD(inv.marketValue)+'</div>';
-      invP+='<div style="font-size:11px;color:var(--text3)">'+(lang==='en'?'Market Value':'Valor de Mercado')+'</div></div></div>';
+      invP+='</div></div><div style="text-align:right"><div style="font-weight:700;font-size:15px;color:var(--accent)">'+fmtD(inv.marketValue)+'</div></div></div>';
       invP+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:8px 0;padding:8px;background:var(--bg);border-radius:var(--radius-sm)">';
-      invP+='<div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:600">'+t('invCommit')+'</div><div style="font-weight:600">'+fmtD(inv.commitment)+'</div></div>';
-      invP+='<div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:600">'+t('invCalls')+'</div><div style="font-weight:600">'+fmtD(inv.calls)+'</div></div>';
-      invP+='<div><div style="font-size:10px;color:var(--text3);text-transform:uppercase;font-weight:600">'+t('invDist')+'</div><div style="font-weight:600;color:var(--teal)">'+fmtD(inv.distributions)+'</div></div>';
-      invP+='</div>';
-      if(inv.fields&&inv.fields.length){
-        invP+='<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px">';
-        inv.fields.forEach(function(f){invP+='<span class="inv-field-chip">'+esc(f.name)+': '+esc(f.value)+'</span>';});
-        invP+='</div>';
-      }
+      invP+='<div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">'+t('invCommit')+'</div><div style="font-weight:600">'+fmtD(inv.commitment)+'</div></div>';
+      invP+='<div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">'+t('invCalls')+'</div><div style="font-weight:600">'+fmtD(inv.calls)+'</div></div>';
+      invP+='<div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">'+t('invDist')+'</div><div style="font-weight:600;color:var(--teal)">'+fmtD(inv.distributions)+'</div></div></div>';
       if(inv.notes) invP+='<div style="font-size:12px;color:var(--text2);margin-top:6px">'+esc(inv.notes)+'</div>';
       invP+='<div style="display:flex;gap:6px;margin-top:10px">';
-      invP+='<button class="btn btn-outline btn-sm" onclick="openInvForm('+q(inv.id)+','+q(id)+')">'+t('editCompany')+'</button>';
-      invP+='<button class="btn btn-danger btn-sm" onclick="delInvFromModal('+q(inv.id)+','+q(id)+')">'+t('delete')+'</button>';
+      if(isAdmin()){
+        invP+='<button class="btn btn-outline btn-sm" onclick="openInvForm('+q(inv.id)+','+q(id)+')">'+t('editCompany')+'</button>';
+        invP+='<button class="btn btn-danger btn-sm" onclick="delInvFromModal('+q(inv.id)+','+q(id)+')">'+t('delete')+'</button>';
+      }
       invP+='</div></div>';
     });
-  } else {
-    invP+='<div class="empty">'+t('noData')+'</div>';
-  }
+  } else {invP+='<div class="empty">'+t('noData')+'</div>';}
 
-  // Banking panel
-  var bankP='<div style="display:flex;justify-content:flex-end;margin-bottom:12px"><button class="btn btn-primary btn-sm" onclick="addBankInModal('+q(id)+')">'+t('addBank')+'</button></div>';
-  bankP+='<div id="bank-view-list">'+renderBankView(id)+'</div>';
+  // Banking
+  var bankP='<div style="display:flex;justify-content:flex-end;margin-bottom:12px">';
+  if(isAdmin()) bankP+='<button class="btn btn-primary btn-sm" onclick="addBankInModal('+q(id)+')">'+t('addBank')+'</button>';
+  bankP+='</div><div id="bank-view-list">'+renderBankView(id)+'</div>';
 
-  // Custom fields panel
-  var cfP='<div style="display:flex;justify-content:flex-end;margin-bottom:12px"><button class="btn btn-primary btn-sm" onclick="addCFInModal('+q(id)+')">'+t('addField')+'</button></div>';
+  // Custom fields
+  var cfP='<div style="display:flex;justify-content:flex-end;margin-bottom:12px">';
+  if(isAdmin()) cfP+='<button class="btn btn-primary btn-sm" onclick="addCFInModal('+q(id)+')">'+t('addField')+'</button>';
+  cfP+='</div>';
   if(c.custom.length){
     cfP+='<table><thead><tr><th>'+t('fieldName')+'</th><th>'+t('fieldValue')+'</th><th></th></tr></thead><tbody>';
     c.custom.forEach(function(f,fi){
-      cfP+='<tr><td style="color:var(--text2);font-weight:500">'+esc(f.name)+'</td><td>'+esc(f.value)+'</td>';
-      cfP+='<td><button class="btn btn-danger btn-sm" onclick="delCustomField('+q(id)+','+fi+')">×</button></td></tr>';
+      cfP+='<tr><td style="color:var(--text2);font-weight:500">'+esc(f.name)+'</td><td>'+esc(f.value)+'</td><td>';
+      if(isAdmin()) cfP+='<button class="btn btn-danger btn-sm" onclick="delCustomField('+q(id)+','+fi+')">×</button>';
+      cfP+='</td></tr>';
     });
     cfP+='</tbody></table>';
-  } else { cfP+='<div class="empty">'+t('noData')+'</div>'; }
+  } else {cfP+='<div class="empty">'+t('noData')+'</div>';}
+
+  // Documents
+  var docP=renderDocuments(id);
 
   // Assemble
   var h='<div class="modal-header"><div><div class="modal-title">'+esc(c.name)+'</div>';
@@ -650,8 +722,10 @@ function openCompany(id){
   h+='<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">';
   h+='<button class="btn btn-teal btn-sm" onclick="exportCompanyCSV('+q(id)+')">'+t('export')+'</button>';
   h+='<button class="btn btn-outline btn-sm" onclick="printCompany('+q(id)+')">'+t('exportPDF')+'</button>';
-  h+='<button class="btn btn-outline btn-sm" onclick="closeModal();openCompanyForm('+q(id)+')">'+t('editCompany')+'</button>';
-  h+='<button class="btn btn-danger btn-sm" onclick="closeModal();delCompany('+q(id)+')">'+t('delete')+'</button>';
+  if(isAdmin()){
+    h+='<button class="btn btn-outline btn-sm" onclick="closeModal();openCompanyForm('+q(id)+')">'+t('editCompany')+'</button>';
+    h+='<button class="btn btn-danger btn-sm" onclick="closeModal();delCompany('+q(id)+')">'+t('delete')+'</button>';
+  }
   h+='<button class="close-btn" onclick="closeModal()">×</button></div></div>';
   h+='<div class="modal-body">';
   h+='<div class="tabs">';
@@ -662,14 +736,16 @@ function openCompany(id){
   h+='<button class="tab" onclick="switchTab(this,\'td-inv\')">'+t('investments')+' ('+invs.length+')</button>';
   h+='<button class="tab" onclick="switchTab(this,\'td-bank\')">'+t('banking')+' ('+c.banking.length+')</button>';
   h+='<button class="tab" onclick="switchTab(this,\'td-cf\')">'+t('customFields')+' ('+c.custom.length+')</button>';
+  h+='<button class="tab" onclick="switchTab(this,\'td-doc\')">'+t('documents')+' ('+(c.documents?c.documents.length:0)+')</button>';
   h+='</div>';
   h+='<div id="td-d" class="tab-panel active">'+det+'</div>';
   h+='<div id="td-sh" class="tab-panel">'+shP+'</div>';
   h+='<div id="td-sub" class="tab-panel">'+subP+'</div>';
-  h+='<div id="td-org" class="tab-panel"><div style="overflow-x:auto;padding:16px 0">'+orgP+'</div></div>';
+  h+='<div id="td-org" class="tab-panel"><div style="overflow-x:auto;padding:8px 0">'+orgP+'</div></div>';
   h+='<div id="td-inv" class="tab-panel">'+invP+'</div>';
   h+='<div id="td-bank" class="tab-panel">'+bankP+'</div>';
   h+='<div id="td-cf" class="tab-panel">'+cfP+'</div>';
+  h+='<div id="td-doc" class="tab-panel">'+docP+'</div>';
   h+='</div>';
   showModal(h,true);
 }
@@ -679,62 +755,73 @@ function renderBankView(id){
   if(!c.banking.length) return '<div class="empty">'+t('noData')+'</div>';
   var h='';
   c.banking.forEach(function(b,bi){
-    h+='<div class="bank-row">';
-    h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
+    h+='<div class="bank-row"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">';
     h+='<div style="font-weight:700">'+esc(b.bank)+' <span style="color:var(--text3);font-weight:400;font-size:12px">'+esc(b.currency||'')+' '+esc(b.type||'')+'</span></div>';
-    h+='<div style="display:flex;gap:5px">';
-    h+='<button class="btn btn-outline btn-sm" onclick="editBankInModal('+q(id)+','+bi+')">'+t('editCompany')+'</button>';
-    h+='<button class="btn btn-danger btn-sm" onclick="delBankAccount('+q(id)+','+bi+')">×</button>';
-    h+='</div></div>';
+    if(isAdmin()){
+      h+='<div style="display:flex;gap:5px">';
+      h+='<button class="btn btn-outline btn-sm" onclick="editBankInModal('+q(id)+','+bi+')">'+t('editCompany')+'</button>';
+      h+='<button class="btn btn-danger btn-sm" onclick="delBankAccount('+q(id)+','+bi+')">×</button></div>';
+    }
+    h+='</div>';
     h+=dr(t('accountNo'),'<span class="bank-sensitive" onclick="this.classList.toggle(\'revealed\')">'+esc(b.account||'—')+'</span>');
     if(b.routing) h+=dr(t('routing'),'<span class="bank-sensitive" onclick="this.classList.toggle(\'revealed\')">'+esc(b.routing)+'</span>');
-    h+=dr('SWIFT',esc(b.swift||''));
-    h+=dr(t('bankAddress'),esc(b.bankAddr||''));
+    h+=dr('SWIFT',esc(b.swift||''))+dr(t('bankAddress'),esc(b.bankAddr||''));
     h+='</div>';
   });
   return h;
 }
 
-function buildSHPie(id){
-  var c=data.companies.find(function(x){return x.id===id;});if(!c||!c.shareholders.length)return;
-  setTimeout(function(){
-    mkChart('sh-pie','doughnut',c.shareholders.map(function(s){return resolveOwner(s);}),c.shareholders.map(function(s){return s.pct;}));
-  },50);
-}
-
+// ── Org Chart (starts from shareholders → companies → subsidiaries) ────────────
 function buildOrgChart(cid){
   var c=data.companies.find(function(x){return x.id===cid;});if(!c)return '';
-  var parents=getParents(cid);
-  var subs=getSubs(cid);
+  var parents=getParents(cid);var subs=getSubs(cid);
   var h='<div style="text-align:center">';
-  h+='<div style="font-size:11px;color:var(--text2);margin-bottom:16px">';
-  h+=lang==='en'?'Purple = parent · Blue = current · Green = subsidiaries':'Morado = matriz · Azul = actual · Verde = subsidiarias';
+  h+='<div style="font-size:11px;color:var(--text2);margin-bottom:16px;padding:8px 12px;background:var(--bg);border-radius:var(--radius-sm);display:inline-block">';
+  h+=lang==='en'?'👤 Shareholders → 🏢 Company → ↳ Subsidiaries':'👤 Accionistas → 🏢 Empresa → ↳ Subsidiarias';
   h+='</div>';
-  if(parents.length){
-    h+='<div style="display:flex;justify-content:center;gap:10px;margin-bottom:0;flex-wrap:wrap">';
-    parents.forEach(function(p){
-      h+='<div onclick="closeModal();openCompany('+q(p.id)+')" class="org-card" style="border:2px solid var(--purple);background:var(--purple-bg)">';
-      h+='<div class="org-card-name" style="color:var(--purple)">'+esc(p.name)+'</div>';
-      h+='<div class="org-card-sub">'+esc(p.jurisdiction)+'</div></div>';
+
+  // Shareholder level (individuals at top)
+  var indivSH=c.shareholders.filter(function(s){return s.type==='individual';});
+  var companySH=c.shareholders.filter(function(s){return s.type==='company';});
+
+  if(indivSH.length||companySH.length){
+    h+='<div style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap;margin-bottom:0">';
+    indivSH.forEach(function(s){
+      h+='<div class="org-card" style="border:2px solid #d97706;background:#fef3c7">';
+      h+='<div style="font-size:14px;margin-bottom:4px">👤</div>';
+      h+='<div class="org-card-name" style="color:#d97706">'+esc(s.person)+'</div>';
+      h+='<div class="org-card-sub">'+s.pct+'%</div></div>';
+    });
+    companySH.forEach(function(s){
+      h+='<div class="org-card" onclick="closeModal();openCompany('+q(s.person)+')" style="border:2px solid var(--purple);background:var(--purple-bg)">';
+      h+='<div style="font-size:14px;margin-bottom:4px">🏢</div>';
+      h+='<div class="org-card-name" style="color:var(--purple)">'+esc(cname(s.person))+'</div>';
+      h+='<div class="org-card-sub">'+s.pct+'%</div></div>';
     });
     h+='</div>';
     h+='<div style="width:2px;height:24px;background:var(--border2);margin:0 auto"></div>';
   }
+
+  // Current company
   h+='<div style="display:flex;justify-content:center">';
-  h+='<div class="org-card" style="border:2.5px solid var(--accent);background:var(--accent-bg)">';
+  h+='<div class="org-card" style="border:2.5px solid var(--accent);background:var(--accent-bg);min-width:160px">';
+  h+='<div style="font-size:14px;margin-bottom:4px">🏢</div>';
   h+='<div class="org-card-name" style="color:var(--accent)">'+esc(c.name)+'</div>';
   h+='<div class="org-card-sub">'+esc(c.jurisdiction)+'</div></div></div>';
+
+  // Subsidiaries
   if(subs.length){
     h+='<div style="width:2px;height:24px;background:var(--border2);margin:0 auto"></div>';
-    h+='<div style="display:flex;justify-content:center;gap:10px;flex-wrap:wrap">';
+    h+='<div style="display:flex;justify-content:center;gap:8px;flex-wrap:wrap">';
     subs.forEach(function(s){
       var sh=s.shareholders.find(function(sh){return sh.type==='company'&&sh.person===cid;});
+      var sub2=getSubs(s.id);
       h+='<div style="display:flex;flex-direction:column;align-items:center">';
-      h+='<div onclick="closeModal();openCompany('+q(s.id)+')" class="org-card" style="border:2px solid var(--teal);background:var(--teal-bg)">';
+      h+='<div class="org-card" onclick="closeModal();openCompany('+q(s.id)+')" style="border:2px solid var(--teal);background:var(--teal-bg)">';
+      h+='<div style="font-size:14px;margin-bottom:4px">🏢</div>';
       h+='<div class="org-card-name" style="color:var(--teal)">'+esc(s.name)+'</div>';
       h+='<div class="org-card-sub">'+esc(s.jurisdiction)+(sh?' · '+sh.pct+'%':'')+'</div></div>';
-      var sub2=getSubs(s.id);
-      if(sub2.length) h+='<div style="font-size:10px;color:var(--teal);margin-top:4px">+'+sub2.length+' sub.</div>';
+      if(sub2.length) h+='<div style="font-size:10px;color:var(--teal);margin-top:3px">+'+sub2.length+' sub.</div>';
       h+='</div>';
     });
     h+='</div>';
@@ -743,108 +830,169 @@ function buildOrgChart(cid){
   return h;
 }
 
+function buildSHPie(id){
+  var c=data.companies.find(function(x){return x.id===id;});if(!c||!c.shareholders.length)return;
+  setTimeout(function(){mkChart('sh-pie','doughnut',c.shareholders.map(function(s){return resolveOwner(s);}),c.shareholders.map(function(s){return s.pct;}));},50);
+}
 function switchTab(btn,pid){
   var mb=btn.closest('.modal-body');
   mb.querySelectorAll('.tab').forEach(function(b){b.classList.remove('active');});
   mb.querySelectorAll('.tab-panel').forEach(function(p){p.classList.remove('active');});
-  btn.classList.add('active');
-  document.getElementById(pid).classList.add('active');
+  btn.classList.add('active');document.getElementById(pid).classList.add('active');
+}
+
+// ── Documents ─────────────────────────────────────────────────────────────────
+function renderDocuments(cid){
+  var c=data.companies.find(function(x){return x.id===cid;});if(!c)return '';
+  var docs=c.documents||[];
+  var h='';
+  if(isAdmin()){
+    h+='<div class="drop-upload" onclick="document.getElementById(\'doc-file-'+cid+'\').click()">';
+    h+='<div style="font-size:24px;margin-bottom:6px">📎</div>';
+    h+='<div style="font-weight:600">'+t('uploadDoc')+'</div>';
+    h+='<div style="font-size:11px;color:var(--text3);margin-top:3px">PDF · DOCX · XLSX · PPTX</div>';
+    h+='<input id="doc-file-'+cid+'" type="file" accept=".pdf,.docx,.xlsx,.pptx,.doc,.xls,.ppt" multiple style="display:none" onchange="uploadDocuments('+q(cid)+',this)"></div>';
+  }
+  h+='<div id="doc-list-'+cid+'">';
+  if(docs.length){
+    docs.forEach(function(doc,di){
+      var icon=docIcon(doc.name);
+      h+='<div class="doc-row">';
+      h+='<div class="doc-icon">'+icon+'</div>';
+      h+='<div><div class="doc-name">'+esc(doc.name)+'</div>';
+      h+='<div class="doc-meta">'+(doc.size?fmtSize(doc.size)+' · ':'')+esc(doc.uploadedAt||'')+'</div></div>';
+      h+='<div style="display:flex;gap:6px;margin-left:auto">';
+      h+='<a href="'+esc(doc.url)+'" target="_blank" download="'+esc(doc.name)+'" class="btn btn-teal btn-sm">⬇ Download</a>';
+      if(isAdmin()) h+='<button class="btn btn-danger btn-sm" onclick="deleteDocument('+q(cid)+','+di+')">×</button>';
+      h+='</div></div>';
+    });
+  } else {h+='<div class="empty"><div style="font-size:28px;margin-bottom:8px">📄</div>'+t('noDocuments')+'</div>';}
+  h+='</div>';
+  return h;
+}
+function docIcon(name){
+  var ext=(name||'').split('.').pop().toLowerCase();
+  if(ext==='pdf') return '📕';
+  if(ext==='docx'||ext==='doc') return '📘';
+  if(ext==='xlsx'||ext==='xls') return '📗';
+  if(ext==='pptx'||ext==='ppt') return '📙';
+  return '📄';
+}
+function fmtSize(bytes){
+  if(bytes<1024) return bytes+'B';
+  if(bytes<1048576) return Math.round(bytes/1024)+'KB';
+  return (bytes/1048576).toFixed(1)+'MB';
+}
+function uploadDocuments(cid,input){
+  var files=Array.from(input.files);if(!files.length)return;
+  var c=data.companies.find(function(x){return x.id===cid;});if(!c)return;
+  if(!c.documents)c.documents=[];
+  var listEl=document.getElementById('doc-list-'+cid);
+  if(listEl)listEl.innerHTML='<div style="padding:16px;color:var(--text3)">Uploading…</div>';
+  var promises=files.map(function(file){
+    var path='famofi/'+cid+'/'+Date.now()+'_'+file.name;
+    var ref=_storage.ref(path);
+    return ref.put(file).then(function(){return ref.getDownloadURL();}).then(function(url){
+      return {name:file.name,url:url,size:file.size,path:path,uploadedAt:new Date().toLocaleDateString()};
+    });
+  });
+  Promise.all(promises).then(function(docs){
+    docs.forEach(function(d){c.documents.push(d);});
+    save();
+    if(listEl)listEl.innerHTML=renderDocumentsInner(cid);
+  }).catch(function(e){
+    if(listEl)listEl.innerHTML='<div class="imp-err">Upload failed: '+e.message+'</div>';
+  });
+}
+function renderDocumentsInner(cid){
+  var c=data.companies.find(function(x){return x.id===cid;});if(!c)return '';
+  var docs=c.documents||[];
+  if(!docs.length) return '<div class="empty">'+t('noDocuments')+'</div>';
+  var h='';
+  docs.forEach(function(doc,di){
+    var icon=docIcon(doc.name);
+    h+='<div class="doc-row"><div class="doc-icon">'+icon+'</div>';
+    h+='<div><div class="doc-name">'+esc(doc.name)+'</div>';
+    h+='<div class="doc-meta">'+(doc.size?fmtSize(doc.size)+' · ':'')+esc(doc.uploadedAt||'')+'</div></div>';
+    h+='<div style="display:flex;gap:6px;margin-left:auto">';
+    h+='<a href="'+esc(doc.url)+'" target="_blank" class="btn btn-teal btn-sm">⬇ Download</a>';
+    if(isAdmin()) h+='<button class="btn btn-danger btn-sm" onclick="deleteDocument('+q(cid)+','+di+')">×</button>';
+    h+='</div></div>';
+  });
+  return h;
+}
+function deleteDocument(cid,di){
+  if(!confirm(lang==='en'?'Delete this document?':'¿Eliminar este documento?'))return;
+  var c=data.companies.find(function(x){return x.id===cid;});if(!c)return;
+  var doc=c.documents[di];
+  if(doc&&doc.path){
+    _storage.ref(doc.path).delete().catch(function(){});
+  }
+  c.documents.splice(di,1);
+  save();
+  var listEl=document.getElementById('doc-list-'+cid);
+  if(listEl)listEl.innerHTML=renderDocumentsInner(cid);
 }
 
 // ── Shareholder add/edit ──────────────────────────────────────────────────────
 function openAddSHForm(cid){
-  var opts='';
-  data.companies.filter(function(x){return x.id!==cid;}).forEach(function(x){opts+='<option value="'+x.id+'">'+esc(x.name)+'</option>';});
+  var opts='';data.companies.filter(function(x){return x.id!==cid;}).forEach(function(x){opts+='<option value="'+x.id+'">'+esc(x.name)+'</option>';});
   var h='<div class="modal-header"><div class="modal-title">'+t('addShareholder')+'</div><button class="close-btn" onclick="closeModal();openCompany('+q(cid)+')">×</button></div>';
   h+='<div class="modal-body"><div class="form-grid">';
   h+='<div class="form-group"><label class="lbl">'+t('ownerType')+'</label><select id="sh-type" class="inp" onchange="toggleSHInput()"><option value="individual">'+t('individual')+'</option><option value="company">'+t('company')+'</option></select></div>';
-  h+='<div class="form-group"><label class="lbl">'+(lang==='en'?'Name':'Nombre')+'</label><input id="sh-person-text" class="inp" placeholder="'+(lang==='en'?'Full name':'Nombre completo')+'"><select id="sh-person-select" class="inp" style="display:none"><option value="">— select —</option>'+opts+'</select></div>';
-  h+='<div class="form-group"><label class="lbl">'+t('ownership')+'</label><input id="sh-pct" class="inp" type="number" min="0" max="100" placeholder="e.g. 50"></div>';
-  h+='<div class="form-group"><label class="lbl">'+t('shareClass')+'</label><input id="sh-class" class="inp" placeholder="e.g. Class A"></div>';
-  h+='</div><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">';
+  h+='<div class="form-group"><label class="lbl">Name</label><input id="sh-person-text" class="inp"><select id="sh-person-select" class="inp" style="display:none"><option value="">— select —</option>'+opts+'</select></div>';
+  h+='<div class="form-group"><label class="lbl">'+t('ownership')+'</label><input id="sh-pct" class="inp" type="number" min="0" max="100"></div>';
+  h+='<div class="form-group"><label class="lbl">'+t('shareClass')+'</label><input id="sh-class" class="inp"></div></div>';
+  h+='<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">';
   h+='<button class="btn btn-outline" onclick="closeModal();openCompany('+q(cid)+')">'+t('cancel')+'</button>';
   h+='<button class="btn btn-primary" onclick="commitAddSH('+q(cid)+')">'+t('save')+'</button></div></div>';
   showModal(h);
 }
-function toggleSHInput(){
-  var tp=document.getElementById('sh-type').value;
-  document.getElementById('sh-person-text').style.display=tp==='company'?'none':'block';
-  document.getElementById('sh-person-select').style.display=tp==='company'?'block':'none';
-}
+function toggleSHInput(){var tp=document.getElementById('sh-type').value;document.getElementById('sh-person-text').style.display=tp==='company'?'none':'block';document.getElementById('sh-person-select').style.display=tp==='company'?'block':'none';}
 function commitAddSH(cid){
   var c=data.companies.find(function(x){return x.id===cid;});if(!c)return;
   var tp=document.getElementById('sh-type').value||'individual';
   var person=tp==='company'?document.getElementById('sh-person-select').value:document.getElementById('sh-person-text').value;
   var pct=parseFloat(document.getElementById('sh-pct').value)||0;
   var cls=document.getElementById('sh-class').value||'';
-  if(!person){alert(lang==='en'?'Enter a name or select a company.':'Ingresa un nombre o selecciona una empresa.');return;}
+  if(!person)return;
   c.shareholders.push({id:uid(),person:person,pct:pct,class:cls,type:tp});
   save();closeModal();openCompany(cid);
 }
-
 function openEditSHForm(cid,idx){
   var c=data.companies.find(function(x){return x.id===cid;});if(!c)return;
   var s=c.shareholders[idx];if(!s)return;
-  var opts='';
-  data.companies.filter(function(x){return x.id!==cid;}).forEach(function(x){opts+='<option value="'+x.id+'"'+(s.person===x.id?' selected':'')+'>'+esc(x.name)+'</option>';});
+  var opts='';data.companies.filter(function(x){return x.id!==cid;}).forEach(function(x){opts+='<option value="'+x.id+'"'+(s.person===x.id?' selected':'')+'>'+esc(x.name)+'</option>';});
   var h='<div class="modal-header"><div class="modal-title">'+t('editShareholder')+'</div><button class="close-btn" onclick="closeModal();openCompany('+q(cid)+')">×</button></div>';
   h+='<div class="modal-body"><div class="form-grid">';
   h+='<div class="form-group"><label class="lbl">'+t('ownerType')+'</label><select id="sh-type-e" class="inp" onchange="toggleSHInputE()"><option value="individual"'+(s.type==='individual'?' selected':'')+'>'+t('individual')+'</option><option value="company"'+(s.type==='company'?' selected':'')+'>'+t('company')+'</option></select></div>';
-  h+='<div class="form-group"><label class="lbl">'+(lang==='en'?'Name':'Nombre')+'</label>';
-  h+='<input id="sh-person-text-e" class="inp" value="'+esc(s.type==='individual'?s.person:'')+'" style="'+(s.type==='company'?'display:none':'')+'">';
-  h+='<select id="sh-person-select-e" class="inp" style="'+(s.type==='individual'?'display:none':'')+'"><option value="">— select —</option>'+opts+'</select></div>';
+  h+='<div class="form-group"><label class="lbl">Name</label><input id="sh-person-text-e" class="inp" value="'+esc(s.type==='individual'?s.person:'')+'" style="'+(s.type==='company'?'display:none':'')+'"><select id="sh-person-select-e" class="inp" style="'+(s.type==='individual'?'display:none':'')+'"><option value="">— select —</option>'+opts+'</select></div>';
   h+='<div class="form-group"><label class="lbl">'+t('ownership')+'</label><input id="sh-pct-e" class="inp" type="number" min="0" max="100" value="'+s.pct+'"></div>';
-  h+='<div class="form-group"><label class="lbl">'+t('shareClass')+'</label><input id="sh-class-e" class="inp" value="'+esc(s.class||'')+'"></div>';
-  h+='</div><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">';
+  h+='<div class="form-group"><label class="lbl">'+t('shareClass')+'</label><input id="sh-class-e" class="inp" value="'+esc(s.class||'')+'"></div></div>';
+  h+='<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">';
   h+='<button class="btn btn-outline" onclick="closeModal();openCompany('+q(cid)+')">'+t('cancel')+'</button>';
   h+='<button class="btn btn-primary" onclick="commitEditSH('+q(cid)+','+idx+')">'+t('save')+'</button></div></div>';
   showModal(h);
 }
-function toggleSHInputE(){
-  var tp=document.getElementById('sh-type-e').value;
-  document.getElementById('sh-person-text-e').style.display=tp==='company'?'none':'block';
-  document.getElementById('sh-person-select-e').style.display=tp==='company'?'block':'none';
-}
+function toggleSHInputE(){var tp=document.getElementById('sh-type-e').value;document.getElementById('sh-person-text-e').style.display=tp==='company'?'none':'block';document.getElementById('sh-person-select-e').style.display=tp==='company'?'block':'none';}
 function commitEditSH(cid,idx){
   var c=data.companies.find(function(x){return x.id===cid;});if(!c)return;
   var tp=document.getElementById('sh-type-e').value||'individual';
   var person=tp==='company'?document.getElementById('sh-person-select-e').value:document.getElementById('sh-person-text-e').value;
   var pct=parseFloat(document.getElementById('sh-pct-e').value)||0;
   var cls=document.getElementById('sh-class-e').value||'';
-  if(!person){alert(lang==='en'?'Enter a name or select a company.':'Ingresa un nombre o selecciona una empresa.');return;}
+  if(!person)return;
   c.shareholders[idx]={id:c.shareholders[idx].id,person:person,pct:pct,class:cls,type:tp};
   save();closeModal();openCompany(cid);
 }
-function delShareholder(cid,idx){
-  if(!confirm(lang==='en'?'Remove this shareholder?':'¿Quitar este accionista?'))return;
-  var c=data.companies.find(function(x){return x.id===cid;});if(!c)return;
-  c.shareholders.splice(idx,1);save();closeModal();openCompany(cid);
-}
-function delSubLink(subId,pid){
-  if(!confirm(lang==='en'?'Remove ownership link? Company stays.':'¿Quitar vínculo? La empresa no se elimina.'))return;
-  var s=data.companies.find(function(x){return x.id===subId;});if(!s)return;
-  s.shareholders=s.shareholders.filter(function(sh){return !(sh.type==='company'&&sh.person===pid);});
-  save();closeModal();openCompany(pid);
-}
-function delInvFromModal(invId,cid){
-  if(!confirm(lang==='en'?'Delete this investment?':'¿Eliminar esta inversión?'))return;
-  data.investments=data.investments.filter(function(x){return x.id!==invId;});
-  save();closeModal();openCompany(cid);
-}
-function delBankAccount(cid,idx){
-  if(!confirm(lang==='en'?'Delete this bank account?':'¿Eliminar esta cuenta bancaria?'))return;
-  var c=data.companies.find(function(x){return x.id===cid;});if(!c)return;
-  c.banking.splice(idx,1);save();
-  var el=document.getElementById('bank-view-list');if(el)el.innerHTML=renderBankView(cid);
-}
-function delCustomField(cid,idx){
-  if(!confirm(lang==='en'?'Remove this field?':'¿Quitar este campo?'))return;
-  var c=data.companies.find(function(x){return x.id===cid;});if(!c)return;
-  c.custom.splice(idx,1);save();closeModal();openCompany(cid);
-}
+function delShareholder(cid,idx){if(!confirm(lang==='en'?'Remove shareholder?':'¿Quitar accionista?'))return;var c=data.companies.find(function(x){return x.id===cid;});if(!c)return;c.shareholders.splice(idx,1);save();closeModal();openCompany(cid);}
+function delSubLink(subId,pid){if(!confirm(lang==='en'?'Remove link? Company stays.':'¿Quitar vínculo?'))return;var s=data.companies.find(function(x){return x.id===subId;});if(!s)return;s.shareholders=s.shareholders.filter(function(sh){return !(sh.type==='company'&&sh.person===pid);});save();closeModal();openCompany(pid);}
+function delInvFromModal(invId,cid){if(!confirm(lang==='en'?'Delete investment?':'¿Eliminar inversión?'))return;data.investments=data.investments.filter(function(x){return x.id!==invId;});save();closeModal();openCompany(cid);}
+function delBankAccount(cid,idx){if(!confirm(lang==='en'?'Delete bank account?':'¿Eliminar cuenta?'))return;var c=data.companies.find(function(x){return x.id===cid;});if(!c)return;c.banking.splice(idx,1);save();var el=document.getElementById('bank-view-list');if(el)el.innerHTML=renderBankView(cid);}
+function delCustomField(cid,idx){if(!confirm(lang==='en'?'Remove field?':'¿Quitar campo?'))return;var c=data.companies.find(function(x){return x.id===cid;});if(!c)return;c.custom.splice(idx,1);save();closeModal();openCompany(cid);}
 
-// ── Bank add/edit modals ──────────────────────────────────────────────────────
-function bankForm(cid,b){
+// ── Bank modals ───────────────────────────────────────────────────────────────
+function bankFormHTML(b){
   var h='<div class="form-grid">';
   h+='<div class="form-group"><label class="lbl">'+t('bankName')+'</label><input id="bk-bank" class="inp" value="'+esc(b?b.bank:'')+'"></div>';
   h+='<div class="form-group"><label class="lbl">'+t('currency')+'</label><input id="bk-cur" class="inp" value="'+esc(b?b.currency:'USD')+'"></div>';
@@ -852,39 +1000,27 @@ function bankForm(cid,b){
   h+='<div class="form-group"><label class="lbl">'+t('routing')+'</label><input id="bk-rou" class="inp" value="'+esc(b?b.routing:'')+'"></div>';
   h+='<div class="form-group"><label class="lbl">SWIFT</label><input id="bk-sw" class="inp" value="'+esc(b?b.swift:'')+'"></div>';
   h+='<div class="form-group"><label class="lbl">'+t('accountType')+'</label><input id="bk-type" class="inp" value="'+esc(b?b.type:'Checking')+'"></div>';
-  h+='<div class="form-group full"><label class="lbl">'+t('bankAddress')+'</label><input id="bk-addr" class="inp" value="'+esc(b?b.bankAddr:'')+'"></div>';
-  h+='</div>';
+  h+='<div class="form-group full"><label class="lbl">'+t('bankAddress')+'</label><input id="bk-addr" class="inp" value="'+esc(b?b.bankAddr:'')+'"></div></div>';
   return h;
 }
 function addBankInModal(cid){
   var h='<div class="modal-header"><div class="modal-title">'+t('addBank')+'</div><button class="close-btn" onclick="closeModal();openCompany('+q(cid)+')">×</button></div>';
-  h+='<div class="modal-body">'+bankForm(cid,null);
-  h+='<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">';
+  h+='<div class="modal-body">'+bankFormHTML(null)+'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">';
   h+='<button class="btn btn-outline" onclick="closeModal();openCompany('+q(cid)+')">'+t('cancel')+'</button>';
   h+='<button class="btn btn-primary" onclick="commitBankAdd('+q(cid)+')">'+t('save')+'</button></div></div>';
   showModal(h);
 }
 function editBankInModal(cid,idx){
-  var c=data.companies.find(function(x){return x.id===cid;});if(!c)return;
-  var b=c.banking[idx];if(!b)return;
+  var c=data.companies.find(function(x){return x.id===cid;});if(!c)return;var b=c.banking[idx];if(!b)return;
   var h='<div class="modal-header"><div class="modal-title">'+t('editCompany')+' '+t('banking')+'</div><button class="close-btn" onclick="closeModal();openCompany('+q(cid)+')">×</button></div>';
-  h+='<div class="modal-body">'+bankForm(cid,b);
-  h+='<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">';
+  h+='<div class="modal-body">'+bankFormHTML(b)+'<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">';
   h+='<button class="btn btn-outline" onclick="closeModal();openCompany('+q(cid)+')">'+t('cancel')+'</button>';
   h+='<button class="btn btn-primary" onclick="commitBankEdit('+q(cid)+','+idx+')">'+t('save')+'</button></div></div>';
   showModal(h);
 }
 function gv(id){return document.getElementById(id)?document.getElementById(id).value:'';}
-function commitBankAdd(cid){
-  var c=data.companies.find(function(x){return x.id===cid;});if(!c)return;
-  c.banking.push({id:uid(),bank:gv('bk-bank'),account:gv('bk-acc'),routing:gv('bk-rou'),swift:gv('bk-sw'),bankAddr:gv('bk-addr'),currency:gv('bk-cur'),type:gv('bk-type')});
-  save();closeModal();openCompany(cid);
-}
-function commitBankEdit(cid,idx){
-  var c=data.companies.find(function(x){return x.id===cid;});if(!c)return;
-  c.banking[idx]={id:c.banking[idx].id,bank:gv('bk-bank'),account:gv('bk-acc'),routing:gv('bk-rou'),swift:gv('bk-sw'),bankAddr:gv('bk-addr'),currency:gv('bk-cur'),type:gv('bk-type')};
-  save();closeModal();openCompany(cid);
-}
+function commitBankAdd(cid){var c=data.companies.find(function(x){return x.id===cid;});if(!c)return;c.banking.push({id:uid(),bank:gv('bk-bank'),account:gv('bk-acc'),routing:gv('bk-rou'),swift:gv('bk-sw'),bankAddr:gv('bk-addr'),currency:gv('bk-cur'),type:gv('bk-type')});save();closeModal();openCompany(cid);}
+function commitBankEdit(cid,idx){var c=data.companies.find(function(x){return x.id===cid;});if(!c)return;c.banking[idx]={id:c.banking[idx].id,bank:gv('bk-bank'),account:gv('bk-acc'),routing:gv('bk-rou'),swift:gv('bk-sw'),bankAddr:gv('bk-addr'),currency:gv('bk-cur'),type:gv('bk-type')};save();closeModal();openCompany(cid);}
 function addCFInModal(cid){
   var h='<div class="modal-header"><div class="modal-title">'+t('addField')+'</div><button class="close-btn" onclick="closeModal();openCompany('+q(cid)+')">×</button></div>';
   h+='<div class="modal-body"><div class="form-grid"><div class="form-group"><label class="lbl">'+t('fieldName')+'</label><input id="cf-name" class="inp"></div>';
@@ -894,14 +1030,11 @@ function addCFInModal(cid){
   h+='<button class="btn btn-primary" onclick="commitCFAdd('+q(cid)+')">'+t('save')+'</button></div></div>';
   showModal(h);
 }
-function commitCFAdd(cid){
-  var c=data.companies.find(function(x){return x.id===cid;});if(!c)return;
-  c.custom.push({id:uid(),name:gv('cf-name'),value:gv('cf-val')});
-  save();closeModal();openCompany(cid);
-}
+function commitCFAdd(cid){var c=data.companies.find(function(x){return x.id===cid;});if(!c)return;c.custom.push({id:uid(),name:gv('cf-name'),value:gv('cf-val')});save();closeModal();openCompany(cid);}
 
 // ── Company form ──────────────────────────────────────────────────────────────
 function openCompanyForm(id){
+  if(!isAdmin())return;
   var c=id?data.companies.find(function(x){return x.id===id;}):null;
   window._fSH=c?JSON.parse(JSON.stringify(c.shareholders)):[];
   var h='<div class="modal-header"><div class="modal-title">'+(c?t('editCompany')+' Company':t('addCompany'))+'</div><button class="close-btn" onclick="closeModal()">×</button></div>';
@@ -919,34 +1052,27 @@ function openCompanyForm(id){
   h+='<div class="form-group"><label class="lbl">'+t('registeredAgent')+'</label><input id="f-agent" class="inp" value="'+esc(c?c.agent:'')+'"></div>';
   h+='<div class="form-group full"><label class="lbl">'+t('address')+'</label><textarea id="f-address" class="inp">'+esc(c?c.address:'')+'</textarea></div>';
   h+='<div class="form-group full"><label class="lbl">'+t('notes')+'</label><textarea id="f-notes" class="inp">'+esc(c?c.notes:'')+'</textarea></div>';
-  h+='</div></div>';
-  h+='<div class="fsec"><div class="fsec-title">'+t('shareholders2')+'</div><div id="sh-list-form"></div>';
-  h+='<div style="display:flex;gap:6px;margin-top:6px"><button class="btn btn-outline btn-sm" onclick="addSHRowForm(\'individual\')">'+t('addShareholder')+'</button>';
-  h+='<button class="btn btn-outline btn-sm" onclick="addSHRowForm(\'company\')">+ '+t('company')+'</button></div></div>';
+  h+='</div></div><div class="fsec"><div class="fsec-title">'+t('shareholders2')+'</div><div id="sh-list-form"></div>';
+  h+='<div style="display:flex;gap:6px;margin-top:6px"><button class="btn btn-outline btn-sm" onclick="addSHRowForm(\'individual\')">'+t('addShareholder')+'</button><button class="btn btn-outline btn-sm" onclick="addSHRowForm(\'company\')">+ '+t('company')+'</button></div></div>';
+  var saveId=id?q(id):"''";
   h+='<div style="display:flex;gap:8px;justify-content:flex-end;padding-top:14px;border-top:1px solid var(--border)">';
   h+='<button class="btn btn-outline" onclick="closeModal()">'+t('cancel')+'</button>';
-  var saveId=id?q(id):"''";
   h+='<button class="btn btn-primary" onclick="saveCompany('+saveId+')">'+t('save')+'</button></div></div>';
-  showModal(h);
-  renderSHListForm();
+  showModal(h);renderSHListForm();
 }
 function renderSHListForm(){
   var el=document.getElementById('sh-list-form');if(!el)return;
   var h='';
   window._fSH.forEach(function(s,i){
-    h+='<div class="sh-form-row">';
-    h+='<span style="font-size:14px">'+(s.type==='company'?'🏢':'👤')+'</span>';
+    h+='<div class="sh-form-row"><span>'+(s.type==='company'?'🏢':'👤')+'</span>';
     if(s.type==='company'){
-      h+='<select style="padding:5px 8px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-size:12px;font-family:inherit;color:var(--text);background:var(--surface);outline:none;width:100%" onchange="_fSH['+i+'].person=this.value"><option value="">— select —</option>';
+      h+='<select onchange="_fSH['+i+'].person=this.value" style="padding:5px 8px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-size:12px;font-family:inherit;color:var(--text);background:var(--surface);outline:none;width:100%"><option value="">— select —</option>';
       data.companies.forEach(function(x){h+='<option value="'+x.id+'"'+(s.person===x.id?' selected':'')+'>'+esc(x.name)+'</option>';});
       h+='</select>';
-    } else {
-      h+='<input value="'+esc(s.person)+'" placeholder="'+t('individual')+'" oninput="_fSH['+i+'].person=this.value">';
-    }
+    } else {h+='<input value="'+esc(s.person)+'" oninput="_fSH['+i+'].person=this.value">';}
     h+='<input value="'+s.pct+'" type="number" min="0" max="100" placeholder="%" oninput="_fSH['+i+'].pct=parseFloat(this.value)||0">';
-    h+='<input value="'+esc(s.class||'')+'" placeholder="'+t('shareClass')+'" oninput="_fSH['+i+'].class=this.value">';
-    h+='<button class="btn btn-danger btn-sm" onclick="_fSH.splice('+i+',1);renderSHListForm()">×</button>';
-    h+='</div>';
+    h+='<input value="'+esc(s.class||'')+'" placeholder="Class" oninput="_fSH['+i+'].class=this.value">';
+    h+='<button class="btn btn-danger btn-sm" onclick="_fSH.splice('+i+',1);renderSHListForm()">×</button></div>';
   });
   el.innerHTML=h;
 }
@@ -954,15 +1080,17 @@ function addSHRowForm(tp){window._fSH.push({id:uid(),person:'',pct:0,class:'',ty
 function saveCompany(id){
   var banking=id?(data.companies.find(function(c){return c.id===id;})||{banking:[]}).banking:[];
   var custom=id?(data.companies.find(function(c){return c.id===id;})||{custom:[]}).custom:[];
+  var documents=id?(data.companies.find(function(c){return c.id===id;})||{documents:[]}).documents:[];
   var obj={id:id||uid(),name:gv('f-name'),jurisdiction:gv('f-jur'),status:gv('f-status'),yearFounded:gv('f-year'),
     purpose:gv('f-purpose'),tags:gv('f-tags'),fiscalId:gv('f-fiscal'),ein:gv('f-ein'),irs:gv('f-irs'),
     director:gv('f-director'),agent:gv('f-agent'),address:gv('f-address'),notes:gv('f-notes'),
-    shareholders:window._fSH,banking:banking,custom:custom};
+    shareholders:window._fSH,banking:banking,custom:custom,documents:documents};
   if(id){var i=data.companies.findIndex(function(c){return c.id===id;});if(i>-1)data.companies[i]=obj;}
   else data.companies.push(obj);
   save();closeModal();render();
 }
 function delCompany(id){
+  if(!isAdmin())return;
   if(!confirm(t('confirmDelete')))return;
   data.companies=data.companies.filter(function(c){return c.id!==id;});
   data.investments=data.investments.filter(function(i){return i.companyId!==id;});
@@ -982,18 +1110,18 @@ function renderInvestments(){
   var totalMV=inv.reduce(function(a,i){return a+(+i.marketValue||0);},0);
   var totalC=inv.reduce(function(a,i){return a+(+i.commitment||0);},0);
   var totalD=inv.reduce(function(a,i){return a+(+i.distributions||0);},0);
-  var h='<div class="section-header"><div class="section-title">'+t('investments')+' <span style="color:var(--text3);font-weight:400;font-size:14px">('+data.investments.length+')</span></div>';
-  h+='<button class="btn btn-primary" onclick="openInvForm(null,null)">'+t('addInvestment')+'</button></div>';
+  var h=roBanner();
+  h+='<div class="section-header"><div class="section-title">'+t('investments')+' <span style="color:var(--text3);font-weight:400;font-size:14px">('+data.investments.length+')</span></div>';
+  if(isAdmin()) h+='<button class="btn btn-primary" onclick="openInvForm(null,null)">'+t('addInvestment')+'</button>';
+  h+='</div>';
   h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px">';
   h+='<div class="kpi"><div class="kpi-label">'+t('invMV')+'</div><div class="kpi-val" style="font-size:20px">'+fmtD(totalMV)+'</div></div>';
   h+='<div class="kpi"><div class="kpi-label">'+t('invCommit')+'</div><div class="kpi-val" style="font-size:20px">'+fmtD(totalC)+'</div></div>';
   h+='<div class="kpi"><div class="kpi-label">'+t('invDist')+'</div><div class="kpi-val" style="font-size:20px;color:var(--teal)">'+fmtD(totalD)+'</div></div>';
-  h+='<div class="kpi"><div class="kpi-label"># '+t('investments')+'</div><div class="kpi-val" style="font-size:20px">'+data.investments.length+'</div></div>';
-  h+='</div>';
+  h+='<div class="kpi"><div class="kpi-label"># '+t('investments')+'</div><div class="kpi-val" style="font-size:20px">'+data.investments.length+'</div></div></div>';
   h+='<div class="charts-row" style="grid-template-columns:1fr 1fr;margin-bottom:18px">';
   h+='<div class="chart-card"><div class="chart-title">'+t('byFund')+'</div><div class="chart-wrap"><canvas id="inv-fund-chart"></canvas></div></div>';
-  h+='<div class="chart-card"><div class="chart-title">'+t('byType')+'</div><div class="chart-wrap"><canvas id="inv-type-chart"></canvas></div></div>';
-  h+='</div>';
+  h+='<div class="chart-card"><div class="chart-title">'+t('byType')+'</div><div class="chart-wrap"><canvas id="inv-type-chart"></canvas></div></div></div>';
   h+='<div class="toolbar"><div class="search-wrap"><span class="si">⌕</span><input type="text" placeholder="'+t('search')+'" value="'+esc(invSearch)+'" oninput="invSearch=this.value;renderPage()"></div>';
   h+='<select class="filter" onchange="invFundF=this.value;renderPage()"><option value="">'+t('allFunds')+'</option>';
   funds.forEach(function(f){h+='<option value="'+esc(f)+'"'+(invFundF===f?' selected':'')+'>'+esc(f)+'</option>';});
@@ -1001,22 +1129,22 @@ function renderInvestments(){
   types.forEach(function(t2){h+='<option value="'+esc(t2)+'"'+(invTypeF===t2?' selected':'')+'>'+esc(t2)+'</option>';});
   h+='</select></div>';
   h+='<div class="card" style="padding:0"><table><thead><tr><th>'+t('invName')+'</th><th>'+t('invFund')+'</th><th>'+t('invCompany')+'</th><th>'+t('invType')+'</th><th>'+t('invMV')+'</th><th>'+t('invCalls')+'</th><th>'+t('invDist')+'</th><th>'+t('invStatus')+'</th><th></th></tr></thead><tbody>';
-  if(inv.length===0){
-    h+='<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--text3)">'+t('noData')+'</td></tr>';
-  } else {
-    inv.forEach(function(i){
-      h+='<tr><td style="font-weight:600">'+esc(i.name)+'</td>';
-      h+='<td>'+(i.fund?'<span class="badge badge-fund">'+esc(i.fund)+'</span>':'—')+'</td>';
-      h+='<td style="cursor:pointer;color:var(--accent);font-weight:500" onclick="go(\'companies\');setTimeout(function(){openCompany('+q(i.companyId)+')},50)">'+esc(cname(i.companyId))+'</td>';
-      h+='<td><span class="badge badge-inv">'+esc(i.type||'—')+'</span></td>';
-      h+='<td style="font-weight:600">'+fmtD(i.marketValue)+'</td>';
-      h+='<td>'+fmtD(i.calls)+'</td>';
-      h+='<td style="color:var(--teal)">'+fmtD(i.distributions)+'</td>';
-      h+='<td>'+(i.status?'<span class="badge badge-active">'+esc(i.status)+'</span>':'—')+'</td>';
-      h+='<td style="white-space:nowrap"><button class="btn btn-outline btn-sm" onclick="openInvForm('+q(i.id)+',null)" style="margin-right:4px">'+t('editCompany')+'</button>';
-      h+='<button class="btn btn-danger btn-sm" onclick="delInv('+q(i.id)+')">×</button></td></tr>';
-    });
-  }
+  if(inv.length===0){h+='<tr><td colspan="9" style="text-align:center;padding:32px;color:var(--text3)">'+t('noData')+'</td></tr>';}
+  else{inv.forEach(function(i){
+    h+='<tr><td style="font-weight:600">'+esc(i.name)+'</td>';
+    h+='<td>'+(i.fund?'<span class="badge badge-fund">'+esc(i.fund)+'</span>':'—')+'</td>';
+    h+='<td style="cursor:pointer;color:var(--accent);font-weight:500" onclick="go(\'companies\');setTimeout(function(){openCompany('+q(i.companyId)+')},50)">'+esc(cname(i.companyId))+'</td>';
+    h+='<td><span class="badge badge-inv">'+esc(i.type||'—')+'</span></td>';
+    h+='<td style="font-weight:600">'+fmtD(i.marketValue)+'</td><td>'+fmtD(i.calls)+'</td>';
+    h+='<td style="color:var(--teal)">'+fmtD(i.distributions)+'</td>';
+    h+='<td>'+(i.status?'<span class="badge badge-active">'+esc(i.status)+'</span>':'—')+'</td>';
+    h+='<td style="white-space:nowrap">';
+    if(isAdmin()){
+      h+='<button class="btn btn-outline btn-sm" onclick="openInvForm('+q(i.id)+',null)" style="margin-right:4px">'+t('editCompany')+'</button>';
+      h+='<button class="btn btn-danger btn-sm" onclick="delInv('+q(i.id)+')">×</button>';
+    }
+    h+='</td></tr>';
+  });}
   h+='</tbody></table></div>';
   return h;
 }
@@ -1031,43 +1159,29 @@ function openInvForm(id,defaultCo){
   var inv=id?data.investments.find(function(x){return x.id===id;}):null;
   window._fInvFields=inv?JSON.parse(JSON.stringify(inv.fields||[])):[];
   var preCo=inv?inv.companyId:(defaultCo||'');
-  var h='<div class="modal-header"><div class="modal-title">'+(inv?(lang==='en'?'Edit Investment':'Editar Inversión'):t('addInvestment'))+'</div><button class="close-btn" onclick="closeModal()">×</button></div>';
+  var saveInvId=id?q(id):"''";
+  var h='<div class="modal-header"><div class="modal-title">'+(inv?'Edit Investment':t('addInvestment'))+'</div><button class="close-btn" onclick="closeModal()">×</button></div>';
   h+='<div class="modal-body"><div class="form-grid">';
   h+='<div class="form-group full"><label class="lbl">'+t('invName')+'</label><input id="iv-name" class="inp" value="'+esc(inv?inv.name:'')+'"></div>';
   h+='<div class="form-group"><label class="lbl">'+t('invFund')+'</label><input id="iv-fund" class="inp" list="fund-list" value="'+esc(inv?inv.fund:'')+'"><datalist id="fund-list">';
-  var knownFunds=[...new Set(data.investments.map(function(i){return i.fund;}).filter(Boolean))];
-  knownFunds.forEach(function(f){h+='<option>'+esc(f)+'</option>';});
+  [...new Set(data.investments.map(function(i){return i.fund;}).filter(Boolean))].forEach(function(f){h+='<option>'+esc(f)+'</option>';});
   h+='</datalist></div>';
   h+='<div class="form-group"><label class="lbl">'+t('invFamily')+'</label><input id="iv-family" class="inp" value="'+esc(inv?inv.family:'')+'"></div>';
   h+='<div class="form-group"><label class="lbl">'+t('invCompany')+'</label><select id="iv-co" class="inp"><option value="">— select —</option>';
   data.companies.forEach(function(c){h+='<option value="'+c.id+'"'+(preCo===c.id?' selected':'')+'>'+esc(c.name)+'</option>';});
-  h+='</select></div>';
-  h+='<div class="form-group"><label class="lbl">'+t('invType')+'</label><input id="iv-type" class="inp" list="inv-types" value="'+esc(inv?inv.type:'')+'"><datalist id="inv-types"><option>Equity</option><option>Real Estate</option><option>Fund</option><option>Bond</option><option>Crypto</option><option>Loan</option><option>Other</option></datalist></div>';
+  h+='</select></div><div class="form-group"><label class="lbl">'+t('invType')+'</label><input id="iv-type" class="inp" list="inv-types" value="'+esc(inv?inv.type:'')+'"><datalist id="inv-types"><option>Equity</option><option>Real Estate</option><option>Fund</option><option>Bond</option><option>Crypto</option><option>Loan</option><option>Other</option></datalist></div>';
   h+='<div class="form-group"><label class="lbl">'+t('invStatus')+'</label><select id="iv-status" class="inp"><option value="active"'+(inv&&inv.status==='active'?' selected':'')+'>Active</option><option value="exited"'+(inv&&inv.status==='exited'?' selected':'')+'>Exited</option><option value="pending"'+(inv&&inv.status==='pending'?' selected':'')+'>Pending</option></select></div>';
   h+='<div class="form-group"><label class="lbl">'+t('invCommit')+' (USD)</label><input id="iv-commit" class="inp" type="number" value="'+((inv&&inv.commitment)||'')+'"></div>';
   h+='<div class="form-group"><label class="lbl">'+t('invCalls')+' (USD)</label><input id="iv-calls" class="inp" type="number" value="'+((inv&&inv.calls)||'')+'"></div>';
   h+='<div class="form-group"><label class="lbl">'+t('invDist')+' (USD)</label><input id="iv-dist" class="inp" type="number" value="'+((inv&&inv.distributions)||'')+'"></div>';
   h+='<div class="form-group"><label class="lbl">'+t('invMV')+' (USD)</label><input id="iv-mv" class="inp" type="number" value="'+((inv&&inv.marketValue)||'')+'"></div>';
-  h+='<div class="form-group full"><label class="lbl">'+t('invNotes')+'</label><textarea id="iv-notes" class="inp">'+esc(inv?inv.notes:'')+'</textarea></div>';
-  h+='</div><div class="fsec" style="margin-top:14px"><div class="fsec-title">'+t('customFields')+'</div><div id="inv-fields-list"></div>';
-  h+='<button class="btn btn-outline btn-sm" onclick="addInvField()">'+t('addField')+'</button></div>';
+  h+='<div class="form-group full"><label class="lbl">'+t('invNotes')+'</label><textarea id="iv-notes" class="inp">'+esc(inv?inv.notes:'')+'</textarea></div></div>';
+  h+='<div class="fsec" style="margin-top:14px"><div class="fsec-title">'+t('customFields')+'</div><div id="inv-fields-list"></div><button class="btn btn-outline btn-sm" onclick="addInvField()">'+t('addField')+'</button></div>';
   h+='<div style="display:flex;gap:8px;justify-content:flex-end;padding-top:14px;border-top:1px solid var(--border);margin-top:14px">';
-  h+='<button class="btn btn-outline" onclick="closeModal()">'+t('cancel')+'</button>';
-  var saveInvId=id?q(id):"''";
-  h+='<button class="btn btn-primary" onclick="saveInv('+saveInvId+')">'+t('save')+'</button></div></div>';
-  showModal(h);
-  renderInvFields();
+  h+='<button class="btn btn-outline" onclick="closeModal()">'+t('cancel')+'</button><button class="btn btn-primary" onclick="saveInv('+saveInvId+')">'+t('save')+'</button></div></div>';
+  showModal(h);renderInvFields();
 }
-function renderInvFields(){
-  var el=document.getElementById('inv-fields-list');if(!el)return;
-  var h='';
-  window._fInvFields.forEach(function(f,i){
-    h+='<div class="inv-field-row"><input class="inp" value="'+esc(f.name)+'" placeholder="'+t('fieldName')+'" oninput="_fInvFields['+i+'].name=this.value">';
-    h+='<input class="inp" value="'+esc(f.value)+'" placeholder="'+t('fieldValue')+'" oninput="_fInvFields['+i+'].value=this.value">';
-    h+='<button class="btn btn-danger btn-sm" onclick="_fInvFields.splice('+i+',1);renderInvFields()">×</button></div>';
-  });
-  el.innerHTML=h;
-}
+function renderInvFields(){var el=document.getElementById('inv-fields-list');if(!el)return;var h='';window._fInvFields.forEach(function(f,i){h+='<div class="inv-field-row"><input class="inp" value="'+esc(f.name)+'" placeholder="'+t('fieldName')+'" oninput="_fInvFields['+i+'].name=this.value"><input class="inp" value="'+esc(f.value)+'" placeholder="'+t('fieldValue')+'" oninput="_fInvFields['+i+'].value=this.value"><button class="btn btn-danger btn-sm" onclick="_fInvFields.splice('+i+',1);renderInvFields()">×</button></div>';});el.innerHTML=h;}
 function addInvField(){window._fInvFields.push({id:uid(),name:'',value:''});renderInvFields();}
 function saveInv(id){
   var obj={id:id||uid(),companyId:gv('iv-co'),name:gv('iv-name'),fund:gv('iv-fund'),family:gv('iv-family'),
@@ -1079,10 +1193,7 @@ function saveInv(id){
   else data.investments.push(obj);
   save();closeModal();render();
 }
-function delInv(id){
-  if(!confirm(lang==='en'?'Delete investment?':'¿Eliminar inversión?'))return;
-  data.investments=data.investments.filter(function(x){return x.id!==id;});save();render();
-}
+function delInv(id){if(!confirm(lang==='en'?'Delete?':'¿Eliminar?'))return;data.investments=data.investments.filter(function(x){return x.id!==id;});save();render();}
 
 // ── Shareholders page ─────────────────────────────────────────────────────────
 var shSearch='',shSel=null;
@@ -1096,16 +1207,15 @@ function renderShareholders(){
   filtered.forEach(function(p){
     var hs=data.companies.filter(function(c){return c.shareholders.some(function(s){return s.type==='individual'&&s.person===p;});});
     var avg=hs.length?Math.round(hs.reduce(function(a,c){var s=c.shareholders.find(function(s){return s.person===p;});return a+(s?s.pct:0);},0)/hs.length):0;
-    var sel=shSel===p;
-    h+='<div class="sh-card'+(sel?' selected':'')+'" onclick="shSel='+q(p)+';renderPage()">';
+    h+='<div class="sh-card'+(shSel===p?' selected':'')+'" onclick="shSel='+q(p)+';renderPage()">';
     h+='<div style="font-weight:700;font-size:14px;margin-bottom:3px">'+esc(p)+'</div>';
     h+='<div style="font-size:12px;color:var(--text3)">'+t('holdingIn')+' '+hs.length+' '+t('companies2')+' · '+avg+'% '+t('pct')+'</div>';
     h+='<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">';
     hs.slice(0,4).forEach(function(c){h+='<span class="holding-chip">'+esc(c.name)+'</span>';});
-    if(hs.length>4) h+='<span class="holding-chip">+' +(hs.length-4)+'</span>';
+    if(hs.length>4) h+='<span class="holding-chip">+'+(hs.length-4)+'</span>';
     h+='</div></div>';
   });
-  if(filtered.length===0) h+='<div class="empty">'+t('noData')+'</div>';
+  if(!filtered.length) h+='<div class="empty">'+t('noData')+'</div>';
   h+='</div><div>';
   if(shSel){
     var hs=data.companies.filter(function(c){return c.shareholders.some(function(s){return s.type==='individual'&&s.person===shSel;});});
@@ -1115,28 +1225,38 @@ function renderShareholders(){
     h+='<div><div style="font-weight:700;font-size:15px">'+esc(shSel)+'</div><div style="font-size:12px;color:var(--text3)">'+hs.length+' '+t('companies2')+'</div></div></div>';
     h+='<canvas id="shd-pie" style="max-height:150px;margin-bottom:14px"></canvas>';
     h+='<table><thead><tr><th>'+t('name')+'</th><th>'+t('jurisdiction')+'</th><th>'+t('ownership')+'</th></tr></thead><tbody>';
-    hs.forEach(function(c){
-      var sh=c.shareholders.find(function(s){return s.person===shSel;});
+    hs.forEach(function(c){var sh=c.shareholders.find(function(s){return s.person===shSel;});
       h+='<tr style="cursor:pointer" onclick="go(\'companies\');setTimeout(function(){openCompany('+q(c.id)+')},50)">';
       h+='<td style="font-weight:600">'+esc(c.name)+'</td><td><span class="badge badge-jur">'+esc(c.jurisdiction)+'</span></td>';
       h+='<td style="font-weight:700;color:var(--accent)">'+sh.pct+'%</td></tr>';
     });
     h+='</tbody></table></div>';
-    setTimeout(function(){
-      if(hs.length) mkChart('shd-pie','doughnut',hs.map(function(c){return c.name.length>20?c.name.slice(0,20)+'…':c.name;}),hs.map(function(c){var s=c.shareholders.find(function(s){return s.person===shSel;});return s?s.pct:0;}));
-    },50);
+    setTimeout(function(){if(hs.length)mkChart('shd-pie','doughnut',hs.map(function(c){return c.name.length>20?c.name.slice(0,20)+'…':c.name;}),hs.map(function(c){var s=c.shareholders.find(function(s){return s.person===shSel;});return s?s.pct:0;}));},50);
   } else {
-    h+='<div class="card" style="display:flex;align-items:center;justify-content:center;height:220px;color:var(--text3)">← '+(lang==='en'?'Select a shareholder':'Selecciona un accionista')+'</div>';
+    h+='<div class="card" style="display:flex;align-items:center;justify-content:center;height:220px;color:var(--text3)">← Select a shareholder</div>';
   }
   h+='</div></div>';
   return h;
 }
 
-// ── Network ───────────────────────────────────────────────────────────────────
+// ── Network (ALL companies shown) ─────────────────────────────────────────────
 function renderNetwork(){
-  var ownedIds=new Set();
-  data.companies.forEach(function(c){c.shareholders.forEach(function(s){if(s.type==='company')ownedIds.add(s.person);});});
-  var roots=data.companies.filter(function(c){return !ownedIds.has(c.id);});
+  var cs=data.companies;
+  // Build ownership edges
+  var edges=[];
+  cs.forEach(function(c){
+    c.shareholders.forEach(function(s){
+      if(s.type==='company'){
+        edges.push({from:s.person,to:c.id,pct:s.pct});
+      }
+    });
+  });
+
+  // Build tree starting from all shareholders (individuals + roots)
+  var ownedIds=new Set(edges.map(function(e){return e.to;}));
+  var roots=cs.filter(function(c){return !ownedIds.has(c.id);}); // not owned by any company
+  var standalone=cs.filter(function(c){return !ownedIds.has(c.id)&&!getSubs(c.id).length&&!c.shareholders.some(function(s){return s.type==='individual';});}); 
+
   function treeNode(c,depth){
     var subs=getSubs(c.id);
     var indiv=c.shareholders.filter(function(s){return s.type==='individual';});
@@ -1150,106 +1270,220 @@ function renderNetwork(){
     h+='<span style="font-weight:700;color:'+col+'">'+esc(c.name)+'</span>';
     h+='<span class="badge badge-jur" style="font-size:10px">'+esc(c.jurisdiction)+'</span>';
     h+=sBadge(c.status);
-    if(indiv.length) h+='<span style="font-size:11px;color:var(--text3)">'+indiv.map(function(s){return s.person+' '+s.pct+'%';}).join(', ')+'</span>';
+    if(indiv.length) h+='<span style="font-size:11px;color:var(--text3)">'+indiv.map(function(s){return esc(s.person)+' '+s.pct+'%';}).join(', ')+'</span>';
     if(ic) h+='<span class="badge badge-inv" style="font-size:10px">'+ic+' inv.</span>';
     h+='</div>';
     subs.forEach(function(s){h+=treeNode(s,depth+1);});
     h+='</div>';
     return h;
   }
-  var h='<div class="section-header"><div class="section-title">'+t('networkTitle')+'</div></div>';
+
+  var h='<div class="section-header"><div class="section-title">'+t('networkTitle')+'</div>';
+  h+='<div style="display:flex;gap:8px">';
+  h+='<button class="btn btn-teal btn-sm" onclick="downloadNetworkPNG()">⬇ '+t('downloadChart')+'</button>';
+  h+='<button class="btn btn-outline btn-sm" onclick="printNetwork()">🖨 '+t('printChart')+'</button>';
+  h+='</div></div>';
   h+='<div class="card" style="margin-bottom:12px;padding:10px 16px;font-size:12px;color:var(--text2)">';
-  h+=lang==='en'?'Purple = root companies. Subsidiaries are indented below. Click any row to open.':'Morado = empresas raíz. Subsidiarias indentadas. Clic para abrir.';
-  h+='</div><div class="card">';
-  if(roots.length){
+  h+=lang==='en'?'Purple = root companies · Indented = subsidiaries · Click any row to open':'Morado = empresas raíz · Indentadas = subsidiarias · Clic para abrir';
+  h+='</div>';
+  h+='<div class="card" id="network-tree">';
+  if(cs.length===0){h+='<div class="empty">'+t('noData')+'</div>';}
+  else{
+    // Show ALL companies — rooted ones in tree, orphans flat at bottom
+    var shown=new Set();
     roots.forEach(function(c,i){
-      h+=treeNode(c,0);
-      if(i<roots.length-1) h+='<hr style="border:none;border-top:1px solid var(--border);margin:12px 0">';
+      h+=treeNode(c,0);shown.add(c.id);
+      if(i<roots.length-1) h+='<hr style="border:none;border-top:1px solid var(--border);margin:10px 0">';
     });
-  } else {
-    h+='<div class="empty">'+t('noData')+'</div>';
+    // Any companies not reachable from roots (shouldn't happen but safety net)
+    var orphans=cs.filter(function(c){return !shown.has(c.id);});
+    if(orphans.length){
+      h+='<hr style="border:none;border-top:1px solid var(--border);margin:10px 0">';
+      orphans.forEach(function(c){h+=treeNode(c,0);shown.add(c.id);});
+    }
   }
   h+='</div>';
   return h;
 }
 
-// ── Import ────────────────────────────────────────────────────────────────────
-var _pending=[];
+function downloadNetworkPNG(){
+  var el=document.getElementById('network-tree');if(!el)return;
+  // Use html2canvas-like approach via print
+  var w=window.open('','_blank');
+  w.document.write('<!DOCTYPE html><html><head><title>'+t('networkTitle')+'</title>');
+  w.document.write('<style>body{font-family:sans-serif;padding:24px;background:#f0f2f8}');
+  w.document.write('.badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600}');
+  w.document.write('.badge-active{background:#e0f7ee;color:#0e9f6e}.badge-dormant{background:#fef3c7;color:#d97706}.badge-liquidation{background:#fde8e8;color:#e3403a}.badge-jur{background:#eef1fe;color:#4f6ef7}.badge-inv{background:#fdeee7;color:#e05c2a}</style></head><body>');
+  w.document.write('<h2 style="margin-bottom:16px;color:#1e2340">'+t('networkTitle')+' — FamOfi</h2>');
+  w.document.write(el.innerHTML);
+  w.document.write('<script>window.print();<\/script></body></html>');
+  w.document.close();
+}
+function printNetwork(){downloadNetworkPNG();}
+
+// ── Import (flexible with preview + edit) ─────────────────────────────────────
+var _importRows=[];     // raw parsed rows
+var _importHeaders=[];  // detected headers
+var _importMapping={};  // colName -> systemField
+var _importEditable=[];  // editable preview rows
+
+var SYSTEM_FIELDS=['Empresa','Jurisdiccion','Propósito','Año','ID Fiscal','EIN','IRS','Director','Registered Agent','Dirección','Estado','Tags','Accionistas','Banco','Account #','Routing','SWIFT'];
+
 function openImport(){
   var h='<div class="modal-header"><div class="modal-title">'+t('importTitle')+'</div><button class="close-btn" onclick="closeModal()">×</button></div>';
-  h+='<div class="modal-body"><div class="import-hint">'+(lang==='en'?'Supports .xlsx, .xls, .csv. Headers auto-detected. Shareholders: "Name 60%; Name2 40%"':'Soporta .xlsx, .xls, .csv. Encabezados detectados automáticamente.')+'</div>';
-  h+='<div class="drop-zone" onclick="document.getElementById(\'fim\').click()" ondragover="event.preventDefault();this.style.borderColor=\'var(--accent)\'" ondragleave="this.style.borderColor=\'\'" ondrop="event.preventDefault();this.style.borderColor=\'\';handleDrop(event)">';
-  h+='<div style="font-size:28px;margin-bottom:6px">📂</div>';
-  h+='<div style="font-weight:600">'+(lang==='en'?'Click or drag & drop a file':'Clic o arrastra un archivo')+'</div>';
+  h+='<div class="modal-body">';
+  h+='<div class="import-hint">'+( lang==='en'?'Upload any CSV or Excel file. Any column structure is supported — you will map columns to fields and edit data before importing.':'Sube cualquier CSV o Excel. Cualquier estructura es soportada — mapea columnas y edita antes de importar.')+'</div>';
+  h+='<div class="drop-zone" onclick="document.getElementById(\'fim\').click()" ondragover="event.preventDefault();this.style.borderColor=\'var(--accent)\'" ondragleave="this.style.borderColor=\'\'" ondrop="event.preventDefault();this.style.borderColor=\'\';handleImportDrop(event)">';
+  h+='<div style="font-size:28px;margin-bottom:6px">📂</div><div style="font-weight:600">'+(lang==='en'?'Click or drag & drop':'Clic o arrastra')+'</div>';
   h+='<div style="font-size:11px;color:var(--text3);margin-top:3px">.xlsx · .xls · .csv</div>';
-  h+='<input id="fim" type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleFileSelect(this)"></div>';
-  h+='<div style="text-align:center;font-size:12px;color:var(--text3);margin-bottom:8px">— '+(lang==='en'?'or paste CSV below':'o pega CSV abajo')+' —</div>';
-  h+='<textarea id="imp-txt" class="import-area" placeholder="Empresa&#9;Jurisdiccion&#9;Director&#9;..."></textarea>';
-  h+='<div id="imp-msg"></div><div id="imp-preview"></div>';
-  h+='<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">';
+  h+='<input id="fim" type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleImportFile(this)"></div>';
+  h+='<div style="text-align:center;font-size:12px;color:var(--text3);margin-bottom:8px">— '+(lang==='en'?'or paste CSV below':'o pega CSV')+'—</div>';
+  h+='<textarea id="imp-txt" style="width:100%;min-height:80px;padding:8px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:monospace;outline:none" placeholder="Empresa,Jurisdiccion,Director..."></textarea>';
+  h+='<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px">';
   h+='<button class="btn btn-outline" onclick="closeModal()">'+t('cancel')+'</button>';
-  h+='<button class="btn btn-outline" onclick="runPreview()">'+(lang==='en'?'Preview':'Vista Previa')+'</button>';
-  h+='<button class="btn btn-primary" id="imp-confirm" style="display:none" onclick="commitImport()">'+(lang==='en'?'Confirm Import':'Confirmar')+'</button></div></div>';
-  showModal(h);
+  h+='<button class="btn btn-primary" onclick="parseImportText()">'+(lang==='en'?'Parse & Map':'Analizar')+'</button></div>';
+  h+='<div id="imp-map-area"></div>';
+  h+='<div id="imp-preview-area"></div>';
+  h+='<div id="imp-msg"></div>';
+  h+='</div>';
+  showModal(h,true);
 }
-function handleDrop(e){var f=e.dataTransfer.files[0];if(f)readFile(f);}
-function handleFileSelect(inp){var f=inp.files[0];if(f)readFile(f);}
-function readFile(f){
+function handleImportDrop(e){var f=e.dataTransfer.files[0];if(f)readImportFile(f);}
+function handleImportFile(inp){var f=inp.files[0];if(f)readImportFile(f);}
+function readImportFile(f){
   var isXL=/\.xlsx?$/i.test(f.name);var r=new FileReader();
   r.onload=function(e){
     try{
       var rows;
       if(isXL){var wb=XLSX.read(e.target.result,{type:'array'});var ws=wb.Sheets[wb.SheetNames[0]];rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false});}
-      else rows=parseCSV(e.target.result);
-      runPreviewFromRows(rows);
-    }catch(err){impMsg(err.message,'err');}
+      else rows=parseCSVRaw(e.target.result);
+      showImportMapping(rows);
+    }catch(err){showImpMsg(err.message,'err');}
   };
   if(isXL)r.readAsArrayBuffer(f);else r.readAsText(f,'UTF-8');
 }
-function runPreview(){var txt=document.getElementById('imp-txt');if(!txt||!txt.value.trim()){impMsg('No text','err');return;}runPreviewFromRows(parseCSV(txt.value.trim()));}
-function parseCSV(txt){
-  var lines=txt.split('\n').filter(function(l){return l.trim();});
-  var f=lines[0]||'';
-  var d=(f.match(/\t/g)||[]).length>=(f.match(/,/g)||[]).length?'\t':',';
-  return lines.map(function(l){return splitLine(l,d);});
+function parseImportText(){
+  var txt=document.getElementById('imp-txt');
+  if(!txt||!txt.value.trim()){showImpMsg('No text','err');return;}
+  showImportMapping(parseCSVRaw(txt.value.trim()));
 }
+function parseCSVRaw(txt){var lines=txt.split('\n').filter(function(l){return l.trim();});var f=lines[0]||'';var d=(f.match(/\t/g)||[]).length>=(f.match(/,/g)||[]).length?'\t':',';return lines.map(function(l){return splitLine(l,d);});}
 function splitLine(line,d){var r=[];var cur='';var q=false;for(var i=0;i<line.length;i++){var c=line[i];if(c==='"'){q=!q;}else if(c===d&&!q){r.push(cur.trim().replace(/^"|"$/g,''));cur='';}else cur+=c;}r.push(cur.trim().replace(/^"|"$/g,''));return r;}
-function ci(heads){var ns=[].slice.call(arguments,1);for(var ni=0;ni<ns.length;ni++){var n=ns[ni];for(var i=0;i<heads.length;i++){if(heads[i].includes(n))return i;}}return -1;}
-function runPreviewFromRows(rows){
-  if(!rows||rows.length<2){impMsg('Need header + data rows','err');return;}
-  var heads=rows[0].map(function(h){return String(h||'').trim().toLowerCase();});
-  var iName=ci(heads,'empresa','company name','name');if(iName===-1){impMsg('Cannot find "Empresa" column','err');return;}
-  var iJur=ci(heads,'jurisdic'),iPurp=ci(heads,'propós','propos','purpose'),iYear=ci(heads,'año','ano','year','constit'),
-    iFisc=ci(heads,'company id','numero fiscal','fiscal'),iEIN=ci(heads,'ein'),iSH=ci(heads,'shareholder','accionista'),
-    iDir=ci(heads,'director'),iAddr=ci(heads,'direcci'),iAgent=ci(heads,'registered agent','agente'),
-    iBank=ci(heads,'bank ','banco '),iAcc=ci(heads,'account #','acct'),iRoute=ci(heads,'routing','aba'),
-    iBAddr=ci(heads,'address for bank'),iSwift=ci(heads,'swift'),iIRS=ci(heads,'irs'),
-    iStatus=ci(heads,'status','estado'),iTags=ci(heads,'tags','etiqueta');
-  var parsed=[];var skipped=0;
-  for(var i=1;i<rows.length;i++){
-    var cols=rows[i];var name=String(cols[iName]||'').trim();if(!name){skipped++;continue;}
-    var shRaw=iSH>-1?String(cols[iSH]||'').trim():'';
-    var shareholders=shRaw?shRaw.split(/[;|]/).map(function(s){var m=s.trim().match(/^(.+?)\s+(\d+(?:\.\d+)?)%?$/);return m?{id:uid(),person:m[1].trim(),pct:parseFloat(m[2]),class:'',type:'individual'}:{id:uid(),person:s.trim(),pct:0,class:'',type:'individual'};}).filter(function(s){return s.person;}):[]; 
-    var bName=iBank>-1?String(cols[iBank]||'').trim():'';
-    var banking=bName?[{id:uid(),bank:bName,account:iAcc>-1?String(cols[iAcc]||'').trim():'',routing:iRoute>-1?String(cols[iRoute]||'').trim():'',swift:iSwift>-1?String(cols[iSwift]||'').trim():'',bankAddr:iBAddr>-1?String(cols[iBAddr]||'').trim():'',currency:'USD',type:'Checking'}]:[];
-    var purp=iPurp>-1?String(cols[iPurp]||'').trim():'';
-    parsed.push({id:uid(),name:name,jurisdiction:iJur>-1?String(cols[iJur]||'').trim():'',purpose:purp,yearFounded:iYear>-1?String(cols[iYear]||'').trim():'',fiscalId:iFisc>-1?String(cols[iFisc]||'').trim():'',ein:iEIN>-1?String(cols[iEIN]||'').trim():'',irs:iIRS>-1?String(cols[iIRS]||'').trim():'',director:iDir>-1?String(cols[iDir]||'').trim():'',agent:iAgent>-1?String(cols[iAgent]||'').trim():'',address:iAddr>-1?String(cols[iAddr]||'').trim():'',status:iStatus>-1?String(cols[iStatus]||'active').trim():'active',tags:iTags>-1?String(cols[iTags]||purp).trim():purp,notes:'',shareholders:shareholders,banking:banking,custom:[]});
-  }
-  _pending=parsed;
-  var prev=document.getElementById('imp-preview');
-  if(prev){
-    var ph='<div style="font-size:13px;font-weight:600;margin:12px 0 8px;color:var(--teal)">'+parsed.length+' '+(lang==='en'?'companies found':'empresas encontradas')+(skipped?' · '+skipped+' skipped':'')+'</div>';
-    ph+='<div style="overflow-x:auto"><table style="font-size:12px"><thead><tr><th>Empresa</th><th>Jurisdicción</th><th>Director</th><th>Shareholders</th></tr></thead><tbody>';
-    parsed.slice(0,5).forEach(function(c){ph+='<tr><td>'+esc(c.name)+'</td><td>'+esc(c.jurisdiction||'—')+'</td><td>'+esc(c.director||'—')+'</td><td>'+esc(c.shareholders.map(function(s){return s.person+' '+s.pct+'%';}).join(', ')||'—')+'</td></tr>';});
-    ph+='</tbody></table></div>';
-    if(parsed.length>5) ph+='<div style="font-size:11px;color:var(--text3);margin-top:4px">… and '+(parsed.length-5)+' more</div>';
-    prev.innerHTML=ph;
-  }
-  var btn=document.getElementById('imp-confirm');if(btn)btn.style.display='inline-flex';
-  impMsg('','ok');
+
+function showImportMapping(rows){
+  if(!rows||rows.length<2){showImpMsg('Need at least 2 rows','err');return;}
+  _importRows=rows;
+  _importHeaders=rows[0].map(function(h){return String(h||'').trim();});
+  // Auto-detect mapping
+  _importMapping={};
+  var sysFl=['Empresa','Jurisdiccion','Propósito','Año','ID Fiscal','EIN','IRS','Director','Registered Agent','Dirección','Estado','Tags','Accionistas','Banco','Account #','Routing','SWIFT'];
+  var keywords={
+    'Empresa':['empresa','company','nombre','name'],
+    'Jurisdiccion':['jurisdic','jurisdiction'],
+    'Propósito':['propós','propos','purpose','prop'],
+    'Año':['año','ano','year','fecha','date','constit'],
+    'ID Fiscal':['company id','fiscal','nif','rut','id/'],
+    'EIN':['ein'],
+    'IRS':['irs'],
+    'Director':['director','administrador'],
+    'Registered Agent':['registered agent','agente'],
+    'Dirección':['direcci','domicilio','address'],
+    'Estado':['status','estado'],
+    'Tags':['tags','etiqueta'],
+    'Accionistas':['shareholder','accionista'],
+    'Banco':['bank','banco'],
+    'Account #':['account','cuenta','acct'],
+    'Routing':['routing','aba'],
+    'SWIFT':['swift']
+  };
+  _importHeaders.forEach(function(h){
+    var hl=h.toLowerCase();
+    sysFl.forEach(function(sf){
+      if(!_importMapping[sf]){
+        var kws=keywords[sf]||[];
+        kws.forEach(function(kw){if(hl.includes(kw))_importMapping[sf]=h;});
+      }
+    });
+  });
+
+  // Show mapping UI
+  var ma=document.getElementById('imp-map-area');if(!ma)return;
+  var mh='<div class="fsec" style="margin-top:16px"><div class="fsec-title">'+(lang==='en'?'Column Mapping (detected automatically — adjust if needed)':'Mapeo de Columnas (detectado — ajusta si es necesario)')+'</div>';
+  mh+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+  SYSTEM_FIELDS.forEach(function(sf){
+    mh+='<div style="display:flex;align-items:center;gap:8px;font-size:12px">';
+    mh+='<div style="min-width:120px;font-weight:600;color:var(--text2)">'+sf+'</div>';
+    mh+='<select id="map-'+sf.replace(/[^a-z]/gi,'_')+'" style="flex:1;padding:5px 8px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-size:12px;font-family:inherit;color:var(--text);background:var(--surface);outline:none">';
+    mh+='<option value="">— skip —</option>';
+    _importHeaders.forEach(function(h){mh+='<option value="'+esc(h)+'"'+(_importMapping[sf]===h?' selected':'')+'>'+esc(h)+'</option>';});
+    mh+='</select></div>';
+  });
+  mh+='</div>';
+  mh+='<div style="display:flex;justify-content:flex-end;margin-top:10px">';
+  mh+='<button class="btn btn-primary btn-sm" onclick="buildImportPreview()">'+(lang==='en'?'Preview Data →':'Vista Previa →')+'</button></div></div>';
+  ma.innerHTML=mh;
 }
-function commitImport(){if(!_pending.length)return;data.companies.push.apply(data.companies,_pending);_pending=[];save();closeModal();render();}
-function impMsg(msg,type){var el=document.getElementById('imp-msg');if(el)el.innerHTML=msg?'<div class="'+(type==='ok'?'imp-ok':'imp-err')+'">'+msg+'</div>':'';}
+
+function buildImportPreview(){
+  // Read current mapping from selects
+  SYSTEM_FIELDS.forEach(function(sf){
+    var sel=document.getElementById('map-'+sf.replace(/[^a-z]/gi,'_'));
+    if(sel) _importMapping[sf]=sel.value||'';
+  });
+
+  // Build editable rows
+  _importEditable=[];
+  for(var i=1;i<_importRows.length;i++){
+    var cols=_importRows[i];
+    function colVal(sf){var col=_importMapping[sf];if(!col)return '';var idx=_importHeaders.indexOf(col);return idx>-1?String(cols[idx]||'').trim():'';}
+    if(!colVal('Empresa')){continue;} // skip empty names
+    _importEditable.push({
+      _skip:false,
+      Empresa:colVal('Empresa'),Jurisdiccion:colVal('Jurisdiccion'),Propósito:colVal('Propósito'),
+      Año:colVal('Año'),'ID Fiscal':colVal('ID Fiscal'),EIN:colVal('EIN'),IRS:colVal('IRS'),
+      Director:colVal('Director'),'Registered Agent':colVal('Registered Agent'),Dirección:colVal('Dirección'),
+      Estado:colVal('Estado')||'active',Tags:colVal('Tags'),Accionistas:colVal('Accionistas'),
+      Banco:colVal('Banco'),'Account #':colVal('Account #'),Routing:colVal('Routing'),SWIFT:colVal('SWIFT')
+    });
+  }
+
+  var pa=document.getElementById('imp-preview-area');if(!pa)return;
+  var ph='<div class="fsec" style="margin-top:16px"><div class="fsec-title">'+(lang==='en'?'Edit Before Import ('+_importEditable.length+' rows — uncheck to skip)':'Editar Antes de Importar ('+_importEditable.length+' filas)')+'</div>';
+  ph+='<div class="import-table-wrap"><table class="import-table"><thead><tr><th>✓</th><th>Empresa</th><th>Jurisdiccion</th><th>Año</th><th>Director</th><th>Accionistas</th><th>Banco</th><th>Estado</th></tr></thead><tbody id="imp-table-body"></tbody></table></div>';
+  ph+='<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">';
+  ph+='<button class="btn btn-outline btn-sm" onclick="document.getElementById(\'imp-preview-area\').innerHTML=\'\'">'+(lang==='en'?'Back':'Atrás')+'</button>';
+  ph+='<button class="btn btn-primary" onclick="confirmImport()">'+(lang==='en'?'Confirm Import ('+_importEditable.length+')':'Confirmar ('+_importEditable.length+')')+'</button></div></div>';
+  pa.innerHTML=ph;
+  renderImportTable();
+}
+
+function renderImportTable(){
+  var tb=document.getElementById('imp-table-body');if(!tb)return;
+  var h='';
+  _importEditable.forEach(function(row,i){
+    h+='<tr class="'+(row._skip?'skip':'')+'">';
+    h+='<td class="skip-cell"><input type="checkbox" '+(row._skip?'':'checked')+' onchange="_importEditable['+i+']._skip=!this.checked;renderImportTable()"></td>';
+    ['Empresa','Jurisdiccion','Año','Director','Accionistas','Banco','Estado'].forEach(function(f){
+      h+='<td><input value="'+esc(row[f]||'')+'" oninput="_importEditable['+i+'][\''+f+'\']=this.value" '+(row._skip?'disabled':'')+' style="width:100%;border:none;outline:none;font-size:12px;font-family:inherit;background:transparent;color:var(--text)"></td>';
+    });
+    h+='</tr>';
+  });
+  tb.innerHTML=h;
+}
+
+function confirmImport(){
+  var toImport=_importEditable.filter(function(r){return !r._skip;});
+  if(!toImport.length){showImpMsg('No rows selected','err');return;}
+  toImport.forEach(function(row){
+    var shRaw=row['Accionistas']||'';
+    var shareholders=shRaw?shRaw.split(/[;|]/).map(function(s){var m=s.trim().match(/^(.+?)\s+(\d+(?:\.\d+)?)%?$/);return m?{id:uid(),person:m[1].trim(),pct:parseFloat(m[2]),class:'',type:'individual'}:{id:uid(),person:s.trim(),pct:0,class:'',type:'individual'};}).filter(function(s){return s.person;}):[]; 
+    var banking=row['Banco']?[{id:uid(),bank:row['Banco'],account:row['Account #']||'',routing:row['Routing']||'',swift:row['SWIFT']||'',bankAddr:'',currency:'USD',type:'Checking'}]:[];
+    data.companies.push({id:uid(),name:row['Empresa'],jurisdiction:row['Jurisdiccion'],purpose:row['Propósito'],yearFounded:row['Año'],fiscalId:row['ID Fiscal'],ein:row['EIN'],irs:row['IRS'],director:row['Director'],agent:row['Registered Agent'],address:row['Dirección'],status:row['Estado']||'active',tags:row['Tags']||row['Propósito'],notes:'',shareholders:shareholders,banking:banking,custom:[],documents:[]});
+  });
+  save();closeModal();render();
+  showImpMsg(toImport.length+' '+(lang==='en'?'companies imported.':'empresas importadas.'),'ok');
+}
+function showImpMsg(msg,type){var el=document.getElementById('imp-msg');if(el)el.innerHTML=msg?'<div class="'+(type==='ok'?'imp-ok':'imp-err')+'">'+msg+'</div>':'';}
 
 // ── Export ────────────────────────────────────────────────────────────────────
 function exportAllCSV(){
@@ -1262,30 +1496,25 @@ function exportCompanyCSV(id){
   var subs=getSubs(id);var invs=data.investments.filter(function(i){return i.companyId===id;});
   var rows=[['Field','Value'],['Empresa',c.name],['Jurisdicción',c.jurisdiction],['Propósito',c.purpose],['Año',c.yearFounded||c.year],['ID Fiscal',c.fiscalId],['EIN',c.ein],['IRS',c.irs],['Director',c.director],['Registered Agent',c.agent],['Dirección',c.address],['Estado',c.status],['',''],['--- ACCIONISTAS ---',''],['Nombre','%','Tipo']];
   c.shareholders.forEach(function(s){rows.push([resolveOwner(s),s.pct+'%',s.type]);});
-  rows.push(['',''],['--- SUBSIDIARIAS ---','']);
-  subs.forEach(function(s){rows.push([s.name,s.jurisdiction,s.status]);});
+  rows.push(['',''],['--- SUBSIDIARIAS ---','']);subs.forEach(function(s){rows.push([s.name,s.jurisdiction,s.status]);});
   rows.push(['',''],['--- INVERSIONES ---',''],['Nombre','Fondo','Tipo','Market Value','Calls','Distribuciones']);
   invs.forEach(function(i){rows.push([i.name,i.fund,i.type,i.marketValue,i.calls,i.distributions]);});
   rows.push(['',''],['--- BANCA ---',''],['Banco','Account #','Routing','SWIFT']);
   (c.banking||[]).forEach(function(b){rows.push([b.bank,b.account,b.routing,b.swift]);});
   dlCSV(rows,c.name.replace(/[^a-z0-9]/gi,'_')+'.csv');
 }
-function dlCSV(rows,name){
-  var csv=rows.map(function(r){return r.map(function(v){return '"'+String(v||'').replace(/"/g,'""')+'"';}).join(',');}).join('\n');
-  var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent('\uFEFF'+csv);a.download=name;a.click();
-}
+function dlCSV(rows,name){var csv=rows.map(function(r){return r.map(function(v){return '"'+String(v||'').replace(/"/g,'""')+'"';}).join(',');}).join('\n');var a=document.createElement('a');a.href='data:text/csv;charset=utf-8,'+encodeURIComponent('\uFEFF'+csv);a.download=name;a.click();}
 function printCompany(id){
   var c=data.companies.find(function(x){return x.id===id;});if(!c)return;
   var subs=getSubs(id);var invs=data.investments.filter(function(i){return i.companyId===id;});
   var win=window.open('','_blank');
   var h='<!DOCTYPE html><html><head><title>'+c.name+'</title>';
   h+='<style>body{font-family:sans-serif;padding:28px;max-width:800px;margin:0 auto}h1{font-size:18px}table{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px}th{background:#f5f5f5;padding:5px 8px;text-align:left}td{padding:5px 8px;border-bottom:1px solid #eee}.row{display:grid;grid-template-columns:180px 1fr;padding:5px 0;border-bottom:1px solid #eee;font-size:12px}.lbl{color:#888}h3{font-size:13px;margin:14px 0 5px}</style></head><body>';
-  h+='<div style="display:flex;justify-content:space-between;margin-bottom:18px"><div><h1>'+c.name+'</h1><div style="color:#666;font-size:12px">'+esc(c.jurisdiction)+' · '+esc(c.yearFounded||c.year||'')+' · '+c.status+'</div></div>';
-  h+='<div style="text-align:right;font-size:10px;color:#888">FamOfi Registry<br>'+new Date().toLocaleDateString()+'</div></div>';
-  [['Jurisdicción',c.jurisdiction],['Propósito',c.purpose],['Año/Fecha',c.yearFounded||c.year],['ID Fiscal',c.fiscalId],['EIN',c.ein],['IRS',c.irs],['Director',c.director],['Registered Agent',c.agent],['Dirección',c.address],['Estado',c.status]].forEach(function(row){if(row[1])h+='<div class="row"><div class="lbl">'+row[0]+'</div><div>'+row[1]+'</div></div>';});
+  h+='<div style="display:flex;justify-content:space-between;margin-bottom:18px"><div><h1>'+c.name+'</h1><div style="color:#666;font-size:12px">'+esc(c.jurisdiction)+' · '+esc(c.yearFounded||c.year||'')+' · '+c.status+'</div></div><div style="text-align:right;font-size:10px;color:#888">FamOfi Registry<br>'+new Date().toLocaleDateString()+'</div></div>';
+  [['Jurisdicción',c.jurisdiction],['Propósito',c.purpose],['Año',c.yearFounded||c.year],['ID Fiscal',c.fiscalId],['EIN',c.ein],['IRS',c.irs],['Director',c.director],['Registered Agent',c.agent],['Dirección',c.address],['Estado',c.status]].forEach(function(row){if(row[1])h+='<div class="row"><div class="lbl">'+row[0]+'</div><div>'+row[1]+'</div></div>';});
   if(c.shareholders.length){h+='<h3>Shareholders</h3><table><tr><th>Name</th><th>%</th><th>Type</th></tr>';c.shareholders.forEach(function(s){h+='<tr><td>'+resolveOwner(s)+'</td><td>'+s.pct+'%</td><td>'+s.type+'</td></tr>';});h+='</table>';}
   if(subs.length){h+='<h3>Subsidiaries</h3><table><tr><th>Name</th><th>Jurisdiction</th><th>Status</th></tr>';subs.forEach(function(s){h+='<tr><td>'+s.name+'</td><td>'+s.jurisdiction+'</td><td>'+s.status+'</td></tr>';});h+='</table>';}
-  if(invs.length){h+='<h3>Investments</h3><table><tr><th>Name</th><th>Fund</th><th>Type</th><th>Market Value</th><th>Calls</th><th>Distributions</th></tr>';invs.forEach(function(i){h+='<tr><td>'+i.name+'</td><td>'+(i.fund||'')+'</td><td>'+i.type+'</td><td>$'+(+i.marketValue||0).toLocaleString()+'</td><td>$'+(+i.calls||0).toLocaleString()+'</td><td>$'+(+i.distributions||0).toLocaleString()+'</td></tr>';});h+='</table>';}
+  if(invs.length){h+='<h3>Investments</h3><table><tr><th>Name</th><th>Fund</th><th>Type</th><th>MV</th><th>Calls</th><th>Dist.</th></tr>';invs.forEach(function(i){h+='<tr><td>'+i.name+'</td><td>'+(i.fund||'')+'</td><td>'+i.type+'</td><td>$'+(+i.marketValue||0).toLocaleString()+'</td><td>$'+(+i.calls||0).toLocaleString()+'</td><td>$'+(+i.distributions||0).toLocaleString()+'</td></tr>';});h+='</table>';}
   if((c.banking||[]).length){h+='<h3>Banking</h3><table><tr><th>Bank</th><th>Account</th><th>Routing</th><th>SWIFT</th></tr>';c.banking.forEach(function(b){h+='<tr><td>'+b.bank+'</td><td>'+b.account+'</td><td>'+b.routing+'</td><td>'+b.swift+'</td></tr>';});h+='</table>';}
   h+='<script>window.print();<\/script></body></html>';
   win.document.write(h);win.document.close();
@@ -1295,8 +1524,7 @@ function printCompany(id){
 function showModal(html,large){
   var ov=document.getElementById('ov');
   if(!ov){ov=document.createElement('div');ov.id='ov';ov.className='overlay';ov.addEventListener('click',function(e){if(e.target===ov)closeModal();});document.body.appendChild(ov);}
-  ov.innerHTML='<div class="modal'+(large?' modal-lg':'')+'">'+html+'</div>';
-  ov.style.display='flex';
+  ov.innerHTML='<div class="modal'+(large?' modal-lg':'')+'">'+html+'</div>';ov.style.display='flex';
 }
 function closeModal(){var ov=document.getElementById('ov');if(ov)ov.style.display='none';}
 </script>
