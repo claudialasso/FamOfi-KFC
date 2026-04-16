@@ -728,7 +728,7 @@ function renderOverview(){
   h+='<div class="chart-card"><div class="chart-title">'+t('byJurisdiction')+'</div><div class="chart-wrap"><canvas id="ch-jur"></canvas></div></div>';
   h+='<div class="chart-card"><div class="chart-title">'+t('byStatus')+'</div><div class="chart-wrap"><canvas id="ch-status"></canvas></div></div>';
   h+='</div>';
-  h+='<div class="card" style="padding:0"><table><thead><tr><th>'+t('name')+'</th><th>'+t('jurisdiction')+'</th><th>'+t('status')+'</th><th>'+t('shareholders2')+'</th><th>'+t('subsidiaries')+'</th><th>'+t('investments')+'</th></tr></thead><tbody>';
+  h+='<div class="card" style="padding:0;width:100%"><table><thead><tr><th>'+t('name')+'</th><th>'+t('jurisdiction')+'</th><th>'+t('status')+'</th><th>'+t('shareholders2')+'</th><th>'+t('subsidiaries')+'</th><th>'+t('investments')+'</th></tr></thead><tbody>';
   if(!cs.length){ h+='<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text3)">'+t('noCompanies')+'</td></tr>'; }
   else { cs.forEach(function(c){
     var subs=getSubs(c.id).length;
