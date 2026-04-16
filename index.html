@@ -126,7 +126,7 @@ tr:last-child td{border-bottom:none}
 tbody tr:hover td{background:var(--accent-bg)}
 .badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:600}
 .badge-active{background:var(--teal-bg);color:var(--teal)}
-.badge-dormant{background:var(--amber-bg);color:var(--amber)}
+.badge-liquidated{background:var(--amber-bg);color:var(--amber)}
 .badge-liquidation{background:var(--red-bg);color:var(--red)}
 .badge-jur{background:var(--accent-bg);color:var(--accent)}
 .badge-inv{background:var(--coral-bg);color:var(--coral)}
@@ -297,7 +297,7 @@ var TT = {
     purpose:'Purpose', yearFounded:'Year / Date Founded', fiscalId:'Company ID / Fiscal #',
     ein:'EIN', irs:'IRS Classification', director:'Director / Administrador',
     registeredAgent:'Registered Agent', address:'Address', status:'Status', tags:'Tags',
-    active:'Active', dormant:'Dormant', liquidation:'In Liquidation',
+    active:'Active', liquidated:'Liquidated', liquidation:'In Liquidation',
     bankName:'Bank', accountNo:'Account #', routing:'Routing / ABA', swift:'SWIFT',
     bankAddress:'Bank Address', currency:'Currency', accountType:'Account Type',
     shareholders2:'Shareholders', ownership:'Ownership %', shareClass:'Share Class',
@@ -335,7 +335,7 @@ var TT = {
     purpose:'Proposito', yearFounded:'Ano / Fecha', fiscalId:'ID Fiscal',
     ein:'EIN', irs:'Clasificacion IRS', director:'Director',
     registeredAgent:'Agente Registrado', address:'Direccion', status:'Estado', tags:'Etiquetas',
-    active:'Activa', dormant:'Inactiva', liquidation:'En Liquidacion',
+    active:'Activa', liquidated:'Liquidada', liquidation:'En Liquidacion',
     bankName:'Banco', accountNo:'# Cuenta', routing:'Routing / ABA', swift:'SWIFT',
     bankAddress:'Dir. Banco', currency:'Moneda', accountType:'Tipo',
     shareholders2:'Accionistas', ownership:'% Participacion', shareClass:'Clase',
@@ -509,7 +509,7 @@ function q(id){ return "'"+id+"'"; }
 function isAdmin(){ return userRole==='admin'; }
 function sBadge(s){
   if(s==='active') return '<span class="badge badge-active">'+t('active')+'</span>';
-  if(s==='dormant') return '<span class="badge badge-dormant">'+t('dormant')+'</span>';
+  if(s==='liquidated') return '<span class="badge badge-liquidated">'+t('liquidated')+'</span>';
   return '<span class="badge badge-liquidation">'+t('liquidation')+'</span>';
 }
 function dr(lbl,val){
@@ -860,7 +860,7 @@ function renderCompanies(){
   h+='<select class="filter" onchange="cJur=this.value;renderPage()"><option value="">'+t('allJurisdictions')+'</option>';
   jurs.forEach(function(j){h+='<option value="'+esc(j)+'"'+(cJur===j?' selected':'')+'>'+esc(j)+'</option>';});
   h+='</select><select class="filter" onchange="cStatus=this.value;renderPage()"><option value="">'+t('allStatus')+'</option>';
-  h+='<option value="active">'+t('active')+'</option><option value="dormant">'+t('dormant')+'</option><option value="liquidation">'+t('liquidation')+'</option></select></div>';
+  h+='<option value="active">'+t('active')+'</option><option value="liquidated">'+t('liquidated')+'</option><option value="liquidation">'+t('liquidation')+'</option></select></div>';
   h+='<div class="card" style="padding:0"><table><thead><tr><th>'+t('name')+'</th><th>'+t('jurisdiction')+'</th><th>'+t('yearFounded')+'</th><th>'+t('director')+'</th><th>'+t('shareholders2')+'</th><th>'+t('status')+'</th><th></th></tr></thead><tbody>';
   if(!cs.length){ h+='<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text3)">'+t('noCompanies')+'</td></tr>'; }
   else { cs.forEach(function(c){
@@ -1318,7 +1318,7 @@ function openCompanyForm(id){
   h+='<div class="modal-body"><div class="fsec"><div class="fsec-title">'+t('details')+'</div><div class="form-grid">';
   h+='<div class="form-group full"><label class="lbl">'+t('name')+'</label><input id="f-name" class="inp" value="'+esc(c?c.name:'')+'"></div>';
   h+='<div class="form-group"><label class="lbl">'+t('jurisdiction')+'</label><input id="f-jur" class="inp" list="jl" value="'+esc(c?c.jurisdiction:'')+'"><datalist id="jl"><option>BVI</option><option>Uruguay</option><option>Singapore</option><option>USA</option><option>Panama</option><option>Ecuador</option><option>Cayman Islands</option></datalist></div>';
-  h+='<div class="form-group"><label class="lbl">'+t('status')+'</label><select id="f-status" class="inp"><option value="active"'+(c&&c.status==='active'?' selected':'')+'>'+t('active')+'</option><option value="dormant"'+(c&&c.status==='dormant'?' selected':'')+'>'+t('dormant')+'</option><option value="liquidation"'+(c&&c.status==='liquidation'?' selected':'')+'>'+t('liquidation')+'</option></select></div>';
+  h+='<div class="form-group"><label class="lbl">'+t('status')+'</label><select id="f-status" class="inp"><option value="active"'+(c&&c.status==='active'?' selected':'')+'>'+t('active')+'</option><option value="liquidated"'+(c&&c.status==='liquidated'?' selected':'')+'>'+t('liquidated')+'</option><option value="liquidation"'+(c&&c.status==='liquidation'?' selected':'')+'>'+t('liquidation')+'</option></select></div>';
   h+='<div class="form-group"><label class="lbl">'+t('yearFounded')+'</label><input id="f-year" class="inp" value="'+esc(c?(c.yearFounded||c.year||''):'')+'" placeholder="'+t('dateHelp')+'"><span style="font-size:11px;color:var(--text3)">'+t('dateHelp')+'</span></div>';
   h+='<div class="form-group"><label class="lbl">'+t('purpose')+'</label><input id="f-purpose" class="inp" list="pl" value="'+esc(c?c.purpose:'')+'"><datalist id="pl"><option>Holding</option><option>Operating</option><option>IP / Royalties</option><option>Real Estate</option></datalist></div>';
   h+='<div class="form-group"><label class="lbl">'+t('tags')+'</label><input id="f-tags" class="inp" value="'+esc(c?c.tags:'')+'"></div>';
