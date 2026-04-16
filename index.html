@@ -655,9 +655,11 @@ function startSub(){
   _unsub = _REF.onSnapshot(function(snap){
     if(snap.exists){
       try{ applyLoaded(JSON.parse(snap.data().payload)); }catch(e){}
-      // If this snapshot was triggered by our own save(), skip re-render
-      // because we already rendered locally. Reset the flag either way.
+      // Skip re-render if: (a) this was our own write, or (b) a modal is open
+      // A modal being open means the user is mid-edit — re-rendering would
+      // destroy their work and cause severe typing lag.
       if(_localWrite){ _localWrite = false; return; }
+      if(document.getElementById('modal-overlay')){ return; }
       render();
     }
   }, function(e){ console.warn('[FamOfi] Snapshot listener error:', e.code); });
@@ -1258,44 +1260,64 @@ function openCompanyForm(id){
 }
 function renderSHListForm(){
   var el=document.getElementById('sh-list-form'); if(!el) return;
-  // Build datalist of all known individual shareholder names once
-  var knownNames=[...new Set(data.companies.reduce(function(a,c){
+  // Build datalists once — one for known individuals, one for known companies
+  var knownIndiv=[...new Set(data.companies.reduce(function(a,c){
     c.shareholders.forEach(function(s){ if(s.type==='individual'&&s.person) a.push(s.person); });
     return a;
   },[]))].sort();
-  var dlOpts=knownNames.map(function(n){return '<option value="'+esc(n)+'">'+esc(n)+'</option>';}).join('');
+  var knownCo=data.companies.map(function(x){return {id:x.id,name:x.name};});
+  var dlIndiv=knownIndiv.map(function(n){return '<option value="'+esc(n)+'">'+esc(n)+'</option>';}).join('');
+  var dlCo=knownCo.map(function(x){return '<option value="'+esc(x.name)+'">'+esc(x.name)+'</option>';}).join('');
   var h='';
-  // One shared datalist for all individual rows
-  h+='<datalist id="sh-known-names">'+dlOpts+'</datalist>';
+  h+='<datalist id="sh-known-names">'+dlIndiv+'</datalist>';
+  h+='<datalist id="sh-known-companies">'+dlCo+'</datalist>';
   window._fSH.forEach(function(s,i){
+    // For company-type, store the display name in person field temporarily;
+    // saveCompany resolves it back to an ID or creates a new company.
+    var coDisplayVal = s.type==='company' ? (cname(s.person)===s.person ? s.person : cname(s.person)) : '';
     h+='<div class="sh-form-row">';
     h+='<span style="font-size:11px;color:var(--text3);font-weight:600">'+(s.type==='company'?'Co':'P')+'</span>';
     if(s.type==='company'){
-      // Company: plain <select> of existing companies
-      h+='<select id="fsh-person-'+i+'" style="padding:5px 8px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-size:12px;font-family:inherit;color:var(--text);background:var(--surface);outline:none;width:100%"><option value="">— select —</option>';
-      data.companies.forEach(function(x){ h+='<option value="'+x.id+'"'+(s.person===x.id?' selected':'')+'>'+esc(x.name)+'</option>'; });
-      h+='</select>';
+      // Company: text input + datalist of existing company names — type freely to create new
+      h+='<input id="fsh-person-'+i+'" list="sh-known-companies" value="'+esc(coDisplayVal)+'" placeholder="Company name or select..." style="padding:5px 8px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-size:12px;font-family:inherit;color:var(--text);background:var(--surface);outline:none;width:100%">';
     } else {
-      // Individual: text input + datalist = type freely OR pick from dropdown
-      // Uses NO oninput — value is read at save time. Zero re-renders while typing.
+      // Individual: text input + datalist of existing names — type freely to create new
       h+='<input id="fsh-person-'+i+'" list="sh-known-names" value="'+esc(s.person)+'" placeholder="Name or select..." style="padding:5px 8px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-size:12px;font-family:inherit;color:var(--text);background:var(--surface);outline:none;width:100%">';
     }
-    h+='<input id="fsh-pct-'+i+'" value="'+s.pct+'" type="number" min="0" max="100" placeholder="%"  style="padding:5px 8px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-size:12px;font-family:inherit;color:var(--text);background:var(--surface);outline:none;width:100%">';
+    h+='<input id="fsh-pct-'+i+'" value="'+s.pct+'" type="number" min="0" max="100" placeholder="%" style="padding:5px 8px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-size:12px;font-family:inherit;color:var(--text);background:var(--surface);outline:none;width:100%">';
     h+='<input id="fsh-class-'+i+'" value="'+esc(s.class||'')+'" placeholder="Class" style="padding:5px 8px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-size:12px;font-family:inherit;color:var(--text);background:var(--surface);outline:none;width:100%">';
     h+='<button class="btn btn-danger btn-sm" onclick="removeSHRow('+i+')">x</button>';
     h+='</div>';
   });
   el.innerHTML=h;
 }
-// Sync all current DOM values into _fSH before any structural change
+// Sync all current DOM values into _fSH before any structural change.
+// For company-type rows, the input holds a display name — resolve to ID here.
+// If the typed name doesn't match any existing company, create a new stub company.
 function syncSHFromDOM(){
   window._fSH.forEach(function(s,idx){
     var pp=document.getElementById('fsh-person-'+idx);
     var pc=document.getElementById('fsh-pct-'+idx);
     var cl=document.getElementById('fsh-class-'+idx);
-    if(pp) s.person=pp.value.trim();
     if(pc) s.pct=parseFloat(pc.value)||0;
     if(cl) s.class=cl.value.trim();
+    if(pp){
+      var raw=pp.value.trim();
+      if(s.type==='company'){
+        // Try to find existing company by name
+        var match=data.companies.find(function(x){ return x.name.toLowerCase()===raw.toLowerCase(); });
+        if(match){
+          s.person=match.id;
+        } else if(raw){
+          // Create a minimal new company and store its id
+          var newId=uid();
+          data.companies.push({id:newId,name:raw,jurisdiction:'',purpose:'',yearFounded:'',fiscalId:'',ein:'',irs:'',director:'',agent:'',address:'',status:'active',tags:'',notes:'',shareholders:[],banking:[],custom:[],documents:[]});
+          s.person=newId;
+        }
+      } else {
+        s.person=raw;
+      }
+    }
   });
 }
 function removeSHRow(i){ syncSHFromDOM(); window._fSH.splice(i,1); renderSHListForm(); }
@@ -1628,7 +1650,12 @@ function showModal(html,lg){
   ov.appendChild(m); document.body.appendChild(ov);
   ov.addEventListener('click',function(e){ if(e.target===ov) closeModal(); });
 }
-function closeModal(){ var ov=document.getElementById('modal-overlay'); if(ov) ov.remove(); }
+function closeModal(){
+  var ov=document.getElementById('modal-overlay');
+  if(ov) ov.remove();
+  // Re-render now that modal is closed, in case snapshot data arrived while it was open
+  render();
+}
 </script>
 </body>
 </html>
