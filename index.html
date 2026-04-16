@@ -540,42 +540,51 @@ _auth.onAuthStateChanged(function(user){
     setLoginLoading(false);
     hideLoginError();
 
-    // 2. Load role from Firestore
-    _ROLES_REF.get().then(function(snap){
-      var roles = (snap.exists && snap.data()) || {};
-      userRole = roles[user.uid] || roles[user.email] || 'viewer';
+        // 2. Load role from Firestore (with timeout safety net)
+        var _loadTimeout = setTimeout(function(){
+          document.getElementById('loading').style.display = 'none';
+          document.getElementById('app').style.display     = 'flex';
+          render();
+        }, 8000);
 
-      var badge = document.getElementById('user-badge');
-      if(badge){
-        badge.textContent = isAdmin() ? 'Admin' : 'Viewer';
-        badge.className = 'user-badge' + (isAdmin() ? ' admin-badge' : '');
-      }
-      var ib = document.getElementById('import-btn');
-      if(ib) ib.style.display = isAdmin() ? '' : 'none';
+        _ROLES_REF.get().then(function(snap){
+          var roles = (snap.exists && snap.data()) || {};
+          userRole = roles[user.uid] || roles[user.email] || 'viewer';
 
-      // 3. Load data
-      var ls = localStorage.getItem('fm_data');
-      if(ls){ try{ applyLoaded(JSON.parse(ls)); }catch(e){} }
+          var badge = document.getElementById('user-badge');
+          if(badge){
+            badge.textContent = isAdmin() ? 'Admin' : 'Viewer';
+            badge.className = 'user-badge' + (isAdmin() ? ' admin-badge' : '');
+          }
+          var ib = document.getElementById('import-btn');
+          if(ib) ib.style.display = isAdmin() ? '' : 'none';
 
-      _REF.get().then(function(s){
-        if(s.exists){ try{ applyLoaded(JSON.parse(s.data().payload)); }catch(e){} }
-        startSub();
-        document.getElementById('loading').style.display = 'none';
-        document.getElementById('app').style.display     = 'flex';
-        render();
-      }).catch(function(){
-        startSub();
-        document.getElementById('loading').style.display = 'none';
-        document.getElementById('app').style.display     = 'flex';
-        render();
-      });
-    }).catch(function(){
-      userRole = 'viewer';
-      startSub();
-      document.getElementById('loading').style.display = 'none';
-      document.getElementById('app').style.display     = 'flex';
-      render();
-    });
+          // 3. Load data
+          var ls = localStorage.getItem('fm_data');
+          if(ls){ try{ applyLoaded(JSON.parse(ls)); }catch(e){} }
+
+          return _REF.get().then(function(s){
+            if(s.exists){ try{ applyLoaded(JSON.parse(s.data().payload)); }catch(e){} }
+            startSub();
+            clearTimeout(_loadTimeout);
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('app').style.display     = 'flex';
+            render();
+          }).catch(function(){
+            startSub();
+            clearTimeout(_loadTimeout);
+            document.getElementById('loading').style.display = 'none';
+            document.getElementById('app').style.display     = 'flex';
+            render();
+          });
+        }).catch(function(){
+          userRole = 'viewer';
+          startSub();
+          clearTimeout(_loadTimeout);
+          document.getElementById('loading').style.display = 'none';
+          document.getElementById('app').style.display     = 'flex';
+          render();
+        });
 
   } else {
     // Signed out — show login, hide everything else
