@@ -97,7 +97,7 @@ main{flex:1;overflow-y:auto;padding:24px}
 .kpi-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;font-weight:600}
 .kpi-val{font-size:26px;font-weight:700}
 .kpi-sub{font-size:11px;color:var(--text3);margin-top:3px}
-.charts-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:22px}
+.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:22px}
 .chart-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow)}
 .chart-title{font-size:11px;font-weight:700;color:var(--text3);margin-bottom:12px;text-transform:uppercase;letter-spacing:.5px}
 .chart-wrap{position:relative;height:160px}
@@ -727,7 +727,6 @@ function renderOverview(){
   h+='<div class="charts-row">';
   h+='<div class="chart-card"><div class="chart-title">'+t('byJurisdiction')+'</div><div class="chart-wrap"><canvas id="ch-jur"></canvas></div></div>';
   h+='<div class="chart-card"><div class="chart-title">'+t('byStatus')+'</div><div class="chart-wrap"><canvas id="ch-status"></canvas></div></div>';
-  h+='<div class="chart-card"><div class="chart-title">'+t('byPurpose')+'</div><div class="chart-wrap"><canvas id="ch-purpose"></canvas></div></div></div>';
   h+='<div class="card" style="padding:0"><table><thead><tr><th>'+t('name')+'</th><th>'+t('jurisdiction')+'</th><th>'+t('status')+'</th><th>'+t('shareholders2')+'</th><th>'+t('subsidiaries')+'</th><th>'+t('investments')+'</th></tr></thead><tbody>';
   if(!cs.length){ h+='<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text3)">'+t('noCompanies')+'</td></tr>'; }
   else { cs.forEach(function(c){
@@ -749,8 +748,6 @@ function buildOvCharts(){
   mkChart('ch-jur','doughnut',Object.keys(jm),Object.values(jm));
   var sm={}; cs.forEach(function(c){var k=t(c.status);sm[k]=(sm[k]||0)+1;});
   mkChart('ch-status','doughnut',Object.keys(sm),Object.values(sm));
-  var pm={}; cs.forEach(function(c){var k=c.tags||c.purpose||'Other';pm[k]=(pm[k]||0)+1;});
-  mkChart('ch-purpose','bar',Object.keys(pm),Object.values(pm));
 }
 
 // ── Companies ─────────────────────────────────────────────────────────────────
