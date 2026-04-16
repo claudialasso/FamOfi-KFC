@@ -378,6 +378,14 @@ function toggleLang(){
 // ── Firebase auth ─────────────────────────────────────────────────────────────
 var currentUser = null;
 var userRole = 'viewer';
+// Tabs this user is allowed to see. null = all tabs (default for admin and plain viewers).
+// Populated from Firestore famofi/roles if the user's entry is an object with a "tabs" array.
+var userTabs = null;
+function canSeeTab(p){
+  if(isAdmin()) return true;
+  if(!userTabs) return true; // null/undefined = all tabs allowed
+  return userTabs.indexOf(p) !== -1;
+}
 
 // Cache key used to persist the resolved role across page loads so the
 // correct role is available instantly before the Firestore fetch completes.
@@ -455,6 +463,7 @@ function doLogin(){
 
 function doLogout(){
   localStorage.removeItem(ROLE_CACHE_KEY);
+  localStorage.removeItem('fm_tabs');
   _auth.signOut().then(function() {
     var email = document.getElementById('li-email');
     var pass  = document.getElementById('li-pass');
@@ -603,6 +612,10 @@ _auth.onAuthStateChanged(function(user){
     // On first-ever login this will be 'viewer'; Phase 2 corrects it.
     var cachedRole = localStorage.getItem(ROLE_CACHE_KEY);
     userRole = cachedRole || 'viewer';
+    // Load cached tab permissions if any
+    var cachedTabs = localStorage.getItem('fm_tabs');
+    if(cachedTabs){ try{ userTabs = JSON.parse(cachedTabs); }catch(e){ userTabs = null; } }
+    else { userTabs = null; }
 
     // Load company data from localStorage cache (synchronous, instant).
     var ls = localStorage.getItem('fm_data');
@@ -620,15 +633,25 @@ _auth.onAuthStateChanged(function(user){
     _ROLES_REF.get().then(function(snap){
 
       // ── ROLE RESOLUTION ───────────────────────────────────────────────────
-      // The roles document looks like one of these two formats:
-      //   Format A (by UID):   { "abc123uid": "admin", "xyz456uid": "viewer" }
-      //   Format B (by email): { "you@email.com": "admin" }
+      // The roles document supports these formats per-user:
+      //   Format A (by UID, simple):    { "abc123uid": "admin" }
+      //   Format B (by email, simple):  { "you@email.com": "viewer" }
+      //   Format C (per-tab viewer):    { "abc123uid": { "role": "viewer", "tabs": ["overview","investments"] } }
       // We try UID first (preferred), then email, then lowercased email.
       var roles        = (snap.exists && snap.data()) || {};
       var byUid        = roles[user.uid];
       var byEmail      = roles[user.email];
       var byEmailLower = roles[(user.email || '').toLowerCase().trim()];
-      var resolvedRole = byUid || byEmail || byEmailLower || 'viewer';
+      var entry        = byUid || byEmail || byEmailLower || 'viewer';
+
+      // Parse: entry can be a plain string or an object { role, tabs }
+      var resolvedRole, resolvedTabs = null;
+      if(typeof entry === 'object' && entry !== null){
+        resolvedRole = entry.role || 'viewer';
+        resolvedTabs = Array.isArray(entry.tabs) ? entry.tabs : null;
+      } else {
+        resolvedRole = entry;
+      }
 
       // Always log so you can see exactly what Firestore returned.
       // Open DevTools → Console to read these lines.
@@ -636,24 +659,26 @@ _auth.onAuthStateChanged(function(user){
       console.log('uid        :', user.uid);
       console.log('email      :', user.email);
       console.log('roles doc  :', JSON.stringify(roles));
-      console.log('byUid      :', byUid);
-      console.log('byEmail    :', byEmail);
-      console.log('byEmailLc  :', byEmailLower);
+      console.log('entry      :', JSON.stringify(entry));
       console.log('→ ROLE     :', resolvedRole);
+      console.log('→ TABS     :', resolvedTabs ? JSON.stringify(resolvedTabs) : 'all');
       console.log('=========================');
 
       // Persist resolved role so Phase 1 is correct on next page load.
       localStorage.setItem(ROLE_CACHE_KEY, resolvedRole);
+      if(resolvedTabs) localStorage.setItem('fm_tabs', JSON.stringify(resolvedTabs));
+      else localStorage.removeItem('fm_tabs');
 
-      // If the role changed from what we showed in Phase 1, update the UI.
-      if(resolvedRole !== userRole){
-        userRole = resolvedRole;
-        applyRoleBadge();
-        render(); // re-render so edit buttons appear/disappear correctly
-      } else {
-        userRole = resolvedRole;
-        applyRoleBadge();
+      var changed = (resolvedRole !== userRole) || (JSON.stringify(resolvedTabs) !== JSON.stringify(userTabs));
+      userRole = resolvedRole;
+      userTabs = resolvedTabs;
+      // If tab restrictions exclude the current page, redirect to first allowed tab
+      if(!canSeeTab(page)){
+        var allowed = pages.filter(canSeeTab);
+        if(allowed.length) page = allowed[0];
       }
+      applyRoleBadge();
+      if(changed) render();
 
     }).catch(function(e){
       // ── ROLE FETCH FAILED ─────────────────────────────────────────────────
@@ -736,10 +761,16 @@ function mkChart(id,type,labels,values){
 
 // ── Render ────────────────────────────────────────────────────────────────────
 function render(){
+  // If current page is not allowed for this user, redirect to first allowed tab
+  if(!canSeeTab(page)){
+    var allowed = pages.filter(canSeeTab);
+    page = allowed.length ? allowed[0] : 'overview';
+  }
   var nav = document.getElementById('nav');
   if(nav){
     nav.innerHTML='';
     pages.forEach(function(p){
+      if(!canSeeTab(p)) return; // hide tabs this user can't see
       var b=document.createElement('button');
       b.textContent=t(p); b.className=p===page?'active':'';
       b.onclick=function(){ go(p); };
