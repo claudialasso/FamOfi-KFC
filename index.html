@@ -1260,22 +1260,60 @@ function openCompanyForm(id){
 }
 function renderSHListForm(){
   var el=document.getElementById('sh-list-form'); if(!el) return;
+  // Collect known individual shareholder names for the dropdown
+  var knownNames=[...new Set(data.companies.reduce(function(a,c){
+    c.shareholders.forEach(function(s){ if(s.type==='individual'&&s.person) a.push(s.person); });
+    return a;
+  },[]))].sort();
   var h='';
   window._fSH.forEach(function(s,i){
     h+='<div class="sh-form-row"><span>'+(s.type==='company'?'Co':'P')+'</span>';
     if(s.type==='company'){
-      h+='<select onchange="_fSH['+i+'].person=this.value" style="padding:5px 8px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-size:12px;font-family:inherit;color:var(--text);background:var(--surface);outline:none;width:100%"><option value="">— select —</option>';
-      data.companies.forEach(function(x){h+='<option value="'+x.id+'"'+(s.person===x.id?' selected':'')+'>'+esc(x.name)+'</option>';});
+      // Company shareholder: dropdown of existing companies
+      h+='<select id="fsh-person-'+i+'" onchange="_fSH['+i+'].person=this.value" style="padding:5px 8px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-size:12px;font-family:inherit;color:var(--text);background:var(--surface);outline:none;width:100%"><option value="">— select —</option>';
+      data.companies.forEach(function(x){ h+='<option value="'+x.id+'"'+(s.person===x.id?' selected':'')+'>'+esc(x.name)+'</option>'; });
       h+='</select>';
-    } else { h+='<input value="'+esc(s.person)+'" oninput="_fSH['+i+'].person=this.value">'; }
-    h+='<input value="'+s.pct+'" type="number" min="0" max="100" placeholder="%" oninput="_fSH['+i+'].pct=parseFloat(this.value)||0">';
-    h+='<input value="'+esc(s.class||'')+'" placeholder="Class" oninput="_fSH['+i+'].class=this.value">';
-    h+='<button class="btn btn-danger btn-sm" onclick="_fSH.splice('+i+',1);renderSHListForm()">x</button></div>';
+    } else {
+      // Individual shareholder: dropdown of known names + free-text fallback via datalist
+      // KEY FIX: use onchange (fires on blur/select) NOT oninput (fires on every keystroke)
+      // This stops the DOM from being rebuilt on every character typed.
+      h+='<select id="fsh-person-'+i+'" onchange="_fSH['+i+'].person=this.value" style="padding:5px 8px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-size:12px;font-family:inherit;color:var(--text);background:var(--surface);outline:none;width:100%"><option value="">— new / type below —</option>';
+      knownNames.forEach(function(n){ h+='<option value="'+esc(n)+'"'+(s.person===n?' selected':'')+'>'+esc(n)+'</option>'; });
+      h+='</select>';
+    }
+    // % and Class inputs: use onchange NOT oninput — no re-render on keystroke
+    h+='<input id="fsh-pct-'+i+'" value="'+s.pct+'" type="number" min="0" max="100" placeholder="%" onchange="_fSH['+i+'].pct=parseFloat(this.value)||0">';
+    h+='<input id="fsh-class-'+i+'" value="'+esc(s.class||'')+'" placeholder="Class" onchange="_fSH['+i+'].class=this.value">';
+    h+='<button class="btn btn-danger btn-sm" onclick="removeSHRow('+i+')">x</button></div>';
   });
   el.innerHTML=h;
 }
+// Remove a shareholder row and re-render only the list (not the whole form)
+function removeSHRow(i){
+  // Sync current input values back before removing, so nothing is lost
+  window._fSH.forEach(function(s,idx){
+    var pp=document.getElementById('fsh-person-'+idx);
+    var pc=document.getElementById('fsh-pct-'+idx);
+    var cl=document.getElementById('fsh-class-'+idx);
+    if(pp) s.person=pp.value;
+    if(pc) s.pct=parseFloat(pc.value)||0;
+    if(cl) s.class=cl.value;
+  });
+  window._fSH.splice(i,1);
+  renderSHListForm();
+}
 function addSHRowForm(tp){ window._fSH.push({id:uid(),person:'',pct:0,class:'',type:tp}); renderSHListForm(); }
 function saveCompany(id){
+  // Sync shareholder row values from DOM before reading _fSH,
+  // since we removed oninput bindings to prevent keystroke lag.
+  window._fSH.forEach(function(s,idx){
+    var pp=document.getElementById('fsh-person-'+idx);
+    var pc=document.getElementById('fsh-pct-'+idx);
+    var cl=document.getElementById('fsh-class-'+idx);
+    if(pp) s.person=pp.value;
+    if(pc) s.pct=parseFloat(pc.value)||0;
+    if(cl) s.class=cl.value;
+  });
   var banking=id?(data.companies.find(function(c){return c.id===id;})||{banking:[]}).banking:[];
   var custom=id?(data.companies.find(function(c){return c.id===id;})||{custom:[]}).custom:[];
   var documents=id?(data.companies.find(function(c){return c.id===id;})||{documents:[]}).documents:[];
