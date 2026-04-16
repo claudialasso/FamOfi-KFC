@@ -333,20 +333,24 @@ function toggleLang(){
 var currentUser = null;
 var userRole = 'viewer';
 
+// Cache key used to persist the resolved role across page loads so the
+// correct role is available instantly before the Firestore fetch completes.
+var ROLE_CACHE_KEY = 'fm_role';
+
 function authErrorMessage(code) {
   var messages = {
-    'auth/invalid-email':        'The email address format is invalid.',
-    'auth/user-not-found':       'No account found with this email address.',
-    'auth/wrong-password':       'Incorrect password. Please try again.',
-    'auth/invalid-credential':   'Incorrect email or password. Please try again.',
-    'auth/too-many-requests':    'Too many failed attempts. Please wait a moment and try again.',
-    'auth/user-disabled':        'This account has been disabled. Contact your administrator.',
+    'auth/invalid-email':         'The email address format is invalid.',
+    'auth/user-not-found':        'No account found with this email address.',
+    'auth/wrong-password':        'Incorrect password. Please try again.',
+    'auth/invalid-credential':    'Incorrect email or password. Please try again.',
+    'auth/too-many-requests':     'Too many failed attempts. Please wait a moment and try again.',
+    'auth/user-disabled':         'This account has been disabled. Contact your administrator.',
     'auth/network-request-failed':'Network error. Please check your connection.',
-    'auth/operation-not-allowed':'Sign-in is not enabled for this app.',
-    'auth/weak-password':        'Password is too weak.',
-    'auth/unauthorized-domain':  'This domain is not authorized in Firebase. Go to Firebase Console → Authentication → Settings → Authorized domains and add: claudialasso.github.io'
+    'auth/operation-not-allowed': 'Sign-in is not enabled for this app.',
+    'auth/weak-password':         'Password is too weak.',
+    'auth/unauthorized-domain':   'This domain is not authorized in Firebase. Add it under Authentication → Settings → Authorized domains.'
   };
-  return messages[code] || 'Sign-in failed. Please check your credentials.';
+  return messages[code] || ('Sign-in failed (' + (code || 'unknown') + '). Check your credentials.');
 }
 
 function showLoginError(msg) {
@@ -390,11 +394,10 @@ function doLogin(){
 
   setLoginLoading(true);
 
-  var doPersist = (_auth.setPersistence || null)
-    ? _auth.setPersistence('none')
-    : Promise.resolve();
-
-  doPersist
+  // Use SESSION persistence: user must log in on every new tab/window open,
+  // but stays logged in on refresh (avoids the full round-trip on every load).
+  // Switch to 'none' if you want login required on every single page load.
+  _auth.setPersistence(firebase.auth.Auth.Persistence.SESSION)
     .then(function(){
       return _auth.signInWithEmailAndPassword(email, pass);
     })
@@ -405,6 +408,7 @@ function doLogin(){
 }
 
 function doLogout(){
+  localStorage.removeItem(ROLE_CACHE_KEY);
   _auth.signOut().then(function() {
     var email = document.getElementById('li-email');
     var pass  = document.getElementById('li-pass');
@@ -502,108 +506,139 @@ function seedData(){
   ];
 }
 
-// ── Helper: update UI badges from current userRole ────────────────────────────
+// ── Helper: apply userRole to UI badges and buttons ──────────────────────────
 function applyRoleBadge(){
   var badge = document.getElementById('user-badge');
   if(badge){
     badge.textContent = isAdmin() ? 'Admin' : 'Viewer';
-    badge.className = 'user-badge' + (isAdmin() ? ' admin-badge' : '');
+    badge.className   = 'user-badge' + (isAdmin() ? ' admin-badge' : '');
   }
   var ib = document.getElementById('import-btn');
   if(ib) ib.style.display = isAdmin() ? '' : 'none';
 }
 
 // ── Auth listener ─────────────────────────────────────────────────────────────
-// FIX: Removed 8-second safety-net timeout.
-// FIX: App renders immediately after role fetch (not after data fetch).
-// FIX: Company data is loaded from localStorage first (instant), then
-//      refreshed from Firestore in the background after render.
-// FIX: Role lookup normalises email to lowercase+trim to avoid case mismatches.
-// FIX: Detailed console logging to surface exact role-resolution result.
+//
+// HOW THIS WORKS (two-phase boot):
+//
+// PHASE 1 — Instant (< 5ms):
+//   Read role from localStorage cache + read data from localStorage cache.
+//   Hide login screen, show the app immediately with no network wait.
+//
+// PHASE 2 — Background (async, no UI blocking):
+//   Fetch famofi/roles from Firestore to get the true, authoritative role.
+//   If the role changed vs the cached value, update userRole + re-render.
+//   Fetch famofi/main for fresh data, then start the real-time listener.
+//
+// WHY THE PREVIOUS VERSION STILL HAD DELAY:
+//   It called _ROLES_REF.get() BEFORE showing the app, so every login still
+//   waited for a Firestore network round-trip (500ms–2s on cold start).
+//
+// WHY THE ROLE WAS ALWAYS "VIEWER":
+//   The most likely cause is Firestore Security Rules blocking the read of
+//   famofi/roles for authenticated users. When .get() is rejected, the catch
+//   block hard-codes userRole = 'viewer'. This version logs the exact error
+//   so you can confirm and fix the rules (see instructions below).
+//
 _auth.onAuthStateChanged(function(user){
   if(user){
     currentUser = user;
-
-    // Show loading, hide everything else
-    document.getElementById('login-screen').style.display = 'none';
-    document.getElementById('loading').style.display      = 'flex';
-    document.getElementById('app').style.display          = 'none';
-
     setLoginLoading(false);
     hideLoginError();
 
-    // ── STEP 1: Fetch role (small doc, typically < 500ms) ──────────────────
-    _ROLES_REF.get().then(function(snap){
-      var roles = (snap.exists && snap.data()) || {};
+    // ── PHASE 1: Instant boot from cache ────────────────────────────────────
 
-      // Try uid first (most reliable), then exact email, then normalised email
+    // Load role from localStorage cache (set during previous session).
+    // On first-ever login this will be 'viewer'; Phase 2 corrects it.
+    var cachedRole = localStorage.getItem(ROLE_CACHE_KEY);
+    userRole = cachedRole || 'viewer';
+
+    // Load company data from localStorage cache (synchronous, instant).
+    var ls = localStorage.getItem('fm_data');
+    if(ls){ try{ applyLoaded(JSON.parse(ls)); }catch(e){ console.warn('[FamOfi] localStorage data parse error', e); } }
+
+    // Show the app RIGHT NOW — no network wait.
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('loading').style.display      = 'none';
+    document.getElementById('app').style.display          = 'flex';
+    applyRoleBadge();
+    render();
+
+    // ── PHASE 2: Background — fetch true role then fresh data ────────────────
+
+    _ROLES_REF.get().then(function(snap){
+
+      // ── ROLE RESOLUTION ───────────────────────────────────────────────────
+      // The roles document looks like one of these two formats:
+      //   Format A (by UID):   { "abc123uid": "admin", "xyz456uid": "viewer" }
+      //   Format B (by email): { "you@email.com": "admin" }
+      // We try UID first (preferred), then email, then lowercased email.
+      var roles        = (snap.exists && snap.data()) || {};
       var byUid        = roles[user.uid];
       var byEmail      = roles[user.email];
       var byEmailLower = roles[(user.email || '').toLowerCase().trim()];
+      var resolvedRole = byUid || byEmail || byEmailLower || 'viewer';
 
-      userRole = byUid || byEmail || byEmailLower || 'viewer';
+      // Always log so you can see exactly what Firestore returned.
+      // Open DevTools → Console to read these lines.
+      console.log('=== FamOfi Role Debug ===');
+      console.log('uid        :', user.uid);
+      console.log('email      :', user.email);
+      console.log('roles doc  :', JSON.stringify(roles));
+      console.log('byUid      :', byUid);
+      console.log('byEmail    :', byEmail);
+      console.log('byEmailLc  :', byEmailLower);
+      console.log('→ ROLE     :', resolvedRole);
+      console.log('=========================');
 
-      // ── DEBUG LOG — open DevTools console to inspect ──────────────────────
-      // Once confirmed working you can remove these lines.
-      console.log('[FamOfi] ── Role resolution ─────────────────────────');
-      console.log('[FamOfi] uid       :', user.uid);
-      console.log('[FamOfi] email     :', user.email);
-      console.log('[FamOfi] roles doc :', JSON.stringify(roles));
-      console.log('[FamOfi] byUid     :', byUid);
-      console.log('[FamOfi] byEmail   :', byEmail);
-      console.log('[FamOfi] byEmailLc :', byEmailLower);
-      console.log('[FamOfi] → resolved:', userRole);
-      console.log('[FamOfi] ─────────────────────────────────────────────');
-      // ─────────────────────────────────────────────────────────────────────
+      // Persist resolved role so Phase 1 is correct on next page load.
+      localStorage.setItem(ROLE_CACHE_KEY, resolvedRole);
 
-      // ── STEP 2: Apply role badge immediately ───────────────────────────────
-      applyRoleBadge();
-
-      // ── STEP 3: Load cached data from localStorage (synchronous / instant) ─
-      var ls = localStorage.getItem('fm_data');
-      if(ls){ try{ applyLoaded(JSON.parse(ls)); }catch(e){ console.warn('[FamOfi] localStorage parse error', e); } }
-
-      // ── STEP 4: Show app and render right away ─────────────────────────────
-      document.getElementById('loading').style.display = 'none';
-      document.getElementById('app').style.display     = 'flex';
-      render();
-
-      // ── STEP 5: Fetch fresh Firestore data in background, then re-render ───
-      _REF.get().then(function(s){
-        if(s.exists){
-          try{ applyLoaded(JSON.parse(s.data().payload)); }
-          catch(e){ console.warn('[FamOfi] Firestore data parse error', e); }
-          render(); // refresh UI with latest data
-        }
-        startSub(); // start real-time listener
-      }).catch(function(e){
-        console.warn('[FamOfi] Background data fetch failed, using cache:', e.code, e.message);
-        startSub();
-      });
+      // If the role changed from what we showed in Phase 1, update the UI.
+      if(resolvedRole !== userRole){
+        userRole = resolvedRole;
+        applyRoleBadge();
+        render(); // re-render so edit buttons appear/disappear correctly
+      } else {
+        userRole = resolvedRole;
+        applyRoleBadge();
+      }
 
     }).catch(function(e){
-      // Role doc fetch failed — log clearly so you can diagnose
-      console.error('[FamOfi] !! Role fetch FAILED !!', e.code, e.message);
-      console.error('[FamOfi] uid:', user.uid, '| email:', user.email);
+      // ── ROLE FETCH FAILED ─────────────────────────────────────────────────
+      // The most common cause: Firestore Security Rules are blocking the read.
+      // See the Firebase checklist below for exactly how to fix this.
+      console.error('=== FamOfi Role Fetch FAILED ===');
+      console.error('Error code   :', e.code);
+      console.error('Error message:', e.message);
+      console.error('uid          :', user.uid);
+      console.error('email        :', user.email);
+      console.error('>>> If you see "permission-denied", your Firestore Security');
+      console.error('>>> Rules are blocking the read of famofi/roles.');
+      console.error('>>> Fix: allow read of famofi/roles for authenticated users.');
+      console.error('================================');
+      // Keep whatever role Phase 1 loaded from cache. Do NOT overwrite with
+      // 'viewer' here — that's what caused the bug in previous versions.
+    });
 
-      // Fallback: viewer access, still show the app
-      userRole = 'viewer';
-      applyRoleBadge();
-
-      var ls = localStorage.getItem('fm_data');
-      if(ls){ try{ applyLoaded(JSON.parse(ls)); }catch(e2){} }
-
-      document.getElementById('loading').style.display = 'none';
-      document.getElementById('app').style.display     = 'flex';
-      render();
+    // Fetch fresh data from Firestore in background (does not block UI).
+    _REF.get().then(function(s){
+      if(s.exists){
+        try{ applyLoaded(JSON.parse(s.data().payload)); }
+        catch(e){ console.warn('[FamOfi] Main data parse error', e); }
+        render();
+      }
+      startSub();
+    }).catch(function(e){
+      console.warn('[FamOfi] Main data fetch failed, using localStorage cache. Code:', e.code);
       startSub();
     });
 
   } else {
-    // Signed out
+    // ── SIGNED OUT ───────────────────────────────────────────────────────────
     currentUser = null;
     userRole    = 'viewer';
-    if(_unsub){ _unsub(); _unsub=null; }
+    if(_unsub){ _unsub(); _unsub = null; }
     document.getElementById('login-screen').style.display = 'flex';
     document.getElementById('loading').style.display      = 'none';
     document.getElementById('app').style.display          = 'none';
@@ -614,7 +649,7 @@ function startSub(){
   if(_unsub) _unsub();
   _unsub = _REF.onSnapshot(function(snap){
     if(snap.exists){ try{ applyLoaded(JSON.parse(snap.data().payload)); render(); }catch(e){} }
-  }, function(){});
+  }, function(e){ console.warn('[FamOfi] Snapshot listener error:', e.code); });
   if(!data.companies.length){ seedData(); save(); }
 }
 
