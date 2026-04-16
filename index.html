@@ -9,7 +9,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebsejs/9.23.0/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
 <script>
 var firebaseConfig = {
   apiKey: "AIzaSyBJtmNQV6dUYQ7qBesXrl0zPrlHP2zjngo",
@@ -25,8 +25,6 @@ var _db = firebase.firestore();
 var _storage = firebase.storage();
 var _REF = _db.collection('famofi').doc('main');
 var _ROLES_REF = _db.collection('famofi').doc('roles');
-
-// Persistence is set in doLogin() before each sign-in attempt (see below)
 </script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -45,8 +43,6 @@ var _ROLES_REF = _db.collection('famofi').doc('roles');
   --shadow-md:0 4px 20px rgba(79,110,247,.12);
 }
 body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.55;min-height:100vh}
-
-/* ── FIX 2: Login screen — always visible by default until auth confirms ── */
 #login-screen{position:fixed;inset:0;background:linear-gradient(135deg,#1e2340 0%,#3a57e8 100%);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px}
 .login-card{background:#fff;border-radius:20px;padding:40px 36px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
 .login-logo{font-size:22px;font-weight:800;color:var(--accent);margin-bottom:6px}
@@ -60,8 +56,6 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:v
 .login-btn{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);font-size:15px;font-weight:700;cursor:pointer;transition:background .15s;display:flex;align-items:center;justify-content:center;gap:8px}
 .login-btn:hover:not(:disabled){background:var(--accent2)}
 .login-btn:disabled{background:#9aa0b8;cursor:not-allowed}
-
-/* ── FIX 3: Error message — always in RED, inline, never alert() ── */
 .login-error{
   background:var(--red-bg);
   color:var(--red);
@@ -71,21 +65,15 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:v
   font-size:13px;
   font-weight:500;
   margin-top:12px;
-  display:none; /* shown via JS */
+  display:none;
   line-height:1.5;
 }
 .login-error::before{content:'⚠ ';font-size:13px}
-
 .login-role-badge{text-align:center;margin-top:16px;font-size:12px;color:var(--text3)}
-
-/* ── FIX 4: Loading spinner — use flex (not conflicting display:none in CSS) ── */
-/* The original CSS had: #loading { display:none } then overrode with display:none inline too */
-/* We fix by NOT setting display in CSS — JS controls it entirely */
 #loading{position:fixed;inset:0;background:var(--bg);align-items:center;justify-content:center;z-index:999;gap:16px;display:none}
 .spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
 .login-spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;flex-shrink:0}
 @keyframes spin{to{transform:rotate(360deg)}}
-
 #app{display:none;flex-direction:column;height:100vh;overflow:hidden}
 header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 20px;display:flex;align-items:center;justify-content:space-between;height:56px;flex-shrink:0;gap:10px;box-shadow:var(--shadow)}
 .logo{font-weight:700;font-size:16px;color:var(--accent);white-space:nowrap}
@@ -212,7 +200,6 @@ textarea.inp{resize:vertical;min-height:60px}
 </head>
 <body>
 
-<!-- Login screen is always shown first. JS hides it only after confirmed auth. -->
 <div id="login-screen">
   <div class="login-card">
     <div class="login-logo">FamOfi <span>Registry</span></div>
@@ -228,7 +215,6 @@ textarea.inp{resize:vertical;min-height:60px}
              onkeydown="if(event.key==='Enter')doLogin()" autocomplete="off">
     </div>
     <button class="login-btn" id="li-btn" onclick="doLogin()">Sign In</button>
-    <!-- FIX: Error shown inline in RED, never alert(), always visible near the form -->
     <div class="login-error" id="li-err"></div>
     <div class="login-role-badge">🔒 Private system — FamOfi</div>
   </div>
@@ -347,7 +333,6 @@ function toggleLang(){
 var currentUser = null;
 var userRole = 'viewer';
 
-// ── FIX 5: Map Firebase error codes to clear, user-friendly messages ──
 function authErrorMessage(code) {
   var messages = {
     'auth/invalid-email':        'The email address format is invalid.',
@@ -400,17 +385,11 @@ function doLogin(){
 
   hideLoginError();
 
-  // Client-side validation first
   if (!email) { showLoginError('Please enter your email address.'); return; }
   if (!pass)  { showLoginError('Please enter your password.'); return; }
 
   setLoginLoading(true);
 
-  // Set NONE persistence before every sign-in so no session is ever stored.
-  // This guarantees login screen appears again on every refresh or browser reopen.
-  // 'none' = no persistence: user must log in every page load/refresh
-  // Using the string directly is more reliable than firebase.auth.Auth.Persistence.NONE
-  // which can be undefined in some compat SDK loading sequences.
   var doPersist = (_auth.setPersistence || null)
     ? _auth.setPersistence('none')
     : Promise.resolve();
@@ -427,8 +406,6 @@ function doLogin(){
 
 function doLogout(){
   _auth.signOut().then(function() {
-    // onAuthStateChanged handles showing the login screen
-    // Reset the form for security
     var email = document.getElementById('li-email');
     var pass  = document.getElementById('li-pass');
     if (email) email.value = '';
@@ -525,69 +502,105 @@ function seedData(){
   ];
 }
 
+// ── Helper: update UI badges from current userRole ────────────────────────────
+function applyRoleBadge(){
+  var badge = document.getElementById('user-badge');
+  if(badge){
+    badge.textContent = isAdmin() ? 'Admin' : 'Viewer';
+    badge.className = 'user-badge' + (isAdmin() ? ' admin-badge' : '');
+  }
+  var ib = document.getElementById('import-btn');
+  if(ib) ib.style.display = isAdmin() ? '' : 'none';
+}
+
 // ── Auth listener ─────────────────────────────────────────────────────────────
-// FIX: This listener is the SINGLE gatekeeper. No other code shows/hides screens.
+// FIX: Removed 8-second safety-net timeout.
+// FIX: App renders immediately after role fetch (not after data fetch).
+// FIX: Company data is loaded from localStorage first (instant), then
+//      refreshed from Firestore in the background after render.
+// FIX: Role lookup normalises email to lowercase+trim to avoid case mismatches.
+// FIX: Detailed console logging to surface exact role-resolution result.
 _auth.onAuthStateChanged(function(user){
   if(user){
     currentUser = user;
 
-    // 1. Hide login, show loading
+    // Show loading, hide everything else
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('loading').style.display      = 'flex';
     document.getElementById('app').style.display          = 'none';
 
-    // Reset login form state in case user logs out and back in
     setLoginLoading(false);
     hideLoginError();
 
-        // 2. Load role from Firestore (with timeout safety net)
-        var _loadTimeout = setTimeout(function(){
-          document.getElementById('loading').style.display = 'none';
-          document.getElementById('app').style.display     = 'flex';
-          render();
-        }, 8000);
+    // ── STEP 1: Fetch role (small doc, typically < 500ms) ──────────────────
+    _ROLES_REF.get().then(function(snap){
+      var roles = (snap.exists && snap.data()) || {};
 
-        _ROLES_REF.get().then(function(snap){
-          var roles = (snap.exists && snap.data()) || {};
-          userRole = roles[user.uid] || roles[user.email] || 'viewer';
+      // Try uid first (most reliable), then exact email, then normalised email
+      var byUid        = roles[user.uid];
+      var byEmail      = roles[user.email];
+      var byEmailLower = roles[(user.email || '').toLowerCase().trim()];
 
-          var badge = document.getElementById('user-badge');
-          if(badge){
-            badge.textContent = isAdmin() ? 'Admin' : 'Viewer';
-            badge.className = 'user-badge' + (isAdmin() ? ' admin-badge' : '');
-          }
-          var ib = document.getElementById('import-btn');
-          if(ib) ib.style.display = isAdmin() ? '' : 'none';
+      userRole = byUid || byEmail || byEmailLower || 'viewer';
 
-          // 3. Load data
-          var ls = localStorage.getItem('fm_data');
-          if(ls){ try{ applyLoaded(JSON.parse(ls)); }catch(e){} }
+      // ── DEBUG LOG — open DevTools console to inspect ──────────────────────
+      // Once confirmed working you can remove these lines.
+      console.log('[FamOfi] ── Role resolution ─────────────────────────');
+      console.log('[FamOfi] uid       :', user.uid);
+      console.log('[FamOfi] email     :', user.email);
+      console.log('[FamOfi] roles doc :', JSON.stringify(roles));
+      console.log('[FamOfi] byUid     :', byUid);
+      console.log('[FamOfi] byEmail   :', byEmail);
+      console.log('[FamOfi] byEmailLc :', byEmailLower);
+      console.log('[FamOfi] → resolved:', userRole);
+      console.log('[FamOfi] ─────────────────────────────────────────────');
+      // ─────────────────────────────────────────────────────────────────────
 
-          return _REF.get().then(function(s){
-            if(s.exists){ try{ applyLoaded(JSON.parse(s.data().payload)); }catch(e){} }
-            startSub();
-            clearTimeout(_loadTimeout);
-            document.getElementById('loading').style.display = 'none';
-            document.getElementById('app').style.display     = 'flex';
-            render();
-          }).catch(function(){
-            startSub();
-            clearTimeout(_loadTimeout);
-            document.getElementById('loading').style.display = 'none';
-            document.getElementById('app').style.display     = 'flex';
-            render();
-          });
-        }).catch(function(){
-          userRole = 'viewer';
-          startSub();
-          clearTimeout(_loadTimeout);
-          document.getElementById('loading').style.display = 'none';
-          document.getElementById('app').style.display     = 'flex';
-          render();
-        });
+      // ── STEP 2: Apply role badge immediately ───────────────────────────────
+      applyRoleBadge();
+
+      // ── STEP 3: Load cached data from localStorage (synchronous / instant) ─
+      var ls = localStorage.getItem('fm_data');
+      if(ls){ try{ applyLoaded(JSON.parse(ls)); }catch(e){ console.warn('[FamOfi] localStorage parse error', e); } }
+
+      // ── STEP 4: Show app and render right away ─────────────────────────────
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('app').style.display     = 'flex';
+      render();
+
+      // ── STEP 5: Fetch fresh Firestore data in background, then re-render ───
+      _REF.get().then(function(s){
+        if(s.exists){
+          try{ applyLoaded(JSON.parse(s.data().payload)); }
+          catch(e){ console.warn('[FamOfi] Firestore data parse error', e); }
+          render(); // refresh UI with latest data
+        }
+        startSub(); // start real-time listener
+      }).catch(function(e){
+        console.warn('[FamOfi] Background data fetch failed, using cache:', e.code, e.message);
+        startSub();
+      });
+
+    }).catch(function(e){
+      // Role doc fetch failed — log clearly so you can diagnose
+      console.error('[FamOfi] !! Role fetch FAILED !!', e.code, e.message);
+      console.error('[FamOfi] uid:', user.uid, '| email:', user.email);
+
+      // Fallback: viewer access, still show the app
+      userRole = 'viewer';
+      applyRoleBadge();
+
+      var ls = localStorage.getItem('fm_data');
+      if(ls){ try{ applyLoaded(JSON.parse(ls)); }catch(e2){} }
+
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('app').style.display     = 'flex';
+      render();
+      startSub();
+    });
 
   } else {
-    // Signed out — show login, hide everything else
+    // Signed out
     currentUser = null;
     userRole    = 'viewer';
     if(_unsub){ _unsub(); _unsub=null; }
