@@ -717,7 +717,8 @@ function renderOverview(){
   var jurs=[...new Set(cs.map(function(c){return c.jurisdiction;}))].length;
   var shSet=new Set(); cs.forEach(function(c){c.shareholders.forEach(function(s){if(s.type==='individual')shSet.add(s.person);});});
   var totalMV=inv.reduce(function(a,i){return a+(+i.marketValue||0);},0);
-  var h=roBanner();
+  var h='<div style="display:flex;flex-direction:column;width:100%">';
+h+=roBanner();
   h+='<div class="kpi-grid">';
   h+='<div class="kpi"><div class="kpi-label">'+t('totalCompanies')+'</div><div class="kpi-val">'+cs.length+'</div></div>';
   h+='<div class="kpi"><div class="kpi-label">'+t('activeCompanies')+'</div><div class="kpi-val">'+active+'</div><div class="kpi-sub">'+(cs.length-active)+' inactive</div></div>';
@@ -741,6 +742,7 @@ function renderOverview(){
     h+='<td>'+(ic?'<span class="badge badge-inv">'+ic+'</span>':'—')+'</td></tr>';
   }); }
   h+='</tbody></table></div>';
+  h+='</div>';
   return h;
 }
 function buildOvCharts(){
