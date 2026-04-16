@@ -97,7 +97,7 @@ main{flex:1;overflow-y:auto;padding:24px}
 .kpi-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px;font-weight:600}
 .kpi-val{font-size:26px;font-weight:700}
 .kpi-sub{font-size:11px;color:var(--text3);margin-top:3px}
-.charts-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:22px}
+.charts-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:22px}
 .chart-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;box-shadow:var(--shadow)}
 .chart-title{font-size:11px;font-weight:700;color:var(--text3);margin-bottom:12px;text-transform:uppercase;letter-spacing:.5px}
 .chart-wrap{position:relative;height:160px}
@@ -422,6 +422,10 @@ function doLogout(){
 var data = { companies:[], investments:[] };
 var _saveTimer = null;
 var _unsub = null;
+// Flag: when WE write to Firestore, suppress the snapshot re-render
+// because we already re-rendered locally. Without this, every save
+// causes a second full re-render ~500ms later when the snapshot fires.
+var _localWrite = false;
 
 function save(){
   if(userRole !== 'admin') return;
@@ -429,9 +433,10 @@ function save(){
   clearTimeout(_saveTimer);
   _saveTimer = setTimeout(function(){
     localStorage.setItem('fm_data', JSON.stringify(data));
+    _localWrite = true; // tell the snapshot listener to skip the next re-render
     _REF.set({ payload: JSON.stringify(data) })
       .then(function(){ setSyncDot('ok'); })
-      .catch(function(){ setSyncDot('error'); });
+      .catch(function(){ setSyncDot('error'); _localWrite = false; });
   }, 500);
 }
 function setSyncDot(s){
@@ -648,7 +653,13 @@ _auth.onAuthStateChanged(function(user){
 function startSub(){
   if(_unsub) _unsub();
   _unsub = _REF.onSnapshot(function(snap){
-    if(snap.exists){ try{ applyLoaded(JSON.parse(snap.data().payload)); render(); }catch(e){} }
+    if(snap.exists){
+      try{ applyLoaded(JSON.parse(snap.data().payload)); }catch(e){}
+      // If this snapshot was triggered by our own save(), skip re-render
+      // because we already rendered locally. Reset the flag either way.
+      if(_localWrite){ _localWrite = false; return; }
+      render();
+    }
   }, function(e){ console.warn('[FamOfi] Snapshot listener error:', e.code); });
   if(!data.companies.length){ seedData(); save(); }
 }
@@ -717,8 +728,7 @@ function renderOverview(){
   var jurs=[...new Set(cs.map(function(c){return c.jurisdiction;}))].length;
   var shSet=new Set(); cs.forEach(function(c){c.shareholders.forEach(function(s){if(s.type==='individual')shSet.add(s.person);});});
   var totalMV=inv.reduce(function(a,i){return a+(+i.marketValue||0);},0);
-  var h='<div style="display:flex;flex-direction:column;width:100%">';
-h+=roBanner();
+  var h=roBanner();
   h+='<div class="kpi-grid">';
   h+='<div class="kpi"><div class="kpi-label">'+t('totalCompanies')+'</div><div class="kpi-val">'+cs.length+'</div></div>';
   h+='<div class="kpi"><div class="kpi-label">'+t('activeCompanies')+'</div><div class="kpi-val">'+active+'</div><div class="kpi-sub">'+(cs.length-active)+' inactive</div></div>';
@@ -728,8 +738,8 @@ h+=roBanner();
   h+='<div class="charts-row">';
   h+='<div class="chart-card"><div class="chart-title">'+t('byJurisdiction')+'</div><div class="chart-wrap"><canvas id="ch-jur"></canvas></div></div>';
   h+='<div class="chart-card"><div class="chart-title">'+t('byStatus')+'</div><div class="chart-wrap"><canvas id="ch-status"></canvas></div></div>';
-  h+='</div>';
-  h+='<div class="card" style="padding:0;width:100%"><table><thead><tr><th>'+t('name')+'</th><th>'+t('jurisdiction')+'</th><th>'+t('status')+'</th><th>'+t('shareholders2')+'</th><th>'+t('subsidiaries')+'</th><th>'+t('investments')+'</th></tr></thead><tbody>';
+  h+='<div class="chart-card"><div class="chart-title">'+t('byPurpose')+'</div><div class="chart-wrap"><canvas id="ch-purpose"></canvas></div></div></div>';
+  h+='<div class="card" style="padding:0"><table><thead><tr><th>'+t('name')+'</th><th>'+t('jurisdiction')+'</th><th>'+t('status')+'</th><th>'+t('shareholders2')+'</th><th>'+t('subsidiaries')+'</th><th>'+t('investments')+'</th></tr></thead><tbody>';
   if(!cs.length){ h+='<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text3)">'+t('noCompanies')+'</td></tr>'; }
   else { cs.forEach(function(c){
     var subs=getSubs(c.id).length;
@@ -742,7 +752,6 @@ h+=roBanner();
     h+='<td>'+(ic?'<span class="badge badge-inv">'+ic+'</span>':'—')+'</td></tr>';
   }); }
   h+='</tbody></table></div>';
-  h+='</div>';
   return h;
 }
 function buildOvCharts(){
@@ -751,6 +760,8 @@ function buildOvCharts(){
   mkChart('ch-jur','doughnut',Object.keys(jm),Object.values(jm));
   var sm={}; cs.forEach(function(c){var k=t(c.status);sm[k]=(sm[k]||0)+1;});
   mkChart('ch-status','doughnut',Object.keys(sm),Object.values(sm));
+  var pm={}; cs.forEach(function(c){var k=c.tags||c.purpose||'Other';pm[k]=(pm[k]||0)+1;});
+  mkChart('ch-purpose','bar',Object.keys(pm),Object.values(pm));
 }
 
 // ── Companies ─────────────────────────────────────────────────────────────────
@@ -1094,7 +1105,9 @@ function openAddSHForm(cid){
   var h='<div class="modal-header"><div class="modal-title">'+t('addShareholder')+'</div><button class="close-btn" onclick="closeModal();openCompany('+q(cid)+')">x</button></div>';
   h+='<div class="modal-body"><div class="form-grid">';
   h+='<div class="form-group"><label class="lbl">'+t('ownerType')+'</label><select id="sh-type" class="inp" onchange="toggleSHInput()"><option value="individual">'+t('individual')+'</option><option value="company">'+t('company')+'</option></select></div>';
-  h+='<div class="form-group"><label class="lbl">Name</label><input id="sh-person-text" class="inp"><select id="sh-person-select" class="inp" style="display:none"><option value="">— select —</option>'+opts+'</select></div>';
+  var shNames=[...new Set(data.companies.reduce(function(a,c){c.shareholders.forEach(function(s){if(s.type==='individual'&&s.person)a.push(s.person);});return a;},[]))].sort();
+  var shOpts=shNames.map(function(n){return '<option value="'+esc(n)+'">'+esc(n)+'</option>';}).join('');
+  h+='<div class="form-group"><label class="lbl">Name</label><input id="sh-person-text" class="inp" list="sh-person-list" placeholder="Type or select..."><datalist id="sh-person-list">'+shOpts+'</datalist><select id="sh-person-select" class="inp" style="display:none"><option value="">— select —</option>'+opts+'</select></div>';
   h+='<div class="form-group"><label class="lbl">'+t('ownership')+'</label><input id="sh-pct" class="inp" type="number" min="0" max="100"></div>';
   h+='<div class="form-group"><label class="lbl">'+t('shareClass')+'</label><input id="sh-class" class="inp"></div></div>';
   h+='<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">';
@@ -1120,7 +1133,9 @@ function openEditSHForm(cid,idx){
   var h='<div class="modal-header"><div class="modal-title">'+t('editShareholder')+'</div><button class="close-btn" onclick="closeModal();openCompany('+q(cid)+')">x</button></div>';
   h+='<div class="modal-body"><div class="form-grid">';
   h+='<div class="form-group"><label class="lbl">'+t('ownerType')+'</label><select id="sh-type-e" class="inp" onchange="toggleSHInputE()"><option value="individual"'+(s.type==='individual'?' selected':'')+'>'+t('individual')+'</option><option value="company"'+(s.type==='company'?' selected':'')+'>'+t('company')+'</option></select></div>';
-  h+='<div class="form-group"><label class="lbl">Name</label><input id="sh-person-text-e" class="inp" value="'+esc(s.type==='individual'?s.person:'')+'" style="'+(s.type==='company'?'display:none':'')+'"><select id="sh-person-select-e" class="inp" style="'+(s.type==='individual'?'display:none':'')+'"><option value="">— select —</option>'+opts+'</select></div>';
+  var shNamesE=[...new Set(data.companies.reduce(function(a,c){c.shareholders.forEach(function(s){if(s.type==='individual'&&s.person)a.push(s.person);});return a;},[]))].sort();
+  var shOptsE=shNamesE.map(function(n){return '<option value="'+esc(n)+'">'+esc(n)+'</option>';}).join('');
+  h+='<div class="form-group"><label class="lbl">Name</label><input id="sh-person-text-e" class="inp" list="sh-person-list-e" value="'+esc(s.type==='individual'?s.person:'')+'" style="'+(s.type==='company'?'display:none':'')+'" placeholder="Type or select..."><datalist id="sh-person-list-e">'+shOptsE+'</datalist><select id="sh-person-select-e" class="inp" style="'+(s.type==='individual'?'display:none':'')+'"><option value="">— select —</option>'+opts+'</select></div>';
   h+='<div class="form-group"><label class="lbl">'+t('ownership')+'</label><input id="sh-pct-e" class="inp" type="number" min="0" max="100" value="'+s.pct+'"></div>';
   h+='<div class="form-group"><label class="lbl">'+t('shareClass')+'</label><input id="sh-class-e" class="inp" value="'+esc(s.class||'')+'"></div></div>';
   h+='<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">';
