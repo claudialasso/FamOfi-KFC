@@ -358,7 +358,8 @@ function authErrorMessage(code) {
     'auth/user-disabled':        'This account has been disabled. Contact your administrator.',
     'auth/network-request-failed':'Network error. Please check your connection.',
     'auth/operation-not-allowed':'Sign-in is not enabled for this app.',
-    'auth/weak-password':        'Password is too weak.'
+    'auth/weak-password':        'Password is too weak.',
+    'auth/unauthorized-domain':  'This domain is not authorized in Firebase. Go to Firebase Console → Authentication → Settings → Authorized domains and add: claudialasso.github.io'
   };
   return messages[code] || 'Sign-in failed. Please check your credentials.';
 }
@@ -407,7 +408,14 @@ function doLogin(){
 
   // Set NONE persistence before every sign-in so no session is ever stored.
   // This guarantees login screen appears again on every refresh or browser reopen.
-  _auth.setPersistence(firebase.auth.Auth.Persistence.NONE)
+  // 'none' = no persistence: user must log in every page load/refresh
+  // Using the string directly is more reliable than firebase.auth.Auth.Persistence.NONE
+  // which can be undefined in some compat SDK loading sequences.
+  var doPersist = (_auth.setPersistence || null)
+    ? _auth.setPersistence('none')
+    : Promise.resolve();
+
+  doPersist
     .then(function(){
       return _auth.signInWithEmailAndPassword(email, pass);
     })
