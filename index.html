@@ -9,7 +9,7 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+<script src="https://www.gstatic.com/firebsejs/9.23.0/firebase-storage-compat.js"></script>
 <script>
 var firebaseConfig = {
   apiKey: "AIzaSyBJtmNQV6dUYQ7qBesXrl0zPrlHP2zjngo",
@@ -785,7 +785,7 @@ function openCompany(id){
   } else { shP+='<div class="empty">'+t('noShareholders')+'</div>'; }
   var subP='';
   if(subs.length){
-    subP='<div style="font-size:12px;color:var(--text2);margin-bottom:12px;padding:8px 12px;background:var(--teal-bg);border-radius:var(--radius-sm)">'+esc(c.name)+(lang==='en'?' owns:')+' es propietaria de:'+'</div>';
+    subP='<div style="font-size:12px;color:var(--text2);margin-bottom:12px;padding:8px 12px;background:var(--teal-bg);border-radius:var(--radius-sm)">'+esc(c.name)+(lang==='en'?' owns:':' es propietaria de:')+'</div>';
     subP+='<table><thead><tr><th>'+t('name')+'</th><th>'+t('jurisdiction')+'</th><th>'+t('ownership')+'</th><th>'+t('status')+'</th><th></th></tr></thead><tbody>';
     subs.forEach(function(s){
       var sh=s.shareholders.find(function(sh){return sh.type==='company'&&sh.person===id;});
