@@ -25,6 +25,8 @@ var _db = firebase.firestore();
 var _storage = firebase.storage();
 var _REF = _db.collection('famofi').doc('main');
 var _ROLES_REF = _db.collection('famofi').doc('roles');
+
+// Persistence is set in doLogin() before each sign-in attempt (see below)
 </script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -43,6 +45,8 @@ var _ROLES_REF = _db.collection('famofi').doc('roles');
   --shadow-md:0 4px 20px rgba(79,110,247,.12);
 }
 body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);font-size:14px;line-height:1.55;min-height:100vh}
+
+/* ── FIX 2: Login screen — always visible by default until auth confirms ── */
 #login-screen{position:fixed;inset:0;background:linear-gradient(135deg,#1e2340 0%,#3a57e8 100%);display:flex;align-items:center;justify-content:center;z-index:1000;padding:20px}
 .login-card{background:#fff;border-radius:20px;padding:40px 36px;width:100%;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.25)}
 .login-logo{font-size:22px;font-weight:800;color:var(--accent);margin-bottom:6px}
@@ -50,15 +54,38 @@ body{font-family:system-ui,-apple-system,sans-serif;background:var(--bg);color:v
 .login-subtitle{font-size:13px;color:var(--text3);margin-bottom:28px}
 .login-field{display:flex;flex-direction:column;gap:5px;margin-bottom:14px}
 .login-field label{font-size:12px;font-weight:600;color:var(--text2)}
-.login-field input{padding:11px 13px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:14px;font-family:inherit;outline:none}
+.login-field input{padding:11px 13px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:14px;font-family:inherit;outline:none;transition:border .15s}
 .login-field input:focus{border-color:var(--accent)}
-.login-btn{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);font-size:15px;font-weight:700;cursor:pointer}
-.login-btn:hover{background:var(--accent2)}
-.login-error{background:var(--red-bg);color:var(--red);padding:10px 13px;border-radius:var(--radius-sm);font-size:13px;margin-top:10px;display:none}
+.login-field input:disabled{background:#f5f6fa;color:var(--text3);cursor:not-allowed}
+.login-btn{width:100%;padding:12px;background:var(--accent);color:#fff;border:none;border-radius:var(--radius-sm);font-size:15px;font-weight:700;cursor:pointer;transition:background .15s;display:flex;align-items:center;justify-content:center;gap:8px}
+.login-btn:hover:not(:disabled){background:var(--accent2)}
+.login-btn:disabled{background:#9aa0b8;cursor:not-allowed}
+
+/* ── FIX 3: Error message — always in RED, inline, never alert() ── */
+.login-error{
+  background:var(--red-bg);
+  color:var(--red);
+  border:1px solid #fca5a5;
+  padding:10px 13px;
+  border-radius:var(--radius-sm);
+  font-size:13px;
+  font-weight:500;
+  margin-top:12px;
+  display:none; /* shown via JS */
+  line-height:1.5;
+}
+.login-error::before{content:'⚠ ';font-size:13px}
+
 .login-role-badge{text-align:center;margin-top:16px;font-size:12px;color:var(--text3)}
-#loading{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;gap:16px;display:none}
+
+/* ── FIX 4: Loading spinner — use flex (not conflicting display:none in CSS) ── */
+/* The original CSS had: #loading { display:none } then overrode with display:none inline too */
+/* We fix by NOT setting display in CSS — JS controls it entirely */
+#loading{position:fixed;inset:0;background:var(--bg);align-items:center;justify-content:center;z-index:999;gap:16px;display:none}
 .spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+.login-spinner{width:16px;height:16px;border:2px solid rgba(255,255,255,.4);border-top-color:#fff;border-radius:50%;animation:spin .6s linear infinite;flex-shrink:0}
 @keyframes spin{to{transform:rotate(360deg)}}
+
 #app{display:none;flex-direction:column;height:100vh;overflow:hidden}
 header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 20px;display:flex;align-items:center;justify-content:space-between;height:56px;flex-shrink:0;gap:10px;box-shadow:var(--shadow)}
 .logo{font-weight:700;font-size:16px;color:var(--accent);white-space:nowrap}
@@ -184,18 +211,34 @@ textarea.inp{resize:vertical;min-height:60px}
 </style>
 </head>
 <body>
+
+<!-- Login screen is always shown first. JS hides it only after confirmed auth. -->
 <div id="login-screen">
   <div class="login-card">
     <div class="login-logo">FamOfi <span>Registry</span></div>
     <div class="login-subtitle">Secure access — authorized users only</div>
-    <div class="login-field"><label>Email</label><input type="email" id="li-email" placeholder="your@email.com" onkeydown="if(event.key==='Enter')doLogin()"></div>
-    <div class="login-field"><label>Password</label><input type="password" id="li-pass" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()"></div>
-    <button class="login-btn" onclick="doLogin()">Sign In</button>
+    <div class="login-field">
+      <label>Email</label>
+      <input type="email" id="li-email" placeholder="your@email.com"
+             onkeydown="if(event.key==='Enter')doLogin()" autocomplete="off">
+    </div>
+    <div class="login-field">
+      <label>Password</label>
+      <input type="password" id="li-pass" placeholder="••••••••"
+             onkeydown="if(event.key==='Enter')doLogin()" autocomplete="off">
+    </div>
+    <button class="login-btn" id="li-btn" onclick="doLogin()">Sign In</button>
+    <!-- FIX: Error shown inline in RED, never alert(), always visible near the form -->
     <div class="login-error" id="li-err"></div>
     <div class="login-role-badge">🔒 Private system — FamOfi</div>
   </div>
 </div>
-<div id="loading"><div class="spinner"></div><div style="color:var(--text2);font-size:13px">Loading FamOfi…</div></div>
+
+<div id="loading">
+  <div class="spinner"></div>
+  <div style="color:var(--text2);font-size:13px">Loading FamOfi…</div>
+</div>
+
 <div id="app">
   <header>
     <div class="logo">FamOfi <span>Registry</span></div>
@@ -210,6 +253,7 @@ textarea.inp{resize:vertical;min-height:60px}
   </header>
   <main id="main"></main>
 </div>
+
 <script>
 // ── i18n ──────────────────────────────────────────────────────────────────────
 var TT = {
@@ -303,17 +347,87 @@ function toggleLang(){
 var currentUser = null;
 var userRole = 'viewer';
 
+// ── FIX 5: Map Firebase error codes to clear, user-friendly messages ──
+function authErrorMessage(code) {
+  var messages = {
+    'auth/invalid-email':        'The email address format is invalid.',
+    'auth/user-not-found':       'No account found with this email address.',
+    'auth/wrong-password':       'Incorrect password. Please try again.',
+    'auth/invalid-credential':   'Incorrect email or password. Please try again.',
+    'auth/too-many-requests':    'Too many failed attempts. Please wait a moment and try again.',
+    'auth/user-disabled':        'This account has been disabled. Contact your administrator.',
+    'auth/network-request-failed':'Network error. Please check your connection.',
+    'auth/operation-not-allowed':'Sign-in is not enabled for this app.',
+    'auth/weak-password':        'Password is too weak.'
+  };
+  return messages[code] || 'Sign-in failed. Please check your credentials.';
+}
+
+function showLoginError(msg) {
+  var errEl = document.getElementById('li-err');
+  if (!errEl) return;
+  errEl.textContent = msg;
+  errEl.style.display = 'block';
+}
+
+function hideLoginError() {
+  var errEl = document.getElementById('li-err');
+  if (errEl) errEl.style.display = 'none';
+}
+
+function setLoginLoading(loading) {
+  var btn   = document.getElementById('li-btn');
+  var email = document.getElementById('li-email');
+  var pass  = document.getElementById('li-pass');
+  if (!btn) return;
+  if (loading) {
+    btn.disabled = true;
+    btn.innerHTML = '<div class="login-spinner"></div> Signing in…';
+    if (email) email.disabled = true;
+    if (pass)  pass.disabled  = true;
+  } else {
+    btn.disabled = false;
+    btn.innerHTML = 'Sign In';
+    if (email) email.disabled = false;
+    if (pass)  pass.disabled  = false;
+  }
+}
+
 function doLogin(){
   var email = document.getElementById('li-email').value.trim();
   var pass  = document.getElementById('li-pass').value;
-  var errEl = document.getElementById('li-err');
-  errEl.style.display = 'none';
-  if(!email || !pass){ errEl.textContent='Please enter email and password.'; errEl.style.display='block'; return; }
-  _auth.signInWithEmailAndPassword(email, pass).catch(function(){
-    errEl.textContent='Invalid email or password.'; errEl.style.display='block';
+
+  hideLoginError();
+
+  // Client-side validation first
+  if (!email) { showLoginError('Please enter your email address.'); return; }
+  if (!pass)  { showLoginError('Please enter your password.'); return; }
+
+  setLoginLoading(true);
+
+  // Set NONE persistence before every sign-in so no session is ever stored.
+  // This guarantees login screen appears again on every refresh or browser reopen.
+  _auth.setPersistence(firebase.auth.Auth.Persistence.NONE)
+    .then(function(){
+      return _auth.signInWithEmailAndPassword(email, pass);
+    })
+    .catch(function(error) {
+      setLoginLoading(false);
+      showLoginError(authErrorMessage(error.code));
+    });
+}
+
+function doLogout(){
+  _auth.signOut().then(function() {
+    // onAuthStateChanged handles showing the login screen
+    // Reset the form for security
+    var email = document.getElementById('li-email');
+    var pass  = document.getElementById('li-pass');
+    if (email) email.value = '';
+    if (pass)  pass.value  = '';
+    hideLoginError();
   });
 }
-function doLogout(){ _auth.signOut(); }
 
 // ── Data ──────────────────────────────────────────────────────────────────────
 var data = { companies:[], investments:[] };
@@ -404,44 +518,65 @@ function seedData(){
 }
 
 // ── Auth listener ─────────────────────────────────────────────────────────────
+// FIX: This listener is the SINGLE gatekeeper. No other code shows/hides screens.
 _auth.onAuthStateChanged(function(user){
   if(user){
     currentUser = user;
-    document.getElementById('login-screen').style.display='none';
-    document.getElementById('loading').style.display='flex';
+
+    // 1. Hide login, show loading
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('loading').style.display      = 'flex';
+    document.getElementById('app').style.display          = 'none';
+
+    // Reset login form state in case user logs out and back in
+    setLoginLoading(false);
+    hideLoginError();
+
+    // 2. Load role from Firestore
     _ROLES_REF.get().then(function(snap){
       var roles = (snap.exists && snap.data()) || {};
       userRole = roles[user.uid] || roles[user.email] || 'viewer';
+
       var badge = document.getElementById('user-badge');
-      if(badge){ badge.textContent=isAdmin()?'Admin':'Viewer'; badge.className='user-badge'+(isAdmin()?' admin-badge':''); }
+      if(badge){
+        badge.textContent = isAdmin() ? 'Admin' : 'Viewer';
+        badge.className = 'user-badge' + (isAdmin() ? ' admin-badge' : '');
+      }
       var ib = document.getElementById('import-btn');
       if(ib) ib.style.display = isAdmin() ? '' : 'none';
+
+      // 3. Load data
       var ls = localStorage.getItem('fm_data');
       if(ls){ try{ applyLoaded(JSON.parse(ls)); }catch(e){} }
+
       _REF.get().then(function(s){
         if(s.exists){ try{ applyLoaded(JSON.parse(s.data().payload)); }catch(e){} }
         startSub();
-        document.getElementById('loading').style.display='none';
-        document.getElementById('app').style.display='flex';
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('app').style.display     = 'flex';
         render();
       }).catch(function(){
         startSub();
-        document.getElementById('loading').style.display='none';
-        document.getElementById('app').style.display='flex';
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('app').style.display     = 'flex';
         render();
       });
     }).catch(function(){
-      userRole='viewer'; startSub();
-      document.getElementById('loading').style.display='none';
-      document.getElementById('app').style.display='flex';
+      userRole = 'viewer';
+      startSub();
+      document.getElementById('loading').style.display = 'none';
+      document.getElementById('app').style.display     = 'flex';
       render();
     });
+
   } else {
-    currentUser=null; userRole='viewer';
+    // Signed out — show login, hide everything else
+    currentUser = null;
+    userRole    = 'viewer';
     if(_unsub){ _unsub(); _unsub=null; }
-    document.getElementById('login-screen').style.display='flex';
-    document.getElementById('loading').style.display='none';
-    document.getElementById('app').style.display='none';
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('loading').style.display      = 'none';
+    document.getElementById('app').style.display          = 'none';
   }
 });
 
@@ -603,7 +738,6 @@ function openCompany(id){
   var c=data.companies.find(function(x){return x.id===id;}); if(!c) return;
   var subs=getSubs(id), parents=getParents(id);
   var invs=data.investments.filter(function(i){return i.companyId===id;});
-  // Details
   var det='';
   if(parents.length){
     det+='<div style="margin-bottom:12px;padding:10px 14px;background:var(--purple-bg);border-radius:var(--radius-sm);border-left:3px solid var(--purple)">';
@@ -621,7 +755,6 @@ function openCompany(id){
     +dr('EIN',esc(c.ein))+dr(t('irs'),esc(c.irs))+dr(t('director'),esc(c.director))
     +dr(t('registeredAgent'),esc(c.agent))+dr(t('address'),esc(c.address))
     +dr(t('tags'),esc(c.tags))+dr(t('notes'),esc(c.notes));
-  // Shareholders
   var shP='<div style="display:flex;justify-content:flex-end;margin-bottom:10px">';
   if(isAdmin()) shP+='<button class="btn btn-primary btn-sm" onclick="openAddSHForm('+q(id)+')">'+t('addShareholder')+'</button>';
   shP+='</div>';
@@ -642,7 +775,6 @@ function openCompany(id){
     });
     shP+='</tbody></table>';
   } else { shP+='<div class="empty">'+t('noShareholders')+'</div>'; }
-  // Subsidiaries
   var subP='';
   if(subs.length){
     subP='<div style="font-size:12px;color:var(--text2);margin-bottom:12px;padding:8px 12px;background:var(--teal-bg);border-radius:var(--radius-sm)">'+esc(c.name)+(lang==='en'?' owns:')+' es propietaria de:'+'</div>';
@@ -657,12 +789,10 @@ function openCompany(id){
     });
     subP+='</tbody></table><div style="font-size:11px;color:var(--text3);margin-top:8px">x removes link only</div>';
   } else { subP='<div class="empty">No subsidiaries.</div>'; }
-  // Org chart
   var orgP='<div style="display:flex;gap:8px;margin-bottom:14px">'
     +'<button class="btn btn-teal btn-sm" onclick="printOrgChart('+q(id)+')">&#128424; '+t('printChart')+'</button>'
     +'<button class="btn btn-outline btn-sm" onclick="printOrgChart('+q(id)+')">&#8659; PDF / PNG</button>'
     +'</div>'+buildFullOrgChart(id);
-  // Investments
   var invP='<div style="display:flex;justify-content:flex-end;margin-bottom:12px">';
   if(isAdmin()) invP+='<button class="btn btn-primary btn-sm" onclick="openInvForm(null,'+q(id)+')">'+t('addInvestment')+'</button>';
   invP+='</div>';
@@ -687,11 +817,9 @@ function openCompany(id){
       invP+='</div></div>';
     });
   } else { invP+='<div class="empty">'+t('noData')+'</div>'; }
-  // Banking
   var bankP='<div style="display:flex;justify-content:flex-end;margin-bottom:12px">';
   if(isAdmin()) bankP+='<button class="btn btn-primary btn-sm" onclick="addBankInModal('+q(id)+')">'+t('addBank')+'</button>';
   bankP+='</div><div id="bank-view-list">'+renderBankView(id)+'</div>';
-  // Custom fields
   var cfP='<div style="display:flex;justify-content:flex-end;margin-bottom:12px">';
   if(isAdmin()) cfP+='<button class="btn btn-primary btn-sm" onclick="addCFInModal('+q(id)+')">'+t('addField')+'</button>';
   cfP+='</div>';
@@ -704,9 +832,7 @@ function openCompany(id){
     });
     cfP+='</tbody></table>';
   } else { cfP+='<div class="empty">'+t('noData')+'</div>'; }
-  // Documents
   var docP=renderDocuments(id);
-  // Assemble
   var h='<div class="modal-header"><div><div class="modal-title">'+esc(c.name)+'</div>';
   h+='<div class="modal-subtitle">'+esc(c.jurisdiction)+' · '+esc(c.yearFounded||c.year||'')+' · '+sBadge(c.status)+'</div></div>';
   h+='<div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap">';
@@ -1231,7 +1357,7 @@ function renderShareholders(){
   return h;
 }
 
-// ── Network (click to expand) ─────────────────────────────────────────────────
+// ── Network ───────────────────────────────────────────────────────────────────
 var _netSelected=null;
 function renderNetwork(){
   var cs=data.companies;
@@ -1307,7 +1433,6 @@ function readImportFile(f){
 function parseImportText(){ var txt=document.getElementById('imp-txt'); if(!txt||!txt.value.trim()){showImpMsg('No text','err');return;} showImportMapping(parseCSVRaw(txt.value.trim())); }
 function parseCSVRaw(txt){ var lines=txt.split('\n').filter(function(l){return l.trim();}); var f=lines[0]||''; var d=(f.match(/\t/g)||[]).length>=(f.match(/,/g)||[]).length?'\t':','; return lines.map(function(l){return splitLine(l,d);}); }
 function splitLine(line,d){ var r=[],cur='',q=false; for(var i=0;i<line.length;i++){var c=line[i];if(c==='"'){q=!q;}else if(c===d&&!q){r.push(cur.trim().replace(/^"|"$/g,''));cur='';}else cur+=c;} r.push(cur.trim().replace(/^"|"$/g,'')); return r; }
-function cii(heads){ var ns=[].slice.call(arguments,1); for(var ni=0;ni<ns.length;ni++){var n=ns[ni];for(var i=0;i<heads.length;i++){if(heads[i].includes(n))return i;}} return -1; }
 function showImportMapping(rows){
   if(!rows||rows.length<2){showImpMsg('Need at least 2 rows','err');return;}
   _importRows=rows; _importHeaders=rows[0].map(function(h){return String(h||'').trim();});
@@ -1380,4 +1505,24 @@ function printCompany(id){
   var subs=getSubs(id); var invs=data.investments.filter(function(i){return i.companyId===id;});
   var w=window.open('','_blank');
   var h='<!DOCTYPE html><html><head><title>'+esc(c.name)+'</title><style>body{font-family:sans-serif;padding:28px;max-width:800px;margin:0 auto}h1{font-size:18px}table{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px}th{background:#f5f5f5;padding:5px 8px;text-align:left}td{padding:5px 8px;border-bottom:1px solid #eee}.row{display:grid;grid-template-columns:180px 1fr;padding:5px 0;border-bottom:1px solid #eee;font-size:12px}.lbl{color:#888}h3{font-size:13px;margin:14px 0 5px}</style></head><body>';
-  h+='<div style="display:flex;justify-content:space-between;margin-bottom:18px"><div><h1>'+esc(c.name)+'</h1><div style="color:#666;font-size:12px">'+esc(c.jurisdiction)+' · '+esc(c.yearFounded||c.year||'')+' · '+c.status+'</div></div><div style="text-align:right;font-size:10px
+  h+='<div style="display:flex;justify-content:space-between;margin-bottom:18px"><div><h1>'+esc(c.name)+'</h1><div style="color:#666;font-size:12px">'+esc(c.jurisdiction)+' · '+esc(c.yearFounded||c.year||'')+' · '+c.status+'</div></div></div>';
+  h+='<h3>Shareholders</h3><table><thead><tr><th>Owner</th><th>%</th><th>Type</th></tr></thead><tbody>';
+  c.shareholders.forEach(function(s){h+='<tr><td>'+esc(resolveOwner(s))+'</td><td>'+s.pct+'%</td><td>'+s.type+'</td></tr>';});
+  h+='</tbody></table>';
+  if(subs.length){h+='<h3>Subsidiaries</h3><table><thead><tr><th>Name</th><th>Jurisdiction</th></tr></thead><tbody>'; subs.forEach(function(s){h+='<tr><td>'+esc(s.name)+'</td><td>'+esc(s.jurisdiction)+'</td></tr>';}); h+='</tbody></table>';}
+  if(invs.length){h+='<h3>Investments</h3><table><thead><tr><th>Name</th><th>Type</th><th>MV</th></tr></thead><tbody>'; invs.forEach(function(i){h+='<tr><td>'+esc(i.name)+'</td><td>'+esc(i.type)+'</td><td>'+fmtD(i.marketValue)+'</td></tr>';}); h+='</tbody></table>';}
+  h+='<scr'+'ipt>window.print();<'+'/scr'+'ipt></body></html>';
+  w.document.write(h); w.document.close();
+}
+
+// ── Modal ────────────────────────────────────────────────────────────────────
+function showModal(html,lg){
+  var ov=document.createElement('div'); ov.className='overlay'; ov.id='modal-overlay';
+  var m=document.createElement('div'); m.className='modal'+(lg?' modal-lg':''); m.innerHTML=html;
+  ov.appendChild(m); document.body.appendChild(ov);
+  ov.addEventListener('click',function(e){ if(e.target===ov) closeModal(); });
+}
+function closeModal(){ var ov=document.getElementById('modal-overlay'); if(ov) ov.remove(); }
+</script>
+</body>
+</html>
