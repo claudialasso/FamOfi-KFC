@@ -176,6 +176,7 @@ textarea.inp{resize:vertical;min-height:60px}
 .inv-field-row{display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:center;margin-bottom:7px}
 .org-chart-scroll{width:100%;max-width:100%;overflow-x:auto;overflow-y:visible;padding-bottom:6px;-webkit-overflow-scrolling:touch}
 .org-level{display:flex;flex-wrap:nowrap;justify-content:center;align-items:flex-start;gap:12px}
+.org-level-upstream{align-items:flex-end}
 .org-branch{display:flex;flex-direction:column;align-items:center;min-width:0}
 .org-conn{width:2px;height:20px;background:var(--border2);margin:0 auto}
 .org-card{--org-pad-y:10px;--org-pad-x:14px;--org-font:12px;border-radius:var(--radius-sm);padding:var(--org-pad-y) var(--org-pad-x);min-width:120px;max-width:180px;text-align:center;cursor:pointer;display:inline-block;margin:0;box-shadow:var(--shadow);transition:all .15s}
@@ -1085,7 +1086,7 @@ function buildUpstream(cid,visited){
   var compOwners=(c.shareholders||[]).filter(function(s){return s.type==='company';});
   var indivOwners=(c.shareholders||[]).filter(function(s){return s.type==='individual';});
   if(!compOwners.length&&!indivOwners.length) return '';
-  var h='<div class="org-level">';
+  var h='<div class="org-level org-level-upstream">';
   compOwners.forEach(function(s){
     var ownerId=s.person;
     var ownerC=companies.find(function(x){return x.id===ownerId;})||{};
