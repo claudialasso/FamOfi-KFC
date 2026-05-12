@@ -175,10 +175,12 @@ textarea.inp{resize:vertical;min-height:60px}
 .dr-val{font-size:13px}
 .inv-field-row{display:grid;grid-template-columns:1fr 1fr auto;gap:6px;align-items:center;margin-bottom:7px}
 .org-chart-scroll{width:100%;max-width:100%;overflow-x:auto;overflow-y:visible;padding-bottom:6px;-webkit-overflow-scrolling:touch}
-.org-level{display:flex;flex-wrap:nowrap;justify-content:center;align-items:flex-start;gap:12px}
-.org-level-upstream{align-items:flex-end}
+.org-level{display:flex;flex-wrap:nowrap;justify-content:center;align-items:flex-end;gap:12px}
 .org-branch{display:flex;flex-direction:column;align-items:center;min-width:0}
-.org-conn{width:2px;height:20px;background:var(--border2);margin:0 auto}
+.org-conn{width:2px;height:20px;background:var(--border2);margin:0 auto;print-color-adjust:exact;-webkit-print-color-adjust:exact}
+.org-pad-node{display:inline-flex;min-width:110px;max-width:150px;height:62px;margin:4px;visibility:hidden}
+.org-pad-conn{width:2px;height:20px;margin:0 auto;visibility:hidden}
+@media print{@page{size:A3 landscape;margin:1cm}.org-chart-scroll{overflow:visible!important;max-width:none!important}.btn{display:none!important}}
 .org-card{--org-pad-y:10px;--org-pad-x:14px;--org-font:12px;border-radius:var(--radius-sm);padding:var(--org-pad-y) var(--org-pad-x);min-width:120px;max-width:180px;text-align:center;cursor:pointer;display:inline-block;margin:0;box-shadow:var(--shadow);transition:all .15s}
 .org-card:hover{box-shadow:var(--shadow-md);transform:translateY(-2px)}
 .org-card-name{font-size:var(--org-font);font-weight:700;margin-bottom:2px;word-break:break-word}
@@ -1079,29 +1081,47 @@ function switchTab(btn,pid){
 }
 
 // ── Full recursive org chart ──────────────────────────────────────────────────
-function buildUpstream(cid,visited){
-  var companies=_sanitizedCompanies();
-  var c=companies.find(function(x){return x.id===cid;});
-  if(!c) return '';
+function _upstreamDepth(cid,visited,companies){
+  var c=companies.find(function(x){return x.id===cid;}); if(!c) return 0;
+  var compOwners=(c.shareholders||[]).filter(function(s){return s.type==='company';});
+  var indivOwners=(c.shareholders||[]).filter(function(s){return s.type==='individual';});
+  if(!compOwners.length&&!indivOwners.length) return 0;
+  if(indivOwners.length&&!compOwners.length) return 1;
+  var maxD=0;
+  compOwners.forEach(function(s){
+    if(!visited.has(s.person)){
+      var next=new Set(visited); next.add(s.person);
+      var d=_upstreamDepth(s.person,next,companies);
+      if(d>maxD) maxD=d;
+    }
+  });
+  return 1+maxD;
+}
+function _buildUpstreamBranch(cid,visited,companies,targetDepth){
+  var c=companies.find(function(x){return x.id===cid;}); if(!c) return '';
   var compOwners=(c.shareholders||[]).filter(function(s){return s.type==='company';});
   var indivOwners=(c.shareholders||[]).filter(function(s){return s.type==='individual';});
   if(!compOwners.length&&!indivOwners.length) return '';
-  var h='<div class="org-level org-level-upstream">';
-  compOwners.forEach(function(s){
+  var h='<div class="org-level">';
+  compOwners.slice().sort(function(a,b){var na=cname(a.person).toLowerCase(),nb=cname(b.person).toLowerCase();return na<nb?-1:na>nb?1:0;}).forEach(function(s){
     var ownerId=s.person;
     var ownerC=companies.find(function(x){return x.id===ownerId;})||{};
     var label=s.pct+'% '+(ownerC.jurisdiction||'');
     h+='<div class="org-branch">';
     if(visited.has(ownerId)){
+      for(var pi=0;pi<targetDepth-1;pi++){h+='<div class="org-level"><div class="org-branch"><div class="org-pad-node"></div></div></div><div class="org-pad-conn"></div>';}
       h+=orgNode('↻ '+cname(ownerId),label,'var(--text3)','var(--surface)','Cycle',ownerId);
     } else {
       var next=new Set(visited); next.add(ownerId);
-      h+=buildUpstream(ownerId,next);
+      var childDepth=_upstreamDepth(ownerId,next,companies);
+      var padLevels=targetDepth-1-childDepth;
+      for(var pi2=0;pi2<padLevels;pi2++){h+='<div class="org-level"><div class="org-branch"><div class="org-pad-node"></div></div></div><div class="org-pad-conn"></div>';}
+      h+=_buildUpstreamBranch(ownerId,next,companies,childDepth);
       h+=orgNode(cname(ownerId),label,'var(--purple)','var(--purple-bg)','Company',ownerId);
     }
     h+='</div>';
   });
-  indivOwners.forEach(function(s){
+  indivOwners.slice().sort(function(a,b){return a.person<b.person?-1:a.person>b.person?1:0;}).forEach(function(s){
     h+='<div class="org-branch">';
     h+=orgNode(s.person,s.pct+'%','var(--amber)','var(--amber-bg)','Individual',null);
     h+='</div>';
@@ -1109,6 +1129,22 @@ function buildUpstream(cid,visited){
   h+='</div>';
   h+=orgConn();
   return h;
+}
+function buildUpstream(cid,visited){
+  var companies=_sanitizedCompanies();
+  var c=companies.find(function(x){return x.id===cid;}); if(!c) return '';
+  var compOwners=(c.shareholders||[]).filter(function(s){return s.type==='company';});
+  var indivOwners=(c.shareholders||[]).filter(function(s){return s.type==='individual';});
+  if(!compOwners.length&&!indivOwners.length) return '';
+  var maxDepth=0;
+  compOwners.forEach(function(s){
+    if(!visited.has(s.person)){
+      var next=new Set(visited); next.add(s.person);
+      var d=_upstreamDepth(s.person,next,companies);
+      if(d>maxDepth) maxDepth=d;
+    }
+  });
+  return _buildUpstreamBranch(cid,visited,companies,maxDepth);
 }
 
 function buildFullOrgChart(cid){
@@ -1177,11 +1213,21 @@ function printOrgChart(id){
   var chartHTML=buildFullOrgChart(id);
   var w=window.open('','_blank');
   w.document.write('<!DOCTYPE html><html><head><title>Org Chart - '+esc(c.name)+'</title>');
-  w.document.write('<style>body{font-family:system-ui,sans-serif;padding:32px;background:#fff;color:#1e2340;text-align:center}');
-  w.document.write('h2{font-size:18px;font-weight:700;margin-bottom:4px;text-align:left}.sub{font-size:13px;color:#5a6080;margin-bottom:24px;text-align:left}');
-  w.document.write('button{display:none!important}@media print{body{padding:16px}@page{margin:1cm}}</style></head><body>');
+  w.document.write('<style>');
+  w.document.write('@page{size:A3 landscape;margin:1.5cm}');
+  w.document.write('*{box-sizing:border-box;margin:0;padding:0}');
+  w.document.write('body{font-family:system-ui,sans-serif;padding:24px;background:#fff;color:#1e2340;text-align:center}');
+  w.document.write('h2{font-size:16px;font-weight:700;margin-bottom:4px;text-align:left}.sub{font-size:12px;color:#5a6080;margin-bottom:20px;text-align:left}');
+  w.document.write('button{display:none!important}');
+  w.document.write('.org-chart-scroll{width:100%;overflow:visible}');
+  w.document.write('.org-level{display:flex;flex-wrap:nowrap;justify-content:center;align-items:flex-end;gap:10px}');
+  w.document.write('.org-branch{display:flex;flex-direction:column;align-items:center;min-width:0}');
+  w.document.write('.org-conn{width:2px;height:16px;background:#c5ccdf;margin:0 auto;print-color-adjust:exact;-webkit-print-color-adjust:exact}');
+  w.document.write('.org-pad-node{display:inline-flex;min-width:100px;height:56px;margin:4px;visibility:hidden}');
+  w.document.write('.org-pad-conn{width:2px;height:16px;margin:0 auto;visibility:hidden}');
+  w.document.write('</style></head><body>');
   w.document.write('<h2>'+esc(c.name)+'</h2>');
-  w.document.write('<div class="sub">'+esc(c.jurisdiction)+' - Organizational Chart - FamOfi Registry - '+new Date().toLocaleDateString()+'</div>');
+  w.document.write('<div class="sub">'+esc(c.jurisdiction)+' — Organizational Chart — FamOfi Registry — '+new Date().toLocaleDateString()+'</div>');
   w.document.write(chartHTML);
   w.document.write('<script>window.print();<\/script></body></html>');
   w.document.close();
@@ -1190,12 +1236,19 @@ function printOrgChart(id){
 // ── Org Charts Tab ────────────────────────────────────────────────────────────
 var _orgSelected=null;
 function renderOrgCharts(){
-  var cs=data.companies;
-  var h='<div class="section-header"><div class="section-title">'+t('orgcharts')+'</div></div>';
+  var cs=data.companies.slice().sort(function(a,b){return a.name.toLowerCase()<b.name.toLowerCase()?-1:a.name.toLowerCase()>b.name.toLowerCase()?1:0;});
+  var jurisdictions=[...new Set(data.companies.map(function(c){return c.jurisdiction;}).filter(Boolean))].sort();
+  var filterJur=window._orgJurFilter||'';
+  var h='<div class="section-header"><div class="section-title">'+t('orgcharts')+'</div>';
+  h+='<div style="display:flex;align-items:center;gap:8px"><select onchange="window._orgJurFilter=this.value;var m=document.getElementById('main');if(m)m.innerHTML=renderOrgCharts();" style="padding:6px 10px;border-radius:var(--radius-sm);border:1.5px solid var(--border);font-size:12px;background:var(--surface);color:var(--text);cursor:pointer">';
+  h+='<option value="">'+(lang==='en'?'All Jurisdictions':'Todas las Jurisdicciones')+'</option>';
+  jurisdictions.forEach(function(j){h+='<option value="'+esc(j)+'"'+(filterJur===j?' selected':'')+'>'+esc(j)+'</option>';});
+  h+='</select></div></div>';
   h+='<div class="card" style="margin-bottom:16px;padding:14px 18px">';
   h+='<div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px">'+(lang==='en'?'Select Company':'Seleccionar Empresa')+'</div>';
   h+='<div style="display:flex;flex-wrap:wrap;gap:8px">';
-  cs.forEach(function(c){
+  var filtered=filterJur?cs.filter(function(c){return c.jurisdiction===filterJur;}):cs;
+  filtered.forEach(function(c){
     var sel=_orgSelected===c.id;
     h+='<button onclick="selectOrgCo('+q(c.id)+')" style="padding:7px 14px;border-radius:var(--radius-sm);font-size:13px;cursor:pointer;font-family:inherit;font-weight:'+(sel?'700':'500')+';border:2px solid '+(sel?'var(--accent)':'var(--border)')+';background:'+(sel?'var(--accent)':'var(--surface)')+';color:'+(sel?'#fff':'var(--text2)')+'">'+esc(c.name)+'</button>';
   });
@@ -1206,7 +1259,7 @@ function renderOrgCharts(){
     h+='<div style="font-size:15px">'+t('selectCompany')+'</div></div>';
     return h;
   }
-  var c=cs.find(function(x){return x.id===_orgSelected;}); if(!c) return h;
+  var c=data.companies.find(function(x){return x.id===_orgSelected;}); if(!c) return h;
   h+='<div class="card" style="margin-bottom:14px;padding:12px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">';
   h+='<div style="font-size:13px;font-weight:600">'+esc(c.name)+' — '+t('orgChart')+'</div>';
   h+='<div style="display:flex;gap:8px">';
