@@ -1240,7 +1240,7 @@ function renderOrgCharts(){
   var jurisdictions=[...new Set(data.companies.map(function(c){return c.jurisdiction;}).filter(Boolean))].sort();
   var filterJur=window._orgJurFilter||'';
   var h='<div class="section-header"><div class="section-title">'+t('orgcharts')+'</div>';
-  h+='<div style="display:flex;align-items:center;gap:8px"><select onchange="window._orgJurFilter=this.value;var m=document.getElementById('main');if(m)m.innerHTML=renderOrgCharts();" style="padding:6px 10px;border-radius:var(--radius-sm);border:1.5px solid var(--border);font-size:12px;background:var(--surface);color:var(--text);cursor:pointer">';
+  h+='<div style="display:flex;align-items:center;gap:8px"><select onchange="window._orgJurFilter=this.value;var m=document.getElementById(\'main\');if(m)m.innerHTML=renderOrgCharts();" style="padding:6px 10px;border-radius:var(--radius-sm);border:1.5px solid var(--border);font-size:12px;background:var(--surface);color:var(--text);cursor:pointer">';
   h+='<option value="">'+(lang==='en'?'All Jurisdictions':'Todas las Jurisdicciones')+'</option>';
   jurisdictions.forEach(function(j){h+='<option value="'+esc(j)+'"'+(filterJur===j?' selected':'')+'>'+esc(j)+'</option>';});
   h+='</select></div></div>';
