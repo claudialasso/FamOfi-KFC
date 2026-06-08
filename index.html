@@ -240,6 +240,7 @@ textarea.inp{resize:vertical;min-height:60px}
   select.filter{width:100%}
   /* Investments kpi */
   div[style*="repeat(4,1fr)"]{grid-template-columns:1fr 1fr !important}
+div[style*="repeat(5,1fr)"]{grid-template-columns:1fr 1fr !important}
   /* Shareholder page */
   div[style*="grid-template-columns:1fr 1fr;gap:14px"]{grid-template-columns:1fr !important}
   /* Tabs */
@@ -327,7 +328,7 @@ var TT = {
     editCompany:'Edit', delete:'Delete', bulkDelete:'Delete Selected',
     invName:'Investment Name', invFund:'Family Fund', invFamily:'Family',
     invType:'Investment Type', invCommit:'Total Commitment', invCalls:'Capital Calls',
-    invDist:'Distributions', invMV:'Market Value', invStatus:'Status',
+    invDist:'Distributions', invExpenses:'Expenses / Fees', invMV:'Market Value', invStatus:'Status',
     invNotes:'Notes', invCompany:'Company',
     addInvestment:'+ Add Investment', allFunds:'All Funds', allTypes:'All Types',
     individual:'Individual', company:'Company', ownerType:'Owner Type',
@@ -365,7 +366,7 @@ var TT = {
     editCompany:'Editar', delete:'Eliminar', bulkDelete:'Eliminar Seleccionados',
     invName:'Nombre Inversion', invFund:'Fondo Familiar', invFamily:'Familia',
     invType:'Tipo de Inversion', invCommit:'Compromiso Total', invCalls:'Capital Calls',
-    invDist:'Distribuciones', invMV:'Valor de Mercado', invStatus:'Estado',
+    invDist:'Distribuciones', invExpenses:'Gastos / Comisiones', invMV:'Valor de Mercado', invStatus:'Estado',
     invNotes:'Notas', invCompany:'Empresa',
     addInvestment:'+ Agregar Inversion', allFunds:'Todos los Fondos', allTypes:'Todos los Tipos',
     individual:'Persona', company:'Empresa', ownerType:'Tipo de Propietario',
@@ -562,6 +563,7 @@ function applyLoaded(d){
     if(inv.commitment==null) inv.commitment=0;
     if(inv.calls==null) inv.calls=0;
     if(inv.distributions==null) inv.distributions=0;
+    if(inv.expenses==null) inv.expenses=0;
     if(inv.marketValue==null) inv.marketValue=0;
     if(!inv.fund) inv.fund='';
     if(!inv.family) inv.family='';
@@ -987,10 +989,11 @@ function openCompany(id){
       if(inv.fund) invP+='<span class="badge badge-fund">'+esc(inv.fund)+'</span>';
       if(inv.type) invP+='<span class="badge badge-inv">'+esc(inv.type)+'</span>';
       invP+='</div></div><div style="text-align:right"><div style="font-weight:700;font-size:15px;color:var(--accent)">'+fmtD(inv.marketValue)+'</div></div></div>';
-      invP+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:8px 0;padding:8px;background:var(--bg);border-radius:var(--radius-sm)">';
+      invP+='<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;margin:8px 0;padding:8px;background:var(--bg);border-radius:var(--radius-sm)">';
       invP+='<div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">'+t('invCommit')+'</div><div style="font-weight:600">'+fmtD(inv.commitment)+'</div></div>';
       invP+='<div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">'+t('invCalls')+'</div><div style="font-weight:600">'+fmtD(inv.calls)+'</div></div>';
-      invP+='<div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">'+t('invDist')+'</div><div style="font-weight:600;color:var(--teal)">'+fmtD(inv.distributions)+'</div></div></div>';
+      invP+='<div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">'+t('invDist')+'</div><div style="font-weight:600;color:var(--teal)">'+fmtD(inv.distributions)+'</div></div>';
+    invP+='<div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase">'+t('invExpenses')+'</div><div style="font-weight:600;color:var(--coral)">'+fmtD(inv.expenses||0)+'</div></div></div>';
       if(inv.notes) invP+='<div style="font-size:12px;color:var(--text2);margin-top:6px">'+esc(inv.notes)+'</div>';
       invP+='<div style="display:flex;gap:6px;margin-top:10px">';
       if(isAdmin()){
@@ -1544,6 +1547,7 @@ function renderInvestments(){
   var totalMV=inv.reduce(function(a,i){return a+(+i.marketValue||0);},0);
   var totalC=inv.reduce(function(a,i){return a+(+i.commitment||0);},0);
   var totalD=inv.reduce(function(a,i){return a+(+i.distributions||0);},0);
+  var totalE=inv.reduce(function(a,i){return a+(+i.expenses||0);},0);
   var h=roBanner();
   h+='<div class="section-header"><div class="section-title">'+t('investments')+' <span style="color:var(--text3);font-weight:400;font-size:14px">('+data.investments.length+')</span></div>';
   h+='<div style="display:flex;gap:8px;flex-wrap:wrap">';
@@ -1551,10 +1555,11 @@ function renderInvestments(){
   if(isAdmin()) h+='<button class="btn btn-primary" onclick="openInvForm(null,null)">'+t('addInvestment')+'</button>';
   if(isAdmin()) h+='<button class="btn btn-danger btn-sm" id="bulk-delete-inv-btn" onclick="bulkDeleteInvestments()" style="display:none;margin-left:8px">'+t('bulkDelete')+'</button>';
   h+='</div></div>';
-  h+='<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px">';
+  h+='<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:18px">';
   h+='<div class="kpi"><div class="kpi-label">'+t('invMV')+'</div><div class="kpi-val" style="font-size:20px">'+fmtD(totalMV)+'</div></div>';
   h+='<div class="kpi"><div class="kpi-label">'+t('invCommit')+'</div><div class="kpi-val" style="font-size:20px">'+fmtD(totalC)+'</div></div>';
   h+='<div class="kpi"><div class="kpi-label">'+t('invDist')+'</div><div class="kpi-val" style="font-size:20px;color:var(--teal)">'+fmtD(totalD)+'</div></div>';
+  h+='<div class="kpi"><div class="kpi-label">'+t('invExpenses')+'</div><div class="kpi-val" style="font-size:20px;color:var(--coral)">'+fmtD(totalE)+'</div></div>';
   h+='<div class="kpi"><div class="kpi-label"># Investments</div><div class="kpi-val" style="font-size:20px">'+data.investments.length+'</div></div></div>';
   h+='<div class="charts-row" style="grid-template-columns:1fr 1fr;margin-bottom:18px">';
   h+='<div class="chart-card"><div class="chart-title">'+t('byFund')+'</div><div class="chart-wrap"><canvas id="inv-fund-chart"></canvas></div></div>';
@@ -1565,8 +1570,8 @@ function renderInvestments(){
   h+='</select><select class="filter" onchange="invTypeF=this.value;renderPage()"><option value="">'+t('allTypes')+'</option>';
   types.forEach(function(t2){h+='<option value="'+esc(t2)+'"'+(invTypeF===t2?' selected':'')+'>'+esc(t2)+'</option>';});
   h+='</select></div>';
-  h+='<div class="card" style="padding:0"><table><thead><tr><th style=\'width:36px\'><input type=\'checkbox\' id=\'inv-select-all\' onclick=\'toggleAllInvSelect(this)\' style=\'cursor:pointer\'></th><th>'+t('invName')+'</th><th>'+t('invFund')+'</th><th>'+t('invCompany')+'</th><th>'+t('invType')+'</th><th>'+t('invCommit')+'</th><th>'+t('invMV')+'</th><th>'+t('invCalls')+'</th><th>'+t('invDist')+'</th><th>'+t('invStatus')+'</th><th></th></tr></thead><tbody>';
-  if(!inv.length){ h+='<tr><td colspan="11" style="text-align:center;padding:32px;color:var(--text3)">'+t('noData')+'</td></tr>'; }
+  h+='<div class="card" style="padding:0"><table><thead><tr><th style=\'width:36px\'><input type=\'checkbox\' id=\'inv-select-all\' onclick=\'toggleAllInvSelect(this)\' style=\'cursor:pointer\'></th><th>'+t('invName')+'</th><th>'+t('invFund')+'</th><th>'+t('invCompany')+'</th><th>'+t('invType')+'</th><th>'+t('invCommit')+'</th><th>'+t('invMV')+'</th><th>'+t('invCalls')+'</th><th>'+t('invDist')+'</th><th>'+t('invExpenses')+'</th><th>'+t('invStatus')+'</th><th></th></tr></thead><tbody>';
+  if(!inv.length){ h+='<tr><td colspan="12" style="text-align:center;padding:32px;color:var(--text3)">'+t('noData')+'</td></tr>'; }
   else { inv.forEach(function(i){
     h+='<tr><td style="text-align:center"><input type="checkbox" class="inv-checkbox" data-id="'+i.id+'" onchange="updateBulkDeleteBtn()"></td><td style="font-weight:600">'+esc(i.name)+'</td>';
     h+='<td>'+(i.fund?'<span class="badge badge-fund">'+esc(i.fund)+'</span>':'—')+'</td>';
@@ -1574,6 +1579,7 @@ function renderInvestments(){
     h+='<td><span class="badge badge-inv">'+esc(i.type||'—')+'</span></td>';
     h+='<td style="font-weight:600">'+fmtD(i.commitment||0)+'</td><td>'+fmtD(i.marketValue)+'</td><td>'+fmtD(i.calls)+'</td>';
     h+='<td style="color:var(--teal)">'+fmtD(i.distributions)+'</td>';
+    h+='<td style="color:var(--coral)">'+fmtD(i.expenses||0)+'</td>';
     h+='<td>'+(i.status?'<span class="badge badge-active">'+esc(i.status)+'</span>':'—')+'</td>';
     h+='<td style="white-space:nowrap">';
     if(isAdmin()){
@@ -1614,6 +1620,7 @@ function openInvForm(id,defaultCo){
   h+='<div class="form-group"><label class="lbl">'+t('invCommit')+' (USD)</label><input id="iv-commit" class="inp" type="number" value="'+((inv&&inv.commitment)||'')+'"></div>';
   h+='<div class="form-group"><label class="lbl">'+t('invCalls')+' (USD)</label><input id="iv-calls" class="inp" type="number" value="'+((inv&&inv.calls)||'')+'"></div>';
   h+='<div class="form-group"><label class="lbl">'+t('invDist')+' (USD)</label><input id="iv-dist" class="inp" type="number" value="'+((inv&&inv.distributions)||'')+'"></div>';
+  h+='<div class="form-group"><label class="lbl">'+t('invExpenses')+' (USD)</label><input id="iv-expenses" class="inp" type="number" value="'+((inv&&inv.expenses)||'')+'"></div>';
   h+='<div class="form-group"><label class="lbl">'+t('invMV')+' (USD)</label><input id="iv-mv" class="inp" type="number" value="'+((inv&&inv.marketValue)||'')+'"></div>';
   h+='<div class="form-group full"><label class="lbl">'+t('invNotes')+'</label><textarea id="iv-notes" class="inp">'+esc(inv?inv.notes:'')+'</textarea></div></div>';
   h+='<div class="fsec" style="margin-top:14px"><div class="fsec-title">'+t('customFields')+'</div><div id="inv-fields-list"></div><button class="btn btn-outline btn-sm" onclick="addInvField()">'+t('addField')+'</button></div>';
@@ -1639,7 +1646,7 @@ function saveInv(id){
   var obj={id:id||uid(),companyId:coId,name:gv('iv-name'),fund:gv('iv-fund'),family:gv('iv-family'),
     type:gv('iv-type'),status:gv('iv-status'),
     commitment:parseFloat(gv('iv-commit'))||0,calls:parseFloat(gv('iv-calls'))||0,
-    distributions:parseFloat(gv('iv-dist'))||0,marketValue:parseFloat(gv('iv-mv'))||0,
+    distributions:parseFloat(gv('iv-dist'))||0,expenses:parseFloat(gv('iv-expenses'))||0,marketValue:parseFloat(gv('iv-mv'))||0,
     notes:gv('iv-notes'),fields:window._fInvFields};
   if(id){var i=data.investments.findIndex(function(x){return x.id===id;});if(i>-1)data.investments[i]=obj;}
   else data.investments.push(obj);
@@ -1687,6 +1694,7 @@ function normalizeInvHeader(h){
   if(s.includes('commit')) return 'commitment';
   if(s.includes('call')) return 'calls';
   if(s.includes('dist')) return 'distributions';
+  if(s.includes('expense')||s.includes('fee')||s.includes('gasto')||s.includes('comision')) return 'expenses';
   if(s.includes('family')||s.includes('familia')) return 'family';
   return null;
 }
@@ -1752,9 +1760,10 @@ function confirmInvImport(){
       if(cv('calls')&&existing.calls!==parseNum(cv('calls'))){existing.calls=parseNum(cv('calls'));changed=true;}
       if(cv('distributions')&&existing.distributions!==parseNum(cv('distributions'))){existing.distributions=parseNum(cv('distributions'));changed=true;}
       if(cv('marketValue')&&existing.marketValue!==parseNum(cv('marketValue'))){existing.marketValue=parseNum(cv('marketValue'));changed=true;}
+    if(cv('expenses')&&existing.expenses!==parseNum(cv('expenses'))){existing.expenses=parseNum(cv('expenses'));changed=true;}
       if(changed){updated++;}else{skipped++;}
     } else {
-      data.investments.push({id:uid(),companyId:coId,name:name,fund:cv('fund'),family:cv('family'),type:cv('type'),status:'active',commitment:commitVal,calls:parseNum(cv('calls')),distributions:parseNum(cv('distributions')),marketValue:parseNum(cv('marketValue')),notes:'',fields:[]});
+      data.investments.push({id:uid(),companyId:coId,name:name,fund:cv('fund'),family:cv('family'),type:cv('type'),status:'active',commitment:commitVal,calls:parseNum(cv('calls')),distributions:parseNum(cv('distributions')),marketValue:parseNum(cv('marketValue')),notes:'',expenses:parseNum(cv('expenses')),fields:[]});
       imported++;
     }
   });
@@ -1967,8 +1976,8 @@ function exportCompanyCSV(id){
   var rows=[['Field','Value'],['Empresa',c.name],['Jurisdiccion',c.jurisdiction],['Proposito',c.purpose],['Ano',c.yearFounded||c.year],['ID Fiscal',c.fiscalId],['EIN',c.ein],['IRS',c.irs],['Director',c.director],['Registered Agent',c.agent],['Direccion',c.address],['Estado',c.status],['',''],['--- ACCIONISTAS ---',''],['Nombre','%','Tipo']];
   c.shareholders.forEach(function(s){rows.push([resolveOwner(s),s.pct+'%',s.type]);});
   rows.push(['',''],['--- SUBSIDIARIAS ---','']); subs.forEach(function(s){rows.push([s.name,s.jurisdiction,s.status]);});
-  rows.push(['',''],['--- INVERSIONES ---',''],['Nombre','Fondo','Tipo','Market Value','Calls','Distribuciones']);
-  invs.forEach(function(i){rows.push([i.name,i.fund,i.type,i.marketValue,i.calls,i.distributions]);});
+  rows.push(['',''],['--- INVERSIONES ---',''],['Nombre','Fondo','Tipo','Market Value','Calls','Distribuciones','Gastos']);
+  invs.forEach(function(i){rows.push([i.name,i.fund,i.type,i.marketValue,i.calls,i.distributions,i.expenses||0]);});
   rows.push(['',''],['--- BANCA ---',''],['Banco','Account #','Routing','SWIFT']);
   (c.banking||[]).forEach(function(b){rows.push([b.bank,b.account,b.routing,b.swift]);});
   dlCSV(rows,c.name.replace(/[^a-z0-9]/gi,'_')+'.csv');
