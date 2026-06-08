@@ -1597,7 +1597,7 @@ function renderInvestments(){
   return h;
 }
 function buildInvCharts(){
-  var inv=data.investments;
+  var inv=data.investments;h
   var fm={}; inv.forEach(function(i){var k=i.fund||'Other';fm[k]=(fm[k]||0)+(+i.marketValue||0);});
   mkChart('inv-fund-chart','doughnut',Object.keys(fm),Object.values(fm));
   var tm={}; inv.forEach(function(i){var k=i.type||'Other';tm[k]=(tm[k]||0)+(+i.marketValue||0);});
@@ -1610,7 +1610,7 @@ function openInvForm(id,defaultCo){
   var saveInvId=id?q(id):"''";
   var h='<div class="modal-header"><div class="modal-title">'+(inv?'Edit Investment':t('addInvestment'))+'</div><button class="close-btn" onclick="closeModal()">x</button></div>';
   h+='<div class="modal-body"><div class="form-grid">';
-  h+='<div class="form-group full"><label class="lbl<th style="cursor:pointer;user-select:none;white-space:nowrap" onclick="invSort=invSort==='asc'?'desc':'asc';renderPage()">'+t('invName')+(invSort==='asc'?' ▲':invSort==='desc'?' ▼':' ⇅')+'</th>';
+  h+='<div class="form-group full"><label class="lbl<th style="cursor:pointer;user-select:none;white-space:nowrap" onclick="invSort=invSort===\'asc\'?\'desc\':\'asc\';renderPage()">'+t('invName')+(invSort==='asc'?' ▲':invSort==='desc'?' ▼':' ⇅')+'</th>';
   });
   ph+='</tr></thead><tbody>';
   preview.forEach(function(row){
