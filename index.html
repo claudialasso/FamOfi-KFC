@@ -886,7 +886,7 @@ function renderCompanies(){
   var h=roBanner();
   h+='<div class="section-header"><div class="section-title">'+t('companies')+' <span style="color:var(--text3);font-weight:400;font-size:14px">('+data.companies.length+')</span></div>';
   h+='<div style="display:flex;gap:8px"><button class="btn btn-teal btn-sm" onclick="exportAllCSV()">'+t('export')+'</button>';
-  if(isAdmin()) h+='<button class="btn btn-primary" onclick="openCompanyForm(null)">'+t('addCompany')+'</button>';
+  if(isAdmin()) h+='<button class="btn btn-primary" onclick="openCompanyForm(null)">'+t('addCompany')+'</button><button class="btn btn-danger btn-sm" id="bulk-delete-co-btn" onclick="bulkDeleteCompanies()" style="display:none;margin-left:8px">'+t('deleteSelected')+'</button>';
   h+='</div></div>';
   h+='<div class="toolbar"><div class="search-wrap"><span class="si">&#8981;</span>';
   h+='<input type="text" placeholder="'+t('search')+'" value="'+esc(cSearch)+'" oninput="cSearch=this.value;renderPage()"></div>';
@@ -894,7 +894,7 @@ function renderCompanies(){
   jurs.forEach(function(j){h+='<option value="'+esc(j)+'"'+(cJur===j?' selected':'')+'>'+esc(j)+'</option>';});
   h+='</select><select class="filter" onchange="cStatus=this.value;renderPage()"><option value="">'+t('allStatus')+'</option>';
   h+='<option value="active">'+t('active')+'</option><option value="liquidated">'+t('liquidated')+'</option><option value="liquidation">'+t('liquidation')+'</option></select></div>';
-  h+='<div class="card" style="padding:0"><table><thead><tr><th>'+t('name')+'</th><th>'+t('jurisdiction')+'</th><th>'+t('yearFounded')+'</th><th>'+t('director')+'</th><th>'+t('shareholders2')+'</th><th>'+t('status')+'</th><th></th></tr></thead><tbody>';
+  h+='<div class="card" style="padding:0"><table><thead><tr><th style='width:36px'><input type='checkbox' id='co-select-all' onclick='toggleAllCoSelect(this)' style='cursor:pointer'></th><th>'+t('name')+'</th><th>'+t('jurisdiction')+'</th><th>'+t('yearFounded')+'</th><th>'+t('director')+'</th><th>'+t('shareholders2')+'</th><th>'+t('status')+'</th><th></th></tr></thead><tbody>';
   if(!cs.length){ h+='<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text3)">'+t('noCompanies')+'</td></tr>'; }
   else { cs.forEach(function(c){
     var shRows=c.shareholders.map(function(s){
@@ -903,7 +903,7 @@ function renderCompanies(){
         +' <span style="font-weight:700;color:var(--accent);font-size:13px">'+s.pct+'%</span>'
         +' <span style="font-size:11px">'+(s.type==='company'?'&#128290;':'&#128100;')+'</span></div>';
     }).join('');
-    h+='<tr><td style="cursor:pointer;font-weight:700" onclick="openCompany('+q(c.id)+')">'+esc(c.name)+'</td>';
+    h+='<tr><td style="width:36px;text-align:center;padding:4px 0" onclick="event.stopPropagation()"><input type="checkbox" class="co-checkbox" data-id="'+c.id+'" onchange="updateBulkDeleteCoBtn()"></td><td style="cursor:pointer;font-weight:700" onclick="openCompany('+q(c.id)+')">'+esc(c.name)+'</td>';
     h+='<td><span class="badge badge-jur">'+esc(c.jurisdiction)+'</span></td>';
     h+='<td style="color:var(--text2)">'+esc(c.yearFounded||c.year||'—')+'</td>';
     h+='<td style="color:var(--text2)">'+esc(c.director||'—')+'</td>';
@@ -1671,6 +1671,52 @@ function confirmInvImport(){
   },100);
 }
 function delInv(id){ if(!confirm(t('confirmDelete')||'Delete this investment? Cannot be undone.')) return; data.investments=data.investments.filter(function(x){return x.id!==id;}); save(); render(); }
+function toggleAllCoSelect(cb){
+  document.querySelectorAll('.co-checkbox').forEach(function(c){c.checked=cb.checked;});
+  updateBulkDeleteCoBtn();
+}
+function updateBulkDeleteCoBtn(){
+  var btn=document.getElementById('bulk-delete-co-btn');
+  if(!btn) return;
+  var checked=document.querySelectorAll('.co-checkbox:checked').length;
+  btn.style.display=checked>0?'inline-flex':'none';
+  var selAll=document.getElementById('co-select-all');
+  if(selAll){var total=document.querySelectorAll('.co-checkbox').length;selAll.indeterminate=checked>0&&checked<total;selAll.checked=checked===total&&total>0;}
+}
+function bulkDeleteCompanies(){
+  var cbs=document.querySelectorAll('.co-checkbox:checked');
+  if(!cbs.length) return;
+  var ids=Array.from(cbs).map(function(c){return c.getAttribute('data-id');});
+  if(!confirm(ids.length+' '+t('companies')+'?')) return;
+  var batch=_db.batch();
+  ids.forEach(function(id){batch.delete(_REF.collection('companies').doc(id));});
+  batch.commit().then(function(){updateBulkDeleteCoBtn();}).catch(function(e){alert(e.message);});
+}
+function toggleAllShSelect(cb){
+  document.querySelectorAll('.sh-checkbox').forEach(function(c){c.checked=cb.checked;});
+  updateBulkShBtn();
+}
+function updateBulkShBtn(){
+  var bar=document.getElementById('sh-bulk-bar');
+  if(!bar) return;
+  var checked=document.querySelectorAll('.sh-checkbox:checked').length;
+  bar.style.display=checked>0?'flex':'none';
+  var selAll=document.getElementById('sh-select-all');
+  if(selAll){var total=document.querySelectorAll('.sh-checkbox').length;selAll.indeterminate=checked>0&&checked<total;selAll.checked=checked===total&&total>0;}
+}
+function bulkDeleteShareholders(){
+  var cbs=document.querySelectorAll('.sh-checkbox:checked');
+  if(!cbs.length) return;
+  var names=Array.from(cbs).map(function(c){return c.getAttribute('data-name');});
+  if(!confirm(names.length+' '+t('shareholders2')+'?')) return;
+  var batch=_db.batch();
+  data.companies.forEach(function(co){
+    var changed=false;
+    var newSh=co.shareholders.filter(function(s){if(s.type==='individual'&&names.indexOf(s.person)>=0){changed=true;return false;}return true;});
+    if(changed)batch.update(_REF.collection('companies').doc(co.id),{shareholders:newSh});
+  });
+  batch.commit().then(function(){updateBulkShBtn();}).catch(function(e){alert(e.message);});
+}
 function bulkDeleteInvestments(){
   var cbs=document.querySelectorAll('.inv-checkbox:checked');
   if(!cbs.length){alert('No investments selected.');return;}
@@ -1700,11 +1746,12 @@ function renderShareholders(){
   var filtered=all.filter(function(p){return !shSearch||p.toLowerCase().includes(shSearch.toLowerCase());});
   var h='<div class="section-header"><div class="section-title">'+t('allShareholders')+' <span style="color:var(--text3);font-weight:400;font-size:14px">('+all.length+')</span></div></div>';
   h+='<div class="toolbar"><div class="search-wrap"><span class="si">&#8981;</span><input type="text" placeholder="'+t('searchShareholder')+'" value="'+esc(shSearch)+'" oninput="shSearch=this.value;renderPage()"></div></div>';
+  if(isAdmin()) h+='<div id="sh-bulk-bar" style="display:none;align-items:center;gap:8px;padding:6px 0"><label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="sh-select-all" onclick="toggleAllShSelect(this)">&nbsp;'+t('selectAll')+'</label><button class="btn btn-danger btn-sm" onclick="bulkDeleteShareholders()">'+t('deleteSelected')+'</button></div>';
   h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px"><div>';
   filtered.forEach(function(p){
     var hs=data.companies.filter(function(c){return c.shareholders.some(function(s){return s.type==='individual'&&s.person===p;});});
     var avg=hs.length?Math.round(hs.reduce(function(a,c){var s=c.shareholders.find(function(s){return s.person===p;});return a+(s?s.pct:0);},0)/hs.length):0;
-    h+='<div class="sh-card'+(shSel===p?' selected':'')+'" onclick="shSel='+q(p)+';renderPage()">';
+    h+='<div class="sh-card'+(shSel===p?' selected':'')+'" style="position:relative" onclick="shSel='+q(p)+';renderPage()"><label onclick="event.stopPropagation()" style="position:absolute;top:8px;right:8px;cursor:pointer"><input type="checkbox" class="sh-checkbox" data-name="'+esc(p)+'" onchange="updateBulkShBtn()"></label>';
     h+='<div style="font-weight:700;font-size:14px;margin-bottom:3px">'+esc(p)+'</div>';
     h+='<div style="font-size:12px;color:var(--text3)">'+t('holdingIn')+' '+hs.length+' '+t('companies2')+' · '+avg+'% '+t('pct')+'</div>';
     h+='<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px">';
