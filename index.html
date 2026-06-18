@@ -459,10 +459,10 @@ function doLogin(){
 
   setLoginLoading(true);
 
-  // Use SESSION persistence: user must log in on every new tab/window open,
-  // but stays logged in on refresh (avoids the full round-trip on every load).
-  // Switch to 'none' if you want login required on every single page load.
-  _auth.setPersistence(firebase.auth.Auth.Persistence.SESSION)
+  // Use LOCAL persistence: user stays logged in across browser restarts
+  // and new tabs/windows. Session survives page refresh and browser close.
+  // Use 'none' if you want no persistence (new login required each tab).
+  _auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL)
     .then(function(){
       return _auth.signInWithEmailAndPassword(email, pass);
     })
@@ -894,7 +894,7 @@ function renderCompanies(){
   jurs.forEach(function(j){h+='<option value="'+esc(j)+'"'+(cJur===j?' selected':'')+'>'+esc(j)+'</option>';});
   h+='</select><select class="filter" onchange="cStatus=this.value;renderPage()"><option value="">'+t('allStatus')+'</option>';
   h+='<option value="active">'+t('active')+'</option><option value="liquidated">'+t('liquidated')+'</option><option value="liquidation">'+t('liquidation')+'</option></select></div>';
-  h+='<div class="card" style="padding:0"><table><thead><tr><th style='width:36px'><input type='checkbox' id='co-select-all' onclick='toggleAllCoSelect(this)' style='cursor:pointer'></th><th>'+t('name')+'</th><th>'+t('jurisdiction')+'</th><th>'+t('yearFounded')+'</th><th>'+t('director')+'</th><th>'+t('shareholders2')+'</th><th>'+t('status')+'</th><th></th></tr></thead><tbody>';
+  h+='<div class="card" style="padding:0"><table><thead><tr><th style="width:36px"><input type="checkbox" id="co-select-all" onclick="toggleAllCoSelect(this)" style="cursor:pointer"></th><th>'+t('name')+'</th><th>'+t('jurisdiction')+'</th><th>'+t('yearFounded')+'</th><th>'+t('director')+'</th><th>'+t('shareholders2')+'</th><th>'+t('status')+'</th><th></th></tr></thead><tbody>';
   if(!cs.length){ h+='<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text3)">'+t('noCompanies')+'</td></tr>'; }
   else { cs.forEach(function(c){
     var shRows=c.shareholders.map(function(s){
