@@ -1372,6 +1372,71 @@ function saveInv(id){
   else data.investments.push(obj);
   save();closeModal();render();
 }
+function openInvImport(){
+  var h='<div class="modal-header"><div class="modal-title">Import Investments</div><button class="close-btn" onclick="closeModal()">×</button></div>';
+  h+='<div class="modal-body"><div class="import-hint">'+(lang==='en'?'Upload any CSV or Excel file with investment data. Map columns to fields, then import.':'Sube un archivo CSV o Excel con inversiones. Mapea columnas e importa.')+'</div>';
+  h+='<div class="drop-zone" onclick="document.getElementById('finv').click()" ondragover="event.preventDefault();this.style.borderColor='var(--accent)'" ondragleave="this.style.borderColor=''" ondrop="event.preventDefault();this.style.borderColor='';handleInvImportDrop(event)">';
+  h+='<div style="font-size:28px;margin-bottom:6px">&#128194;</div><div style="font-weight:600">Click or drag &amp; drop</div>';
+  h+='<div style="font-size:11px;color:var(--text3);margin-top:3px">.xlsx · .xls · .csv</div>';
+  h+='<input id="finv" type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleInvImportFile(this)"></div>';
+  h+='<div id="inv-map-area"></div><div id="inv-preview-area"></div></div>';
+  showModal(h,true);
+}
+function handleInvImportFile(inp){ var f=inp.files[0]; if(f) readInvImportFile(f); }
+function handleInvImportDrop(e){ var f=e.dataTransfer.files[0]; if(f) readInvImportFile(f); }
+function readInvImportFile(f){
+  var isXL=/\.xlsx?$/i.test(f.name); var r=new FileReader();
+  r.onload=function(e){ try{ var rows; if(isXL){var wb=XLSX.read(e.target.result,{type:'array'});var ws=wb.Sheets[wb.SheetNames[0]];rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false});}else rows=parseCSVRaw(e.target.result); showInvImportMapping(rows); }catch(err){alert(err.message);} };
+  if(isXL) r.readAsArrayBuffer(f); else r.readAsText(f,'UTF-8');
+}
+var INV_FIELDS=['name','fund','family','company','type','commitment','calls','distributions','marketValue','expenses'];
+var INV_FIELD_LABELS={name:'Investment Name',fund:'Family Fund',family:'Family',company:'Company',type:'Type',commitment:'Total Commitment',calls:'Capital Calls',distributions:'Distributions',marketValue:'Market Value',expenses:'Expenses/Fees'};
+var INV_FIELD_KW={name:['name','nombre','investment'],fund:['fund','fondo','familia fund'],family:['family','familia'],company:['company','empresa','compan'],type:['type','tipo'],commitment:['commit','compromi'],calls:['call','capital call','llamada'],distributions:['distrib'],marketValue:['market','valor','mv','nav'],expenses:['expense','fee','gasto']};
+function showInvImportMapping(rows){
+  if(!rows||rows.length<2){alert('Need at least 2 rows');return;}
+  window._invImportRows=rows; var headers=rows[0].map(function(h){return String(h||'').trim();});
+  window._invImportHeaders=headers;
+  var mapped={}; var heads=headers.map(function(h){return h.toLowerCase();});
+  INV_FIELDS.forEach(function(f){ var kws=INV_FIELD_KW[f]||[]; kws.forEach(function(k){ if(!mapped[f]){for(var i=0;i<heads.length;i++){if(heads[i].includes(k)){mapped[f]=headers[i];break;}}} }); });
+  window._invImportMapping=mapped;
+  var ma=document.getElementById('inv-map-area'); if(!ma) return;
+  var mh='<div class="fsec" style="margin-top:16px"><div class="fsec-title">Column Mapping</div>';
+  mh+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">';
+  INV_FIELDS.forEach(function(f){
+    mh+='<div style="display:flex;align-items:center;gap:8px;font-size:12px"><div style="min-width:130px;font-weight:600;color:var(--text2)">'+INV_FIELD_LABELS[f]+'</div>';
+    mh+='<select id="invmap-'+f+'" style="flex:1;padding:5px 8px;border:1.5px solid var(--border);border-radius:var(--radius-xs);font-size:12px;font-family:inherit;color:var(--text);background:var(--surface);outline:none"><option value="">— skip —</option>';
+    headers.forEach(function(h){mh+='<option value="'+esc(h)+'"'+(mapped[f]===h?' selected':'')+'>'+esc(h)+'</option>';});
+    mh+='</select></div>';
+  });
+  mh+='</div><div style="display:flex;justify-content:flex-end;margin-top:10px"><button class="btn btn-primary btn-sm" onclick="buildInvImportPreview()">Preview Data</button></div></div>';
+  ma.innerHTML=mh;
+}
+function buildInvImportPreview(){
+  var headers=window._invImportHeaders||[]; var rows=window._invImportRows||[];
+  INV_FIELDS.forEach(function(f){var sel=document.getElementById('invmap-'+f);if(sel){window._invImportMapping[f]=sel.value||'';}});
+  var mapped=window._invImportMapping||{}; var preview=[];
+  for(var i=1;i<rows.length;i++){
+    var cols=rows[i];
+    var nameCol=mapped['name'];var nameIdx=nameCol?headers.indexOf(nameCol):-1;
+    if(nameIdx<0||!String(cols[nameIdx]||'').trim()) continue;
+    preview.push(cols);
+  }
+  var pa=document.getElementById('inv-preview-area'); if(!pa) return;
+  var ph='<div class="fsec" style="margin-top:16px"><div class="fsec-title">Preview ('+preview.length+' rows)</div>';
+  ph+='<div class="import-table-wrap"><table class="import-table"><thead><tr>';
+  ph+='<th>'+INV_FIELD_LABELS['name']+'</th><th>'+INV_FIELD_LABELS['fund']+'</th><th>'+INV_FIELD_LABELS['company']+'</th><th>'+INV_FIELD_LABELS['type']+'</th><th>'+INV_FIELD_LABELS['commitment']+'</th><th>'+INV_FIELD_LABELS['marketValue']+'</th><th>'+INV_FIELD_LABELS['calls']+'</th><th>'+INV_FIELD_LABELS['distributions']+'</th>';
+  ph+='</tr></thead><tbody>';
+  preview.forEach(function(row){
+    function cv2(f){var col=mapped[f];if(!col)return '—';var idx=headers.indexOf(col);return idx>-1?esc(String(row[idx]||'').trim())||'—':'—';}
+    ph+='<tr><td>'+cv2('name')+'</td><td>'+cv2('fund')+'</td><td>'+cv2('company')+'</td><td>'+cv2('type')+'</td><td>'+cv2('commitment')+'</td><td>'+cv2('marketValue')+'</td><td>'+cv2('calls')+'</td><td>'+cv2('distributions')+'</td></tr>';
+  });
+  ph+='</tbody></table></div>';
+  ph+='<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">';
+  ph+='<button class="btn btn-primary" onclick="confirmInvImport()">Import All '+preview.length+' Rows</button>';
+  ph+='</div></div>';
+  pa.innerHTML=ph;
+}
+
 function confirmInvImport(){
   var rows=_invImportRows;
   var mapped=window._invImportMapping||{};
