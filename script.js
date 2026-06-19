@@ -1314,7 +1314,7 @@ function renderInvestments(){
   return h;
 }
 function buildInvCharts(){
-  var inv=data.investments;h
+  var inv=data.investments;
   var fm={}; inv.forEach(function(i){var k=i.fund||'Other';fm[k]=(fm[k]||0)+(+i.marketValue||0);});
   mkChart('inv-fund-chart','doughnut',Object.keys(fm),Object.values(fm));
   var tm={}; inv.forEach(function(i){var k=i.type||'Other';tm[k]=(tm[k]||0)+(+i.marketValue||0);});
@@ -1324,25 +1324,53 @@ function openInvForm(id,defaultCo){
   var inv=id?data.investments.find(function(x){return x.id===id;}):null;
   window._fInvFields=inv?JSON.parse(JSON.stringify(inv.fields||[])):[];
   var preCo=inv?inv.companyId:(defaultCo||'');
-  var saveInvId=id?q(id):"''";
-  var h='<div class="modal-header"><div class="modal-title">'+(inv?'Edit Investment':t('addInvestment'))+'</div><button class="close-btn" onclick="closeModal()">x</button></div>';
+  var h='<div class="modal-header"><div class="modal-title">'+(inv?(lang==='en'?'Edit Investment':'Editar Inversión'):t('addInvestment'))+'</div><button class="close-btn" onclick="closeModal()">×</button></div>';
   h+='<div class="modal-body"><div class="form-grid">';
-  h+='<div class="form-group full"><label class="lbl<th style="cursor:pointer;user-select:none;white-space:nowrap" onclick="invSort=invSort===\'asc\'?\'desc\':\'asc\';renderPage()">'+t('invName')+(invSort==='asc'?' ▲':invSort==='desc'?' ▼':' ⇅')+'</th>';
-  ph+='</tr></thead><tbody>';
-  preview.forEach(function(row){
-    ph+='<tr>';
-    ['name','fund','company','type','commitment','marketValue','calls','distributions'].forEach(function(k){
-      ph+='<td>'+esc(String(mapped[k]?row[mapped[k]]:'—'))+'</td>';
-    });
-    ph+='</tr>';
+  h+='<div class="form-group full"><label class="lbl">'+t('invName')+'</label><input id="iv-name" class="inp" value="'+esc(inv?inv.name:'')+'"></div>';
+  h+='<div class="form-group"><label class="lbl">'+t('invFund')+'</label><input id="iv-fund" class="inp" list="fund-list" value="'+esc(inv?inv.fund:'')+'"><datalist id="fund-list">';
+  var knownFunds=[...new Set(data.investments.map(function(i){return i.fund;}).filter(Boolean))];
+  knownFunds.forEach(function(f){h+='<option>'+esc(f)+'</option>';});
+  h+='</datalist></div>';
+  h+='<div class="form-group"><label class="lbl">'+t('invFamily')+'</label><input id="iv-family" class="inp" value="'+esc(inv?inv.family:'')+'"></div>';
+  h+='<div class="form-group"><label class="lbl">'+t('invCompany')+'</label><select id="iv-co" class="inp"><option value="">— select —</option>';
+  data.companies.forEach(function(c){h+='<option value="'+c.id+'"'+(preCo===c.id?' selected':'')+'>'+esc(c.name)+'</option>';});
+  h+='</select></div>';
+  h+='<div class="form-group"><label class="lbl">'+t('invType')+'</label><input id="iv-type" class="inp" list="inv-types" value="'+esc(inv?inv.type:'')+'"><datalist id="inv-types"><option>Equity</option><option>Real Estate</option><option>Fund</option><option>Bond</option><option>Crypto</option><option>Loan</option><option>Other</option></datalist></div>';
+  h+='<div class="form-group"><label class="lbl">'+t('invStatus')+'</label><select id="iv-status" class="inp"><option value="active"'+(inv&&inv.status==='active'?' selected':'')+'>Active</option><option value="exited"'+(inv&&inv.status==='exited'?' selected':'')+'>Exited</option><option value="pending"'+(inv&&inv.status==='pending'?' selected':'')+'>Pending</option></select></div>';
+  h+='<div class="form-group"><label class="lbl">'+t('invCommit')+' (USD)</label><input id="iv-commit" class="inp" type="number" value="'+((inv&&inv.commitment)||'')+'"></div>';
+  h+='<div class="form-group"><label class="lbl">'+t('invCalls')+' (USD)</label><input id="iv-calls" class="inp" type="number" value="'+((inv&&inv.calls)||'')+'"></div>';
+  h+='<div class="form-group"><label class="lbl">'+t('invDist')+' (USD)</label><input id="iv-dist" class="inp" type="number" value="'+((inv&&inv.distributions)||'')+'"></div>';
+  h+='<div class="form-group"><label class="lbl">'+t('invMV')+' (USD)</label><input id="iv-mv" class="inp" type="number" value="'+((inv&&inv.marketValue)||'')+'"></div>';
+  h+='<div class="form-group full"><label class="lbl">'+t('invNotes')+'</label><textarea id="iv-notes" class="inp">'+esc(inv?inv.notes:'')+'</textarea></div>';
+  h+='</div><div class="fsec" style="margin-top:14px"><div class="fsec-title">'+t('customFields')+'</div><div id="inv-fields-list"></div>';
+  h+='<button class="btn btn-outline btn-sm" onclick="addInvField()">'+t('addField')+'</button></div>';
+  h+='<div style="display:flex;gap:8px;justify-content:flex-end;padding-top:14px;border-top:1px solid var(--border);margin-top:14px">';
+  h+='<button class="btn btn-outline" onclick="closeModal()">'+t('cancel')+'</button>';
+  var saveInvId=id?q(id):"''";
+  h+='<button class="btn btn-primary" onclick="saveInv('+saveInvId+')">'+t('save')+'</button></div></div>';
+  showModal(h);
+  renderInvFields();
+}
+function renderInvFields(){
+  var el=document.getElementById('inv-fields-list');if(!el)return;
+  var h='';
+  window._fInvFields.forEach(function(f,i){
+    h+='<div class="inv-field-row"><input class="inp" value="'+esc(f.name)+'" placeholder="'+t('fieldName')+'" oninput="_fInvFields['+i+'].name=this.value">';
+    h+='<input class="inp" value="'+esc(f.value)+'" placeholder="'+t('fieldValue')+'" oninput="_fInvFields['+i+'].value=this.value">';
+    h+='<button class="btn btn-danger btn-sm" onclick="_fInvFields.splice('+i+',1);renderInvFields()">×</button></div>';
   });
-  ph+='</tbody></table></div>';
-  ph+='<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px">';
-  ph+='<button class="btn btn-primary" onclick="confirmInvImport()">Import All '+rows.length+' Rows</button>';
-  ph+='</div></div>';
-  p.innerHTML=ph;
-  // Store mapping for use in confirmInvImport
-  window._invImportMapping=mapped;
+  el.innerHTML=h;
+}
+function addInvField(){window._fInvFields.push({id:uid(),name:'',value:''});renderInvFields();}
+function saveInv(id){
+  var obj={id:id||uid(),companyId:gv('iv-co'),name:gv('iv-name'),fund:gv('iv-fund'),family:gv('iv-family'),
+    type:gv('iv-type'),status:gv('iv-status'),
+    commitment:parseFloat(gv('iv-commit'))||0,calls:parseFloat(gv('iv-calls'))||0,
+    distributions:parseFloat(gv('iv-dist'))||0,marketValue:parseFloat(gv('iv-mv'))||0,
+    notes:gv('iv-notes'),fields:window._fInvFields};
+  if(id){var i=data.investments.findIndex(function(x){return x.id===id;});if(i>-1)data.investments[i]=obj;}
+  else data.investments.push(obj);
+  save();closeModal();render();
 }
 function confirmInvImport(){
   var rows=_invImportRows;
