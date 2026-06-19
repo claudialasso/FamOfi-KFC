@@ -1375,7 +1375,7 @@ function saveInv(id){
 function openInvImport(){
   var h='<div class="modal-header"><div class="modal-title">Import Investments</div><button class="close-btn" onclick="closeModal()">×</button></div>';
   h+='<div class="modal-body"><div class="import-hint">'+(lang==='en'?'Upload any CSV or Excel file with investment data. Map columns to fields, then import.':'Sube un archivo CSV o Excel con inversiones. Mapea columnas e importa.')+'</div>';
-  h+='<div class="drop-zone" onclick="document.getElementById('finv').click()" ondragover="event.preventDefault();this.style.borderColor='var(--accent)'" ondragleave="this.style.borderColor=''" ondrop="event.preventDefault();this.style.borderColor='';handleInvImportDrop(event)">';
+  h+='<div class="drop-zone" onclick="document.getElementById(\'finv\').click()" ondragover="event.preventDefault();this.style.borderColor=\'var(--accent)\'" ondragleave="this.style.borderColor=\'\'" ondrop="event.preventDefault();this.style.borderColor=\'\';handleInvImportDrop(event)">';
   h+='<div style="font-size:28px;margin-bottom:6px">&#128194;</div><div style="font-weight:600">Click or drag &amp; drop</div>';
   h+='<div style="font-size:11px;color:var(--text3);margin-top:3px">.xlsx · .xls · .csv</div>';
   h+='<input id="finv" type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleInvImportFile(this)"></div>';
