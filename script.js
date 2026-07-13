@@ -118,6 +118,7 @@ function canSeeTab(p){
 // Cache key used to persist the resolved role across page loads so the
 // correct role is available instantly before the Firestore fetch completes.
 var ROLE_CACHE_KEY = 'fm_role';
+var TEST_INJECTED_LINE = 1;
 
 function authErrorMessage(code) {
   var messages = {
@@ -545,13 +546,13 @@ function renderPage(){
   else if(page==='orgcharts') { m.innerHTML=renderOrgCharts(); }
   else if(page==='network')   { m.innerHTML=renderNetwork(); }
 }
-function roBanner(){
+function safeRerender(renderFn){var m=document.getElementById('main');var active=document.activeElement;var restoreId=null,selStart=null,selEnd=null;if(active&&m&&m.contains(active)&&active.id){restoreId=active.id;if(typeof active.selectionStart==='number'){selStart=active.selectionStart;selEnd=active.selectionEnd;}}renderFn();if(restoreId){var el=document.getElementById(restoreId);if(el){el.focus();if(selStart!=null&&el.setSelectionRange){try{el.setSelectionRange(selStart,selEnd);}catch(e){}}}}} function rerenderMain(){safeRerender(renderPage);} function rerenderFull(){safeRerender(render);} function roBanner(){
   if(isAdmin()) return '';
   return '<div class="readonly-banner">View-only access — you can view but not edit data.</div>';
 }
 
 // ── Overview ──────────────────────────────────────────────────────────────────
-function renderOverview(){
+var ovSort='asc'; function toggleOvSort(){ ovSort=ovSort==='asc'?'desc':'asc'; rerenderFull(); } function toggleOvSh(wrapId,btn){ var wrap=document.getElementById(wrapId); if(!wrap) return; var hidden=wrap.querySelector('.ov-sh-hidden'); if(!hidden) return; var isHidden=hidden.style.display==='none'; if(isHidden){ hidden.style.display='inline'; btn.textContent='Show less'; } else { hidden.style.display='none'; var n=hidden.querySelectorAll('.sh-chip').length; btn.textContent='+'+n+' more'; } } function renderOverview(){
   var cs=data.companies, inv=data.investments;
   var active=cs.filter(function(c){return c.status==='active';}).length;
   var jurs=[...new Set(cs.map(function(c){return c.jurisdiction;}))].length;
@@ -568,15 +569,15 @@ function renderOverview(){
   h+='<div class="chart-card"><div class="chart-title">'+t('byJurisdiction')+'</div><div class="chart-wrap"><canvas id="ch-jur"></canvas></div></div>';
   h+='<div class="chart-card"><div class="chart-title">'+t('byStatus')+'</div><div class="chart-wrap"><canvas id="ch-status"></canvas></div></div>';
   h+='</div>';
-  h+='<div class="card" style="padding:0;width:100%"><table><thead><tr><th>'+t('name')+'</th><th>'+t('jurisdiction')+'</th><th>'+t('status')+'</th><th>'+t('shareholders2')+'</th><th>'+t('subsidiaries')+'</th><th>'+t('investments')+'</th></tr></thead><tbody>';
-  if(!cs.length){ h+='<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text3)">'+t('noCompanies')+'</td></tr>'; }
-  else { cs.forEach(function(c){
+  var csSorted=cs.slice().sort(function(a,b){var an=(a.name||'').toLowerCase(),bn=(b.name||'').toLowerCase();var cmp=an<bn?-1:an>bn?1:0;return ovSort==='desc'?-cmp:cmp;}); var sortIcon=ovSort==='asc'?'▲':'▼'; h+='<div class="card" style="padding:0;width:100%"><table><thead><tr><th style="cursor:pointer;user-select:none" onclick="toggleOvSort()">'+t('name')+' <span style="font-size:9px;color:var(--accent)">'+sortIcon+'</span></th><th>'+t('jurisdiction')+'</th><th>'+t('status')+'</th><th>'+t('shareholders2')+'</th><th>'+t('subsidiaries')+'</th><th>'+t('investments')+'</th></tr></thead><tbody>';
+  if(!csSorted.length){ h+='<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text3)">'+t('noCompanies')+'</td></tr>'; }
+  else { csSorted.forEach(function(c){
     var subs=getSubs(c.id).length;
     var ic=inv.filter(function(i){return i.companyId===c.id;}).length;
-    var shList=c.shareholders.map(function(s){return '<span style="font-size:12px">'+esc(resolveOwner(s))+' <b style="color:var(--accent)">'+s.pct+'%</b></span>';}).join('<br>');
+    var shList='—'; if(c.shareholders.length){ var _chip=function(s){return '<span class="sh-chip">'+esc(resolveOwner(s))+' <b>'+s.pct+'%</b></span>';}; var _wid='ovsh-'+c.id; var _vis=c.shareholders.slice(0,2).map(_chip).join(''); var _rest=c.shareholders.slice(2); shList='<div class="ov-sh-wrap" id="'+_wid+'">'+_vis; if(_rest.length){ shList+='<span class="ov-sh-hidden" style="display:none">'+_rest.map(_chip).join('')+'</span><button type="button" class="ov-sh-toggle" onclick="event.stopPropagation();toggleOvSh(\''+_wid+'\',this)">+'+_rest.length+' more</button>'; } shList+='</div>'; }
     h+='<tr style="cursor:pointer" onclick="openCompany('+q(c.id)+')">';
     h+='<td><strong>'+esc(c.name)+'</strong></td><td><span class="badge badge-jur">'+esc(c.jurisdiction)+'</span></td>';
-    h+='<td>'+sBadge(c.status)+'</td><td>'+(shList||'—')+'</td>';
+    h+='<td>'+sBadge(c.status)+'</td><td>'+shList+'</td>';
     h+='<td>'+(subs?'<span class="badge badge-active">'+subs+'</span>':'—')+'</td>';
     h+='<td>'+(ic?'<span class="badge badge-inv">'+ic+'</span>':'—')+'</td></tr>';
   }); }
@@ -606,14 +607,14 @@ function renderCompanies(){
   if(isAdmin()) h+='<button class="btn btn-primary" onclick="openCompanyForm(null)">'+t('addCompany')+'</button><button class="btn btn-danger btn-sm" id="bulk-delete-co-btn" onclick="bulkDeleteCompanies()" style="display:none;margin-left:8px">'+t('deleteSelected')+'</button>';
   h+='</div></div>';
   h+='<div class="toolbar"><div class="search-wrap"><span class="si">&#8981;</span>';
-  h+='<input type="text" placeholder="'+t('search')+'" value="'+esc(cSearch)+'" oninput="cSearch=this.value;renderPage()"></div>';
-  h+='<select class="filter" onchange="cJur=this.value;renderPage()"><option value="">'+t('allJurisdictions')+'</option>';
+  h+='<input type="text" id="co-search-input" placeholder="'+t('search')+'" value="'+esc(cSearch)+'" oninput="cSearch=this.value;rerenderMain()"></div>';
+  h+='<select class="filter" id="co-jur-filter" onchange="cJur=this.value;rerenderMain()"><option value="">'+t('allJurisdictions')+'</option>';
   jurs.forEach(function(j){h+='<option value="'+esc(j)+'"'+(cJur===j?' selected':'')+'>'+esc(j)+'</option>';});
-  h+='</select><select class="filter" onchange="cStatus=this.value;renderPage()"><option value="">'+t('allStatus')+'</option>';
+  h+='</select><select class="filter" id="co-status-filter" onchange="cStatus=this.value;rerenderMain()"><option value="">'+t('allStatus')+'</option>';
   h+='<option value="active">'+t('active')+'</option><option value="liquidated">'+t('liquidated')+'</option><option value="liquidation">'+t('liquidation')+'</option></select></div>';
   h+='<div class="card" style="padding:0"><table><thead><tr><th style="width:36px"><input type="checkbox" id="co-select-all" onclick="toggleAllCoSelect(this)" style="cursor:pointer"></th><th>'+t('name')+'</th><th>'+t('jurisdiction')+'</th><th>'+t('yearFounded')+'</th><th>'+t('director')+'</th><th>'+t('shareholders2')+'</th><th>'+t('status')+'</th><th></th></tr></thead><tbody>';
   if(!cs.length){ h+='<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text3)">'+t('noCompanies')+'</td></tr>'; }
-  else { cs.forEach(function(c){
+  else { csSorted.forEach(function(c){
     var shRows=c.shareholders.map(function(s){
       return '<div style="display:flex;align-items:center;gap:4px;margin-bottom:2px">'
         +'<span style="font-size:13px">'+esc(resolveOwner(s))+'</span>'
@@ -915,16 +916,16 @@ function buildSubTree(cid,visited){
   return h;
 }
 function orgNode(name,sub,color,bg,label,clickId,isCurrent){
-  var style='display:inline-flex;flex-direction:column;align-items:center;justify-content:center;';
-  style+='border:2px solid '+color+';background:'+bg+';border-radius:10px;padding:10px 14px;';
-  style+='min-width:110px;max-width:150px;text-align:center;margin:4px;box-shadow:0 2px 8px rgba(0,0,0,.08);';
-  if(isCurrent) style+='border-width:3px;';
-  if(clickId) style+='cursor:pointer;';
-  var click=clickId?'onclick="openCompany('+q(clickId)+')"':'';
-  return '<div style="'+style+'" '+click+'>'
-    +'<div style="font-size:10px;color:'+color+';font-weight:700;text-transform:uppercase;margin-bottom:3px">'+label+'</div>'
-    +'<div style="font-size:12px;font-weight:700;color:'+color+';line-height:1.3;word-break:break-word">'+esc(name)+'</div>'
-    +(sub?'<div style="font-size:10px;color:var(--text3);margin-top:3px">'+esc(sub)+'</div>':'')
+  var cls='org-card'+(clickId?' clickable':'')+(isCurrent?' current':'');var _style='border-color:'+color+';background:'+bg+';';var click=clickId?('onclick="openCompany('+q(clickId)+')"'):'';
+  
+  
+  
+  
+  
+  return '<div class="'+cls+'" style="'+_style+'" '+click+'>'
+    +'<div class="org-card-label" style="color:'+color+'">'+label+'</div>'
+    +'<div class="org-card-name" style="color:'+color+'">'+esc(name)+'</div>'
+    +(sub?'<div class="org-card-sub">'+esc(sub)+'</div>':'')
     +'</div>';
 }
 function orgConn(){ return '<div class="org-conn"></div>'; }
@@ -992,7 +993,7 @@ function renderOrgCharts(){
   h+='<button class="btn btn-teal btn-sm" onclick="printOrgChart('+q(c.id)+')">&#128424; '+t('printChart')+'</button>';
   h+='<button class="btn btn-outline btn-sm" onclick="printOrgChart('+q(c.id)+')">&#8659; PDF / PNG</button>';
   h+='</div></div>';
-  h+='<div class="card" style="overflow-x:auto;padding:24px">'+buildFullOrgChart(c.id)+'</div>';
+  h+='<div class="card org-chart-card">'+buildFullOrgChart(c.id)+'</div>';
   return h;
 }
 function selectOrgCo(id){
@@ -1157,7 +1158,7 @@ function openCompanyForm(id){
   h+='<div class="form-group"><label class="lbl">'+t('fiscalId')+'</label><input id="f-fiscal" class="inp" value="'+esc(c?c.fiscalId:'')+'"></div>';
   h+='<div class="form-group"><label class="lbl">EIN</label><input id="f-ein" class="inp" value="'+esc(c?c.ein:'')+'"></div>';
   h+='<div class="form-group"><label class="lbl">'+t('irs')+'</label><input id="f-irs" class="inp" value="'+esc(c?c.irs:'')+'"></div>';
-  h+='<div class="form-group"><label class="lbl">'+t('director')+'</label><input id="f-director" class="inp" value="'+esc(c?c.director:'')+'"></div>';
+  var _knownDirectors=[...new Set(data.companies.map(function(x){return x.director;}).filter(Boolean))].sort(); var _directorOpts=_knownDirectors.map(function(d){return '<option value="'+esc(d)+'">'+esc(d)+'</option>';}).join(''); h+='<div class="form-group"><label class="lbl">'+t('director')+'</label><input id="f-director" class="inp" list="director-list" value="'+esc(c?c.director:'')+'"><datalist id="director-list">'+_directorOpts+'</datalist></div>';
   h+='<div class="form-group"><label class="lbl">'+t('registeredAgent')+'</label><input id="f-agent" class="inp" value="'+esc(c?c.agent:'')+'"></div>';
   h+='<div class="form-group full"><label class="lbl">'+t('address')+'</label><textarea id="f-address" class="inp">'+esc(c?c.address:'')+'</textarea></div>';
   h+='<div class="form-group full"><label class="lbl">'+t('notes')+'</label><textarea id="f-notes" class="inp">'+esc(c?c.notes:'')+'</textarea></div>';
@@ -1286,10 +1287,10 @@ function renderInvestments(){
   h+='<div class="charts-row" style="grid-template-columns:1fr 1fr;margin-bottom:18px">';
   h+='<div class="chart-card"><div class="chart-title">'+t('byFund')+'</div><div class="chart-wrap"><canvas id="inv-fund-chart"></canvas></div></div>';
   h+='<div class="chart-card"><div class="chart-title">'+t('byType')+'</div><div class="chart-wrap"><canvas id="inv-type-chart"></canvas></div></div></div>';
-  h+='<div class="toolbar"><div class="search-wrap"><span class="si">&#8981;</span><input type="text" placeholder="'+t('search')+'" value="'+esc(invSearch)+'" oninput="invSearch=this.value;renderPage()"></div>';
-  h+='<select class="filter" onchange="invFundF=this.value;renderPage()"><option value="">'+t('allFunds')+'</option>';
+  h+='<div class="toolbar"><div class="search-wrap"><span class="si">&#8981;</span><input type="text" id="inv-search-input" placeholder="'+t('search')+'" value="'+esc(invSearch)+'" oninput="invSearch=this.value;rerenderMain()"></div>';
+  h+='<select class="filter" id="inv-fund-filter" onchange="invFundF=this.value;rerenderMain()"><option value="">'+t('allFunds')+'</option>';
   funds.forEach(function(f){h+='<option value="'+esc(f)+'"'+(invFundF===f?' selected':'')+'>'+esc(f)+'</option>';});
-  h+='</select><select class="filter" onchange="invTypeF=this.value;renderPage()"><option value="">'+t('allTypes')+'</option>';
+  h+='</select><select class="filter" id="inv-type-filter" onchange="invTypeF=this.value;rerenderMain()"><option value="">'+t('allTypes')+'</option>';
   types.forEach(function(t2){h+='<option value="'+esc(t2)+'"'+(invTypeF===t2?' selected':'')+'>'+esc(t2)+'</option>';});
   h+='</select></div>';
   h+='<div class="card" style="padding:0"><table><thead><tr><th style=\'width:36px\'><input type=\'checkbox\' id=\'inv-select-all\' onclick=\'toggleAllInvSelect(this)\' style=\'cursor:pointer\'></th><th>'+t('invName')+'</th><th>'+t('invFund')+'</th><th>'+t('invCompany')+'</th><th>'+t('invType')+'</th><th>'+t('invCommit')+'</th><th>'+t('invMV')+'</th><th>'+t('invCalls')+'</th><th>'+t('invDist')+'</th><th>'+t('invExpenses')+'</th><th>'+t('invStatus')+'</th><th></th></tr></thead><tbody>';
@@ -1563,7 +1564,7 @@ function renderShareholders(){
   var all=[...shSet].sort();
   var filtered=all.filter(function(p){return !shSearch||p.toLowerCase().includes(shSearch.toLowerCase());});
   var h='<div class="section-header"><div class="section-title">'+t('allShareholders')+' <span style="color:var(--text3);font-weight:400;font-size:14px">('+all.length+')</span></div></div>';
-  h+='<div class="toolbar"><div class="search-wrap"><span class="si">&#8981;</span><input type="text" placeholder="'+t('searchShareholder')+'" value="'+esc(shSearch)+'" oninput="shSearch=this.value;renderPage()"></div></div>';
+  h+='<div class="toolbar"><div class="search-wrap"><span class="si">&#8981;</span><input type="text" id="sh-search-input" placeholder="'+t('searchShareholder')+'" value="'+esc(shSearch)+'" oninput="shSearch=this.value;rerenderMain()"></div></div>';
   if(isAdmin()) h+='<div id="sh-bulk-bar" style="display:none;align-items:center;gap:8px;padding:6px 0"><label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" id="sh-select-all" onclick="toggleAllShSelect(this)">&nbsp;'+t('selectAll')+'</label><button class="btn btn-danger btn-sm" onclick="bulkDeleteShareholders()">'+t('deleteSelected')+'</button></div>';
   h+='<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px"><div>';
   filtered.forEach(function(p){
@@ -1602,17 +1603,17 @@ function renderShareholders(){
 }
 
 // ── Network ───────────────────────────────────────────────────────────────────
-var _netSelected=null;
+var _netSelected=null; var netSearch=''; var netSort='asc'; function toggleNetSort(){ netSort=netSort==='asc'?'desc':'asc'; rerenderMain(); }
 function renderNetwork(){
   var cs=data.companies;
-  var h='<div class="section-header"><div class="section-title">'+t('networkTitle')+'</div></div>';
+  cs=cs.filter(function(c){var q2=netSearch.toLowerCase();return !q2||c.name.toLowerCase().includes(q2);}); cs=cs.slice().sort(function(a,b){var an=(a.name||'').toLowerCase(),bn=(b.name||'').toLowerCase();var cmp=an<bn?-1:an>bn?1:0;return netSort==='desc'?-cmp:cmp;}); var h='<div class="section-header"><div class="section-title">'+t('networkTitle')+'</div></div>';
   h+='<div class="card" style="margin-bottom:12px;padding:10px 16px;font-size:12px;color:var(--text2)">';
   h+=lang==='en'?'Click any company to reveal its ownership relationships. Click again to collapse.':'Clic en una empresa para ver sus relaciones. Clic de nuevo para colapsar.';
   h+='</div>';
-  h+='<div class="card" style="padding:0">';
+  h+='<div class="toolbar"><div class="search-wrap"><span class="si">&#8981;</span><input type="text" id="net-search-input" placeholder="'+t('search')+'" value="'+esc(netSearch)+'" oninput="netSearch=this.value;rerenderMain()"></div></div>'; h+='<div class="card" style="padding:0">';
   if(!cs.length){ h+='<div class="empty">'+t('noData')+'</div>'; }
   else {
-    h+='<table><thead><tr><th>'+t('name')+'</th><th>'+t('jurisdiction')+'</th><th>'+t('status')+'</th><th>'+t('shareholders2')+'</th><th>'+t('subsidiaries')+'</th><th></th></tr></thead><tbody>';
+    h+='<table><thead><tr><th style="cursor:pointer;user-select:none" onclick="toggleNetSort()">'+t('name')+' <span style="font-size:9px;color:var(--accent)">'+(netSort==='asc'?'▲':'▼')+'</span></th><th>'+t('jurisdiction')+'</th><th>'+t('status')+'</th><th>'+t('shareholders2')+'</th><th>'+t('subsidiaries')+'</th><th></th></tr></thead><tbody>';
     cs.forEach(function(c){
       var isSelected=_netSelected===c.id;
       var subs=getSubs(c.id);
