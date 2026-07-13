@@ -614,7 +614,7 @@ function renderCompanies(){
   h+='<option value="active">'+t('active')+'</option><option value="liquidated">'+t('liquidated')+'</option><option value="liquidation">'+t('liquidation')+'</option></select></div>';
   h+='<div class="card" style="padding:0"><table><thead><tr><th style="width:36px"><input type="checkbox" id="co-select-all" onclick="toggleAllCoSelect(this)" style="cursor:pointer"></th><th>'+t('name')+'</th><th>'+t('jurisdiction')+'</th><th>'+t('yearFounded')+'</th><th>'+t('director')+'</th><th>'+t('shareholders2')+'</th><th>'+t('status')+'</th><th></th></tr></thead><tbody>';
   if(!cs.length){ h+='<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text3)">'+t('noCompanies')+'</td></tr>'; }
-  else { csSorted.forEach(function(c){
+  else { cs.forEach(function(c){
     var shRows=c.shareholders.map(function(s){
       return '<div style="display:flex;align-items:center;gap:4px;margin-bottom:2px">'
         +'<span style="font-size:13px">'+esc(resolveOwner(s))+'</span>'
