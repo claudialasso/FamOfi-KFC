@@ -149,7 +149,7 @@ textarea.inp{resize:vertical;min-height:60px}
 .empty{text-align:center;padding:40px 20px;color:var(--text3)}
 .sh-card{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;cursor:pointer;transition:all .15s}
 .sh-card:hover,.sh-card.selected{border-color:var(--accent);background:var(--accent-bg)}
-.holding-chip{background:var(--accent-bg);color:var(--accent);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+.holding-chip{background:var(--accent-bg);color:var(--accent);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600} .sh-chip{display:inline-block;background:var(--accent-bg);color:var(--accent);padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;margin:2px 4px 2px 0} .ov-sh-wrap{line-height:1.8} .ov-sh-hidden{display:none} .ov-sh-toggle{background:none;border:none;color:var(--text3);font-size:11px;font-weight:600;cursor:pointer;padding:2px 6px;text-decoration:underline;font-family:inherit}
 .inv-card{background:var(--surface);border:1.5px solid var(--border);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px}
 .inv-card:hover{border-color:var(--accent)}
 .inv-field-chip{font-size:11px;background:var(--bg);padding:3px 9px;border-radius:20px;border:1px solid var(--border);color:var(--text2)}
@@ -166,12 +166,12 @@ textarea.inp{resize:vertical;min-height:60px}
 .org-pad-node{display:inline-flex;min-width:110px;max-width:150px;height:62px;margin:4px;visibility:hidden}
 .org-pad-conn{width:2px;height:20px;margin:0 auto;visibility:hidden}
 @media print{@page{size:A3 landscape;margin:1cm}.org-chart-scroll{overflow:visible!important;max-width:none!important}.btn{display:none!important}}
-.org-card{--org-pad-y:10px;--org-pad-x:14px;--org-font:12px;border-radius:var(--radius-sm);padding:var(--org-pad-y) var(--org-pad-x);min-width:120px;max-width:180px;text-align:center;cursor:pointer;display:inline-block;margin:0;box-shadow:var(--shadow);transition:all .15s}
-.org-card:hover{box-shadow:var(--shadow-md);transform:translateY(-2px)}
+.org-card{--org-pad-y:10px;--org-pad-x:14px;--org-font:12px;border-radius:var(--radius-sm);padding:var(--org-pad-y) var(--org-pad-x);min-width:110px;max-width:150px;text-align:center;cursor:default;display:inline-block;margin:4px;box-shadow:var(--shadow);transition:all .15s;background:var(--surface);border-style:solid;border-width:2px} .org-card.clickable{cursor:pointer} .org-card.clickable:hover{box-shadow:var(--shadow-md);transform:translateY(-2px)} .org-card.current{border-width:3px} .org-card-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px} .org-chart-card{padding:24px;overflow-x:auto}
+
 .org-card-name{font-size:var(--org-font);font-weight:700;margin-bottom:2px;word-break:break-word}
-.org-card-sub{font-size:calc(var(--org-font) - 2px);color:var(--text3)}
-@media(max-width:700px){.org-level{gap:8px}.org-card{--org-pad-y:7px;--org-pad-x:10px;--org-font:11px;min-width:96px;max-width:140px}.org-conn{height:14px}}
-@media(max-width:380px){.org-card{--org-pad-y:6px;--org-pad-x:8px;--org-font:10px;min-width:84px;max-width:120px}}
+.org-card-sub{font-size:calc(var(--org-font) - 2px);color:var(--text3);margin-top:3px}
+@media(max-width:700px){.org-level{gap:8px}.org-card{--org-pad-y:7px;--org-pad-x:10px;--org-font:11px;min-width:96px;max-width:140px}.org-conn{height:14px}.org-chart-card{padding:12px 8px}}
+@media(max-width:380px){.org-card{--org-pad-y:6px;--org-pad-x:8px;--org-font:10px;min-width:84px;max-width:120px}.org-chart-card{padding:8px 4px}.org-level{gap:6px}.org-conn{height:10px}}
 .import-area{width:100%;min-height:100px;padding:10px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:12px;font-family:monospace;color:var(--text);background:var(--bg);outline:none;resize:vertical}
 .import-hint{background:var(--accent-bg);border-radius:var(--radius-sm);padding:11px 14px;font-size:12px;color:var(--accent);margin-bottom:12px;border-left:3px solid var(--accent);line-height:1.6}
 .imp-ok{background:var(--teal-bg);color:var(--teal);padding:9px 14px;border-radius:var(--radius-sm);font-size:13px;margin-top:8px}
