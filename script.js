@@ -1499,7 +1499,7 @@ function renderInvestments(){
   h+='</select><select class="filter" id="inv-type-filter" onchange="invTypeF=this.value;rerenderMain()"><option value="">'+t('allTypes')+'</option>';
   types.forEach(function(t2){h+='<option value="'+esc(t2)+'"'+(invTypeF===t2?' selected':'')+'>'+esc(t2)+'</option>';});
   h+='</select></div>';
-  h+='<div class="card" style="padding:0"><table><thead><tr><th style=\'width:36px\'><input type=\'checkbox\' id=\'inv-select-all\' onclick=\'toggleAllInvSelect(this)\' style=\'cursor:pointer\'></th><th>'+t('invName')+'</th><th>'+t('invFund')+'</th><th>'+t('invCompany')+'</th><th>'+t('invType')+'</th><th>'+t('invCommit')+'</th><th>'+t('invMV')+'</th><th>'+t('invCalls')+'</th><th>'+t('invDist')+'</th><th>'+t('invExpenses')+'</th><th>'+t('invStatus')+'</th><th></th></tr></thead><tbody>';
+  h+='<div class="card" style="padding:0"><table class='inv-table'><thead><tr><th style=\'width:36px\'><input type=\'checkbox\' id=\'inv-select-all\' onclick=\'toggleAllInvSelect(this)\' style=\'cursor:pointer\'></th><th>'+t('invName')+'</th><th>'+t('invFund')+'</th><th>'+t('invCompany')+'</th><th>'+t('invType')+'</th><th>'+t('invCommit')+'</th><th>'+t('invMV')+'</th><th>'+t('invCalls')+'</th><th>'+t('invDist')+'</th><th>'+t('invExpenses')+'</th><th>'+t('invStatus')+'</th><th></th></tr></thead><tbody>';
   if(!inv.length){ h+='<tr><td colspan="12" style="text-align:center;padding:32px;color:var(--text3)">'+t('noData')+'</td></tr>'; }
   else { inv.forEach(function(i){
     h+='<tr><td style="text-align:center"><input type="checkbox" class="inv-checkbox" data-id="'+i.id+'" onchange="updateBulkDeleteBtn()"></td><td style="font-weight:600">'+esc(i.name)+'</td>';
