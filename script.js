@@ -929,7 +929,211 @@ function orgNode(name,sub,color,bg,label,clickId,isCurrent){
     +'</div>';
 }
 function orgConn(){ return '<div class="org-conn"></div>'; }
-
+window.__orgChartPan = window.__orgChartPan || { active: null };
+function orgChartDirectCards(el){
+  var out = [];
+  for(var i=0;i<el.children.length;i++){
+    var child = el.children[i];
+    if(child.classList && child.classList.contains('org-card')){ out.push(child); }
+    else if(child.classList && child.classList.contains('org-branch')){
+      for(var j=0;j<child.children.length;j++){
+        var gc = child.children[j];
+        if(gc.classList && gc.classList.contains('org-card')) out.push(gc);
+      }
+    }
+  }
+  return out;
+}
+function orgChartSideCards(el){
+  if(!el||!el.classList) return [];
+  if(el.classList.contains('org-card')) return [el];
+  if(el.classList.contains('org-level')) return orgChartDirectCards(el);
+  return [];
+}
+function orgChartConnectorPairs(root){
+  var pairs = [];
+  var conns = root.querySelectorAll('.org-conn');
+  for(var i=0;i<conns.length;i++){
+    var conn = conns[i];
+    var before = orgChartSideCards(conn.previousElementSibling);
+    var after = orgChartSideCards(conn.nextElementSibling);
+    if(!before.length||!after.length) continue;
+    for(var b=0;b<before.length;b++){
+      for(var a=0;a<after.length;a++){
+        pairs.push([before[b], after[a]]);
+      }
+    }
+  }
+  return pairs;
+}
+function orgChartCardPos(card, container){
+  var left = 0, top = 0, node = card, guard = 0;
+  while(node && node !== container && guard < 40){
+    left += node.offsetLeft||0;
+    top += node.offsetTop||0;
+    node = node.offsetParent;
+    guard++;
+  }
+  return { left: left, top: top, width: card.offsetWidth, height: card.offsetHeight };
+}
+function drawOrgChartConnectors(canvas){
+  var scrollEl = canvas.querySelector('.org-chart-scroll');
+  if(!scrollEl) return;
+  scrollEl.style.position = 'relative';
+  var old = scrollEl.querySelector('svg.org-chart-connectors');
+  if(old) old.remove();
+  var pairs = orgChartConnectorPairs(scrollEl);
+  if(!pairs.length) return;
+  var w = Math.max(scrollEl.scrollWidth, scrollEl.offsetWidth);
+  var h = Math.max(scrollEl.scrollHeight, scrollEl.offsetHeight);
+  var svgNS = 'http://www.w3.org/2000/svg';
+  var svg = document.createElementNS(svgNS,'svg');
+  svg.setAttribute('class','org-chart-connectors');
+  svg.setAttribute('width', w);
+  svg.setAttribute('height', h);
+  svg.style.position = 'absolute';
+  svg.style.left = '0';
+  svg.style.top = '0';
+  svg.style.overflow = 'visible';
+  svg.style.pointerEvents = 'none';
+  for(var i=0;i<pairs.length;i++){
+    var p = orgChartCardPos(pairs[i][0], scrollEl);
+    var c = orgChartCardPos(pairs[i][1], scrollEl);
+    var parentAbove = p.top <= c.top;
+    var x1 = p.left + p.width/2;
+    var y1 = parentAbove ? p.top + p.height : p.top;
+    var x2 = c.left + c.width/2;
+    var y2 = parentAbove ? c.top : c.top + c.height;
+    var midY = (y1+y2)/2;
+    var d = 'M '+x1+' '+y1+' L '+x1+' '+midY+' L '+x2+' '+midY+' L '+x2+' '+y2;
+    var path = document.createElementNS(svgNS,'path');
+    path.setAttribute('d', d);
+    path.setAttribute('fill','none');
+    path.setAttribute('stroke','var(--border2, #c7cbe0)');
+    path.setAttribute('stroke-width','1.5');
+    svg.appendChild(path);
+  }
+  scrollEl.insertBefore(svg, scrollEl.firstChild);
+}
+function orgChartApply(viewport){
+  var st = viewport.__orgState;
+  var canvas = viewport.__orgCanvas;
+  canvas.style.transform = 'translate('+st.x+'px,'+st.y+'px) scale('+st.scale+')';
+}
+function orgChartFit(viewport, canvas){
+  var prev = canvas.style.transform;
+  canvas.style.transform = 'none';
+  var cw = canvas.offsetWidth, ch = canvas.offsetHeight;
+  var vw = viewport.clientWidth, vh = viewport.clientHeight;
+  if(!cw||!ch||!vw||!vh){ canvas.style.transform = prev; return; }
+  var scale = Math.min(vw/cw, vh/ch, 1);
+  if(!scale || !isFinite(scale)) scale = 1;
+  scale = Math.max(scale, 0.12);
+  var tx = (vw - cw*scale)/2;
+  var ty = (vh - ch*scale)/2;
+  viewport.__orgState.scale = scale;
+  viewport.__orgState.x = tx;
+  viewport.__orgState.y = ty;
+  orgChartApply(viewport);
+}
+function orgChartZoomBtn(factor){
+  var vp = document.querySelector('.org-chart-viewport');
+  if(!vp||!vp.__orgState) return;
+  var st = vp.__orgState;
+  var vw = vp.clientWidth, vh = vp.clientHeight;
+  var newScale = Math.min(Math.max(st.scale*factor, 0.12), 3);
+  var ratio = newScale/st.scale;
+  var cx = vw/2, cy = vh/2;
+  st.x = cx - (cx-st.x)*ratio;
+  st.y = cy - (cy-st.y)*ratio;
+  st.scale = newScale;
+  orgChartApply(vp);
+}
+function orgChartFitBtn(){
+  var vp = document.querySelector('.org-chart-viewport');
+  if(!vp) return;
+  orgChartFit(vp, vp.__orgCanvas);
+}
+function orgChartPointerDown(e){
+  if(e.target && e.target.closest && e.target.closest('.org-chart-controls')) return;
+  var vp = e.currentTarget;
+  var p = e.touches ? e.touches[0] : e;
+  window.__orgChartPan.active = { viewport: vp, lastX: p.clientX, lastY: p.clientY };
+  vp.classList.add('grabbing');
+  if(e.cancelable) e.preventDefault();
+}
+function orgChartPointerMove(e){
+  var a = window.__orgChartPan.active;
+  if(!a) return;
+  var p = e.touches ? e.touches[0] : e;
+  if(!p) return;
+  var dx = p.clientX - a.lastX, dy = p.clientY - a.lastY;
+  a.lastX = p.clientX; a.lastY = p.clientY;
+  var st = a.viewport.__orgState;
+  if(st){ st.x += dx; st.y += dy; orgChartApply(a.viewport); }
+  if(e.cancelable) e.preventDefault();
+}
+function orgChartPointerUp(){
+  var a = window.__orgChartPan.active;
+  if(a && a.viewport) a.viewport.classList.remove('grabbing');
+  window.__orgChartPan.active = null;
+}
+function orgChartWheel(e){
+  var vp = e.currentTarget;
+  var st = vp.__orgState;
+  if(!st) return;
+  e.preventDefault();
+  var rect = vp.getBoundingClientRect();
+  var mx = e.clientX - rect.left, my = e.clientY - rect.top;
+  var delta = e.deltaY < 0 ? 1.12 : 0.89;
+  var newScale = Math.min(Math.max(st.scale*delta, 0.12), 3);
+  var ratio = newScale/st.scale;
+  st.x = mx - (mx-st.x)*ratio;
+  st.y = my - (my-st.y)*ratio;
+  st.scale = newScale;
+  orgChartApply(vp);
+}
+function orgChartRefit(){
+  var vp = document.querySelector('.org-chart-viewport');
+  if(!vp || !vp.__orgCanvas) return;
+  drawOrgChartConnectors(vp.__orgCanvas);
+  orgChartFit(vp, vp.__orgCanvas);
+}
+function initOrgChartViewport(){
+  var scroll = document.querySelector('.org-chart-scroll');
+  if(!scroll) return;
+  if(scroll.closest('.org-chart-canvas')) return;
+  var host = scroll.parentNode;
+  var viewport = document.createElement('div');
+  viewport.className = 'org-chart-viewport';
+  var canvas = document.createElement('div');
+  canvas.className = 'org-chart-canvas';
+  host.insertBefore(viewport, scroll);
+  canvas.appendChild(scroll);
+  viewport.appendChild(canvas);
+  var controls = document.createElement('div');
+  controls.className = 'org-chart-controls';
+  controls.innerHTML = '<button type="button" class="org-chart-zoom-btn" title="Zoom in" onclick="orgChartZoomBtn(1.25)">+</button><button type="button" class="org-chart-zoom-btn" title="Zoom out" onclick="orgChartZoomBtn(0.8)">\u2212</button><button type="button" class="org-chart-zoom-btn" title="Reset view" onclick="orgChartFitBtn()">\u2921</button>';
+  viewport.appendChild(controls);
+  viewport.__orgState = { x:0, y:0, scale:1 };
+  viewport.__orgCanvas = canvas;
+  viewport.addEventListener('mousedown', orgChartPointerDown);
+  viewport.addEventListener('touchstart', orgChartPointerDown, { passive:false });
+  viewport.addEventListener('wheel', orgChartWheel, { passive:false });
+  if(!window.__orgChartGlobalBound){
+    window.__orgChartGlobalBound = true;
+    window.addEventListener('mousemove', orgChartPointerMove);
+    window.addEventListener('mouseup', orgChartPointerUp);
+    window.addEventListener('touchmove', orgChartPointerMove, { passive:false });
+    window.addEventListener('touchend', orgChartPointerUp);
+    window.addEventListener('resize', function(){
+      clearTimeout(window.__orgChartResizeT);
+      window.__orgChartResizeT = setTimeout(orgChartRefit, 150);
+    });
+  }
+  drawOrgChartConnectors(canvas);
+  orgChartFit(viewport, canvas);
+}
 function printOrgChart(id){
   var c=data.companies.find(function(x){return x.id===id;}); if(!c) return;
   var chartHTML=buildFullOrgChart(id);
@@ -994,6 +1198,7 @@ function renderOrgCharts(){
   h+='<button class="btn btn-outline btn-sm" onclick="printOrgChart('+q(c.id)+')">&#8659; PDF / PNG</button>';
   h+='</div></div>';
   h+='<div class="card org-chart-card">'+buildFullOrgChart(c.id)+'</div>';
+  setTimeout(function(){ if(window.initOrgChartViewport) window.initOrgChartViewport(); }, 0);
   return h;
 }
 function selectOrgCo(id){
