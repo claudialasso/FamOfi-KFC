@@ -165,6 +165,16 @@ textarea.inp{resize:vertical;min-height:60px}
 .org-conn{width:2px;height:20px;background:var(--border2);margin:0 auto;print-color-adjust:exact;-webkit-print-color-adjust:exact}
 .org-pad-node{display:inline-flex;min-width:110px;max-width:150px;height:62px;margin:4px;visibility:hidden}
 .org-pad-conn{width:2px;height:20px;margin:0 auto;visibility:hidden}
+  .org-chart-viewport{position:relative;width:100%;height:min(70vh,640px);min-height:360px;overflow:hidden;border-radius:var(--radius-sm);background:var(--bg);cursor:grab;touch-action:none;-webkit-user-select:none;user-select:none}
+  .org-chart-viewport.grabbing{cursor:grabbing}
+  .org-chart-canvas{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform}
+  .org-chart-canvas .org-chart-scroll{overflow:visible!important;width:max-content!important;max-width:none!important;padding:24px}
+  .org-chart-connectors{position:absolute;top:0;left:0;overflow:visible;pointer-events:none}
+  .org-chart-controls{position:absolute;right:10px;bottom:10px;display:flex;gap:6px;z-index:5}
+  .org-chart-zoom-btn{width:30px;height:30px;border-radius:50%;border:1.5px solid var(--border);background:var(--surface);color:var(--text);font-size:16px;line-height:1;cursor:pointer;box-shadow:var(--shadow);display:flex;align-items:center;justify-content:center}
+  .org-chart-zoom-btn:hover{background:var(--accent-bg);color:var(--accent)}
+  @media(max-width:700px){.org-chart-viewport{height:min(60vh,480px);min-height:300px}}
+  @media(max-width:380px){.org-chart-viewport{height:min(55vh,420px);min-height:260px}}
 @media print{@page{size:A3 landscape;margin:1cm}.org-chart-scroll{overflow:visible!important;max-width:none!important}.btn{display:none!important}}
 .org-card{--org-pad-y:10px;--org-pad-x:14px;--org-font:12px;border-radius:var(--radius-sm);padding:var(--org-pad-y) var(--org-pad-x);min-width:110px;max-width:150px;text-align:center;cursor:default;display:inline-block;margin:4px;box-shadow:var(--shadow);transition:all .15s;background:var(--surface);border-style:solid;border-width:2px} .org-card.clickable{cursor:pointer} .org-card.clickable:hover{box-shadow:var(--shadow-md);transform:translateY(-2px)} .org-card.current{border-width:3px} .org-card-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px} .org-chart-card{padding:24px;overflow-x:auto}
 
