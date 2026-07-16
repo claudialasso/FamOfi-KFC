@@ -1161,7 +1161,7 @@ function printOrgChart(id){
 }
 
 // ── Org Charts Tab ────────────────────────────────────────────────────────────
-var _orgSelected=null;
+var _orgSelected=null,_orgCoSearch='';
 function renderOrgCharts(){
   var cs=data.companies.slice().sort(function(a,b){return a.name.toLowerCase()<b.name.toLowerCase()?-1:a.name.toLowerCase()>b.name.toLowerCase()?1:0;});
   var jurisdictions=[...new Set(data.companies.map(function(c){return c.jurisdiction;}).filter(Boolean))].sort();
@@ -1173,7 +1173,7 @@ function renderOrgCharts(){
   h+='</select></div></div>';
   h+='<div class="card" style="padding:0;overflow:hidden;margin-bottom:16px">';
   h+='<div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--bg)">';
-  h+='<input type="text" id="org-co-search" placeholder="'+(lang==="en"?'Search companies...':'Buscar empresas...')+'" oninput="filterOrgCompanyList(this.value)" style="flex:1;padding:7px 11px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;background:var(--surface);outline:none">';
+  h+='<input type="text" id="org-co-search" placeholder="'+(lang==="en"?'Search companies...':'Buscar empresas...')+'" value="'+esc(_orgCoSearch)+'" oninput="_orgCoSearch=this.value;filterOrgCompanyList(this.value)" style="flex:1;padding:7px 11px;border:1.5px solid var(--border);border-radius:var(--radius-sm);font-size:13px;font-family:inherit;background:var(--surface);outline:none">';
   h+='</div><div id="org-co-list" style="max-height:200px;overflow-y:auto;padding:6px">';
   var filtered=(filterJur?cs.filter(function(c){return c.jurisdiction===filterJur;}):cs);
   if(!filtered.length){h+='<div style="padding:16px;text-align:center;color:var(--text3);font-size:13px">'+(lang==="en"?'No companies found.':'Sin empresas.')+'</div>';}
@@ -1204,7 +1204,11 @@ function renderOrgCharts(){
 }
 function selectOrgCo(id){
   _orgSelected=id;
-  var m=document.getElementById('main'); if(m) m.innerHTML=renderOrgCharts();
+    var list=document.getElementById('org-co-list');
+    var scrollTop=list?list.scrollTop:0;
+    var m=document.getElementById('main'); if(m) m.innerHTML=renderOrgCharts();
+    var nl=document.getElementById('org-co-list'); if(nl) nl.scrollTop=scrollTop;
+    filterOrgCompanyList(_orgCoSearch);
 }
 
 function filterOrgCompanyList(q){
