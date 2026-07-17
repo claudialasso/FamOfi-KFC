@@ -753,7 +753,7 @@ function openCompany(id){
   h+='<button class="tab active" onclick="switchTab(this,\'td-d\')">'+t('details')+'</button>';
   h+='<button class="tab" onclick="switchTab(this,\'td-sh\');buildSHPie('+q(id)+')">'+t('shareholders2')+' ('+c.shareholders.length+')</button>';
   h+='<button class="tab" onclick="switchTab(this,\'td-sub\')">'+t('subsidiaries')+' ('+subs.length+')</button>';
-  h+='<button class="tab" onclick="switchTab(this,\'td-org\')">'+t('orgChart')+'</button>';
+  h+='<button class="tab" onclick="switchTab(this,\'td-org\');activateOrgChartTab()">'+t('orgChart')+'</button>';
   h+='<button class="tab" onclick="switchTab(this,\'td-inv\')">'+t('investments')+' ('+invs.length+')</button>';
   h+='<button class="tab" onclick="switchTab(this,\'td-bank\')">'+t('banking')+' ('+c.banking.length+')</button>';
   h+='<button class="tab" onclick="switchTab(this,\'td-cf\')">'+t('customFields')+' ('+c.custom.length+')</button>';
@@ -1036,23 +1036,23 @@ function orgChartFit(viewport, canvas){
   viewport.__orgState.y = ty;
   orgChartApply(viewport);
 }
-function orgChartZoomBtn(factor){
-  var vp = document.querySelector('.org-chart-viewport');
-  if(!vp||!vp.__orgState) return;
-  var st = vp.__orgState;
-  var vw = vp.clientWidth, vh = vp.clientHeight;
-  var newScale = Math.min(Math.max(st.scale*factor, 0.12), 3);
-  var ratio = newScale/st.scale;
-  var cx = vw/2, cy = vh/2;
-  st.x = cx - (cx-st.x)*ratio;
-  st.y = cy - (cy-st.y)*ratio;
-  st.scale = newScale;
-  orgChartApply(vp);
+function orgChartZoomBtn(factor,btn){
+var vp = (btn && btn.closest) ? btn.closest('.org-chart-viewport') : document.querySelector('.org-chart-viewport');
+if(!vp||!vp.__orgState) return;
+var st = vp.__orgState;
+var vw = vp.clientWidth, vh = vp.clientHeight;
+var newScale = Math.min(Math.max(st.scale*factor, 0.12), 3);
+var ratio = newScale/st.scale;
+var cx = vw/2, cy = vh/2;
+st.x = cx - (cx-st.x)*ratio;
+st.y = cy - (cy-st.y)*ratio;
+st.scale = newScale;
+orgChartApply(vp);
 }
-function orgChartFitBtn(){
-  var vp = document.querySelector('.org-chart-viewport');
-  if(!vp) return;
-  orgChartFit(vp, vp.__orgCanvas);
+function orgChartFitBtn(btn){
+var vp = (btn && btn.closest) ? btn.closest('.org-chart-viewport') : document.querySelector('.org-chart-viewport');
+if(!vp) return;
+orgChartFit(vp, vp.__orgCanvas);
 }
 function orgChartPointerDown(e){
   if(e.target && e.target.closest && e.target.closest('.org-chart-controls')) return;
@@ -1095,45 +1095,54 @@ function orgChartWheel(e){
   orgChartApply(vp);
 }
 function orgChartRefit(){
-  var vp = document.querySelector('.org-chart-viewport');
-  if(!vp || !vp.__orgCanvas) return;
-  drawOrgChartConnectors(vp.__orgCanvas);
-  orgChartFit(vp, vp.__orgCanvas);
+var vps = document.querySelectorAll('.org-chart-viewport');
+vps.forEach(function(vp){
+if(!vp || !vp.__orgCanvas) return;
+drawOrgChartConnectors(vp.__orgCanvas);
+orgChartFit(vp, vp.__orgCanvas);
+});
 }
 function initOrgChartViewport(){
-  var scroll = document.querySelector('.org-chart-scroll');
-  if(!scroll) return;
-  if(scroll.closest('.org-chart-canvas')) return;
-  var host = scroll.parentNode;
-  var viewport = document.createElement('div');
-  viewport.className = 'org-chart-viewport';
-  var canvas = document.createElement('div');
-  canvas.className = 'org-chart-canvas';
-  host.insertBefore(viewport, scroll);
-  canvas.appendChild(scroll);
-  viewport.appendChild(canvas);
-  var controls = document.createElement('div');
-  controls.className = 'org-chart-controls';
-  controls.innerHTML = '<button type="button" class="org-chart-zoom-btn" title="Zoom in" onclick="orgChartZoomBtn(1.25)">+</button><button type="button" class="org-chart-zoom-btn" title="Zoom out" onclick="orgChartZoomBtn(0.8)">\u2212</button><button type="button" class="org-chart-zoom-btn" title="Reset view" onclick="orgChartFitBtn()">\u2921</button>';
-  viewport.appendChild(controls);
-  viewport.__orgState = { x:0, y:0, scale:1 };
-  viewport.__orgCanvas = canvas;
-  viewport.addEventListener('mousedown', orgChartPointerDown);
-  viewport.addEventListener('touchstart', orgChartPointerDown, { passive:false });
-  viewport.addEventListener('wheel', orgChartWheel, { passive:false });
-  if(!window.__orgChartGlobalBound){
-    window.__orgChartGlobalBound = true;
-    window.addEventListener('mousemove', orgChartPointerMove);
-    window.addEventListener('mouseup', orgChartPointerUp);
-    window.addEventListener('touchmove', orgChartPointerMove, { passive:false });
-    window.addEventListener('touchend', orgChartPointerUp);
-    window.addEventListener('resize', function(){
-      clearTimeout(window.__orgChartResizeT);
-      window.__orgChartResizeT = setTimeout(orgChartRefit, 150);
-    });
-  }
-  drawOrgChartConnectors(canvas);
-  orgChartFit(viewport, canvas);
+var scrolls = document.querySelectorAll('.org-chart-scroll');
+scrolls.forEach(function(scroll){
+if(scroll.closest('.org-chart-canvas')) return;
+var host = scroll.parentNode;
+var viewport = document.createElement('div');
+viewport.className = 'org-chart-viewport';
+var canvas = document.createElement('div');
+canvas.className = 'org-chart-canvas';
+host.insertBefore(viewport, scroll);
+canvas.appendChild(scroll);
+viewport.appendChild(canvas);
+var controls = document.createElement('div');
+controls.className = 'org-chart-controls';
+controls.innerHTML = '<button type="button" class="org-chart-zoom-btn" title="Zoom in" onclick="orgChartZoomBtn(1.25,this)">+</button><button type="button" class="org-chart-zoom-btn" title="Zoom out" onclick="orgChartZoomBtn(0.8,this)">\u2212</button><button type="button" class="org-chart-zoom-btn" title="Reset view" onclick="orgChartFitBtn(this)">\u2921</button>';
+viewport.appendChild(controls);
+viewport.__orgState = { x:0, y:0, scale:1 };
+viewport.__orgCanvas = canvas;
+viewport.addEventListener('mousedown', orgChartPointerDown);
+viewport.addEventListener('touchstart', orgChartPointerDown, { passive:false });
+viewport.addEventListener('wheel', orgChartWheel, { passive:false });
+drawOrgChartConnectors(canvas);
+orgChartFit(viewport, canvas);
+});
+if(!window.__orgChartGlobalBound){
+window.__orgChartGlobalBound = true;
+window.addEventListener('mousemove', orgChartPointerMove);
+window.addEventListener('mouseup', orgChartPointerUp);
+window.addEventListener('touchmove', orgChartPointerMove, { passive:false });
+window.addEventListener('touchend', orgChartPointerUp);
+window.addEventListener('resize', function(){
+clearTimeout(window.__orgChartResizeT);
+window.__orgChartResizeT = setTimeout(orgChartRefit, 150);
+});
+}
+}
+function activateOrgChartTab(){
+setTimeout(function(){
+if(window.initOrgChartViewport) window.initOrgChartViewport();
+if(window.orgChartRefit) window.orgChartRefit();
+}, 0);
 }
 function printOrgChart(id){
   var c=data.companies.find(function(x){return x.id===id;}); if(!c) return;
