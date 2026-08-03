@@ -53,7 +53,7 @@ var TT = {
     ownedBy:'Owned by', dateHelp:'E.g.: 2015, Mar 2015, 15/03/2015',
     editShareholder:'Edit Shareholder', readOnly:'View-only access',
     uploadDoc:'Upload Document', noDocuments:'No documents uploaded yet.',
-    printChart:'Print Chart', selectCompany:'Select a company to view its org chart'
+    printChart:'Print Chart', printConfigTitle:'Print Configuration', printScope:'What to print', printScopeFull:'Entire chart', printScopeBranch:'Selected company and its branch only', printScopeSelected:'Only selected nodes', printInclude:'Include in printout', printOptColors:'Colors and backgrounds', printOptLabels:'Type labels', printOptSub:'Details (percent / jurisdiction)', printOptLegend:'Legend', printSelectNodes:'Select nodes to include', printPreview:'Live preview', printPreviewNote:'This preview shows how the printed pages will look. Cards and branches stay intact and are not split across pages.', selectCompany:'Select a company to view its org chart'
   },
   es: {
     overview:'Resumen', companies:'Empresas', shareholders:'Accionistas',
@@ -91,7 +91,7 @@ var TT = {
     ownedBy:'Propiedad de', dateHelp:'Ej: 2015, Mar 2015, 15/03/2015',
     editShareholder:'Editar Accionista', readOnly:'Solo lectura',
     uploadDoc:'Subir Documento', noDocuments:'Sin documentos subidos.',
-    printChart:'Imprimir Grafico', selectCompany:'Selecciona una empresa para ver su organigrama'
+    printChart:'Imprimir Grafico', printConfigTitle:'Configuracion de Impresion', printScope:'Que imprimir', printScopeFull:'Organigrama completo', printScopeBranch:'Solo la empresa seleccionada y su rama', printScopeSelected:'Solo los nodos seleccionados', printInclude:'Incluir en la impresion', printOptColors:'Colores y fondos', printOptLabels:'Etiquetas de tipo', printOptSub:'Detalles (porcentaje / jurisdiccion)', printOptLegend:'Leyenda', printSelectNodes:'Selecciona los nodos a incluir', printPreview:'Vista previa en vivo', printPreviewNote:'Esta vista previa muestra como se veran las paginas impresas. Las tarjetas y ramas se mantienen intactas y no se dividen entre paginas.', selectCompany:'Selecciona una empresa para ver su organigrama'
   }
 };
 var lang = localStorage.getItem('fm_lang') || 'en';
@@ -875,7 +875,7 @@ function buildFullOrgChart(cid){
   var visited=new Set([cid]);
   var h='<div class="org-chart-scroll">';
   h+='<div style="text-align:center;font-family:system-ui,sans-serif">';
-  h+='<div style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-bottom:20px;font-size:12px;font-weight:600">';
+  h+='<div class="org-legend" style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-bottom:20px;font-size:12px;font-weight:600">';
   h+='<span style="color:var(--amber)">Individual Shareholder</span>';
   h+='<span style="color:var(--purple)">Company Owner</span>';
   h+='<span style="color:var(--accent)">Selected Company</span>';
@@ -1144,31 +1144,200 @@ if(window.initOrgChartViewport) window.initOrgChartViewport();
 if(window.orgChartRefit) window.orgChartRefit();
 }, 0);
 }
-function printOrgChart(id){
-  var c=data.companies.find(function(x){return x.id===id;}); if(!c) return;
-  var chartHTML=buildFullOrgChart(id);
-  var w=window.open('','_blank');
-  w.document.write('<!DOCTYPE html><html><head><title>Org Chart - '+esc(c.name)+'</title>');
-  w.document.write('<style>');
-  w.document.write('@page{size:A3 landscape;margin:1.5cm}');
-  w.document.write('*{box-sizing:border-box;margin:0;padding:0}');
-  w.document.write('body{font-family:system-ui,sans-serif;padding:24px;background:#fff;color:#1e2340;text-align:center}');
-  w.document.write('h2{font-size:16px;font-weight:700;margin-bottom:4px;text-align:left}.sub{font-size:12px;color:#5a6080;margin-bottom:20px;text-align:left}');
-  w.document.write('button{display:none!important}');
-  w.document.write('.org-chart-scroll{width:100%;overflow:visible}');
-  w.document.write('.org-level{display:flex;flex-wrap:nowrap;justify-content:center;align-items:flex-end;gap:10px}');
-  w.document.write('.org-branch{display:flex;flex-direction:column;align-items:center;min-width:0}');
-  w.document.write('.org-conn{width:2px;height:16px;background:#c5ccdf;margin:0 auto;print-color-adjust:exact;-webkit-print-color-adjust:exact}');
-  w.document.write('.org-pad-node{display:inline-flex;min-width:100px;height:56px;margin:4px;visibility:hidden}');
-  w.document.write('.org-pad-conn{width:2px;height:16px;margin:0 auto;visibility:hidden}');
-  w.document.write('</style></head><body>');
-  w.document.write('<h2>'+esc(c.name)+'</h2>');
-  w.document.write('<div class="sub">'+esc(c.jurisdiction)+' — Organizational Chart — FamOfi Registry — '+new Date().toLocaleDateString()+'</div>');
-  w.document.write(chartHTML);
-  w.document.write('<script>window.print();<\/script></body></html>');
-  w.document.close();
+function printOrgChart(id){ openPrintConfig(id); }
+
+// ── Org Chart Print Configuration (redesigned) ─────────────────────────────
+var _orgPrintCfg = null;
+
+function orgPrintNodeInfo(card){
+  var label = card.querySelector('.org-card-label');
+  var nameEl = card.querySelector('.org-card-name');
+  var subEl = card.querySelector('.org-card-sub');
+  return {
+    label: label ? label.textContent : '',
+    name: nameEl ? nameEl.textContent : '',
+    sub: subEl ? subEl.textContent : ''
+  };
 }
 
+function openPrintConfig(companyId){
+  var c = data.companies.find(function(x){ return x.id===companyId; });
+  if(!c) return;
+  var tmp = document.createElement('div');
+  tmp.innerHTML = buildFullOrgChart(companyId);
+  var branchOptions = [{id:companyId, name:c.name}];
+  var seen = {}; seen[companyId] = true;
+  var clickable = tmp.querySelectorAll('.org-card.clickable');
+  for(var i=0;i<clickable.length;i++){
+    var m = /openCompany\('([^']+)'\)/.exec(clickable[i].getAttribute('onclick')||'');
+    if(m && !seen[m[1]]){
+      seen[m[1]] = true;
+      var co = data.companies.find(function(x){ return x.id===m[1]; });
+      if(co) branchOptions.push({id:m[1], name:co.name});
+    }
+  }
+  var cards = tmp.querySelectorAll('.org-card');
+  var nodeChecks = '';
+  for(var i=0;i<cards.length;i++){
+    cards[i].setAttribute('data-print-key','n'+i);
+    var info = orgPrintNodeInfo(cards[i]);
+    nodeChecks += '<label class="print-cfg-option"><input type="checkbox" class="print-node-check" value="n'+i+'" checked onchange="orgPrintRefreshPreview()"> <span>'+esc(info.label)+' \u2014 '+esc(info.name)+(info.sub?' ('+esc(info.sub)+')':'')+'</span></label>';
+  }
+
+  _orgPrintCfg = { companyId: companyId, totalNodes: cards.length };
+
+  var branchSelectHTML = '';
+  for(var i=0;i<branchOptions.length;i++){
+    branchSelectHTML += '<option value="'+esc(branchOptions[i].id)+'">'+esc(branchOptions[i].name)+'</option>';
+  }
+
+  var html = ''
+    +'<div class="modal-header"><div><div class="modal-title">'+t('printConfigTitle')+'</div><div class="modal-subtitle">'+esc(c.name)+'</div></div><button class="close-btn" onclick="closeModal()">&times;</button></div>'
+    +'<div class="modal-body">'
+      +'<div class="print-cfg-grid">'
+        +'<div>'
+          +'<div class="print-cfg-section"><div class="print-cfg-label">'+t('printScope')+'</div>'
+            +'<label class="print-cfg-option"><input type="radio" name="print-scope" value="full" checked onchange="orgPrintScopeChanged()"> '+t('printScopeFull')+'</label>'
+            +'<label class="print-cfg-option"><input type="radio" name="print-scope" value="branch" onchange="orgPrintScopeChanged()"> '+t('printScopeBranch')+'</label>'
+            +'<select class="print-cfg-select" id="print-branch-select" onchange="orgPrintRefreshPreview()" style="margin:4px 0 8px 26px;width:calc(100% - 26px)">'+branchSelectHTML+'</select>'
+            +'<label class="print-cfg-option"><input type="radio" name="print-scope" value="selected" onchange="orgPrintScopeChanged()"> '+t('printScopeSelected')+'</label>'
+          +'</div>'
+          +'<div class="print-cfg-section"><div class="print-cfg-label">'+t('printInclude')+'</div>'
+            +'<label class="print-cfg-option"><input type="checkbox" id="print-opt-colors" checked onchange="orgPrintRefreshPreview()"> '+t('printOptColors')+'</label>'
+            +'<label class="print-cfg-option"><input type="checkbox" id="print-opt-labels" checked onchange="orgPrintRefreshPreview()"> '+t('printOptLabels')+'</label>'
+            +'<label class="print-cfg-option"><input type="checkbox" id="print-opt-sub" checked onchange="orgPrintRefreshPreview()"> '+t('printOptSub')+'</label>'
+            +'<label class="print-cfg-option"><input type="checkbox" id="print-opt-legend" checked onchange="orgPrintRefreshPreview()"> '+t('printOptLegend')+'</label>'
+          +'</div>'
+          +'<div class="print-cfg-section" id="print-node-list-wrap" style="display:none"><div class="print-cfg-label">'+t('printSelectNodes')+'</div><div class="print-node-list">'+nodeChecks+'</div></div>'
+        +'</div>'
+        +'<div>'
+          +'<div class="print-cfg-label">'+t('printPreview')+'</div>'
+          +'<div class="print-preview-shell"><div id="print-preview-inner" class="print-preview-scale"></div></div>'
+          +'<div class="print-preview-note">'+t('printPreviewNote')+'</div>'
+        +'</div>'
+      +'</div>'
+    +'</div>'
+    +'<div class="modal-header" style="border-top:1px solid var(--border);border-bottom:none;justify-content:flex-end;gap:8px">'
+      +'<button class="btn btn-outline" onclick="closeModal()">'+t('cancel')+'</button>'
+      +'<button class="btn btn-teal" onclick="runOrgChartPrint()">&#128424; '+t('printChart')+'</button>'
+    +'</div>';
+
+  showModal(html, true);
+  orgPrintRefreshPreview();
+}
+
+function orgPrintScopeChanged(){
+  var scope = (document.querySelector('input[name="print-scope"]:checked')||{}).value;
+  var wrap = document.getElementById('print-node-list-wrap');
+  if(wrap) wrap.style.display = (scope==='selected') ? 'block' : 'none';
+  orgPrintRefreshPreview();
+}
+
+function orgPrintFilteredHTML(){
+  if(!_orgPrintCfg) return '';
+  var scope = (document.querySelector('input[name="print-scope"]:checked')||{}).value || 'full';
+  var sourceId = _orgPrintCfg.companyId;
+  if(scope==='branch'){
+    var sel = document.getElementById('print-branch-select');
+    if(sel && sel.value) sourceId = sel.value;
+  }
+  var root = document.createElement('div');
+  root.innerHTML = buildFullOrgChart(sourceId);
+
+  var cards = root.querySelectorAll('.org-card');
+  for(var i=0;i<cards.length;i++){ cards[i].setAttribute('data-print-key','n'+i); }
+
+  if(scope==='selected'){
+    var checked = {};
+    var boxes = document.querySelectorAll('.print-node-check');
+    for(var i=0;i<boxes.length;i++){ if(boxes[i].checked) checked[boxes[i].value] = true; }
+    for(var i=0;i<cards.length;i++){
+      if(!checked[cards[i].getAttribute('data-print-key')]) cards[i].remove();
+    }
+    var branches = root.querySelectorAll('.org-branch');
+    for(var i=0;i<branches.length;i++){
+      if(!branches[i].querySelector('.org-card')) branches[i].remove();
+    }
+  }
+
+  var elColors = document.getElementById('print-opt-colors');
+  var elLabels = document.getElementById('print-opt-labels');
+  var elSub = document.getElementById('print-opt-sub');
+  var elLegend = document.getElementById('print-opt-legend');
+  var showLabels = elLabels ? elLabels.checked : true;
+  var showSub = elSub ? elSub.checked : true;
+  var showLegend = elLegend ? elLegend.checked : true;
+  var showColors = elColors ? elColors.checked : true;
+
+  if(!showLabels){ var els=root.querySelectorAll('.org-card-label'); for(var i=0;i<els.length;i++) els[i].style.display='none'; }
+  if(!showSub){ var els2=root.querySelectorAll('.org-card-sub'); for(var i=0;i<els2.length;i++) els2[i].style.display='none'; }
+  var legendRow = root.querySelector('.org-legend');
+  if(legendRow && !showLegend) legendRow.style.display='none';
+  var scrollRoot = root.querySelector('.org-chart-scroll');
+  if(scrollRoot) scrollRoot.classList.toggle('print-mono', !showColors);
+
+  return root.innerHTML;
+}
+
+function orgPrintRefreshPreview(){
+  var host = document.getElementById('print-preview-inner');
+  if(!host) return;
+  host.style.transform='none';
+  host.style.width='auto';
+  host.innerHTML = orgPrintFilteredHTML();
+  var canvas = document.createElement('div');
+  canvas.className = 'org-print-canvas';
+  while(host.firstChild) canvas.appendChild(host.firstChild);
+  host.appendChild(canvas);
+  if(window.drawOrgChartConnectors) window.drawOrgChartConnectors(canvas);
+  var scroll = canvas.querySelector('.org-chart-scroll');
+  var shell = host.parentNode;
+  var w = scroll ? scroll.scrollWidth : 800;
+  var shellWidth = (shell ? shell.clientWidth : 500) - 20;
+  var scale = w > 0 ? Math.min(1, shellWidth / w) : 1;
+  host.style.transform = 'scale('+scale+')';
+  host.style.width = (scale>0 ? (100/scale) : 100)+'%';
+}
+
+function runOrgChartPrint(){
+  if(!_orgPrintCfg) return;
+  var c = data.companies.find(function(x){ return x.id===_orgPrintCfg.companyId; });
+  var filteredHTML = orgPrintFilteredHTML();
+  var root = document.getElementById('print-org-root');
+  if(!root){
+    root = document.createElement('div');
+    root.id = 'print-org-root';
+    document.body.appendChild(root);
+  }
+  var headerName = c ? esc(c.name) : '';
+  var headerJur = c ? esc(c.jurisdiction||'') : '';
+  root.innerHTML = '<div class="org-print-header"><div class="t1">'+headerName+' \u2014 '+t('orgChart')+'</div>'
+    +'<div class="t2">'+headerJur+' \u2014 FamOfi Registry \u2014 '+new Date().toLocaleDateString()+'</div></div>'
+    +'<div id="print-org-canvas" class="org-print-canvas">'+filteredHTML+'</div>';
+
+  var canvas = document.getElementById('print-org-canvas');
+  if(window.drawOrgChartConnectors) window.drawOrgChartConnectors(canvas);
+
+  var scroll = canvas.querySelector('.org-chart-scroll');
+  if(scroll){
+    var pageWidthPx = 1040;
+    var w = scroll.scrollWidth;
+    var scale = w > pageWidthPx ? (pageWidthPx / w) : 1;
+    root.style.zoom = scale;
+  } else {
+    root.style.zoom = 1;
+  }
+
+  closeModal();
+  document.body.classList.add('printing-org');
+  setTimeout(function(){ window.print(); }, 60);
+}
+
+window.addEventListener('afterprint', function(){
+  document.body.classList.remove('printing-org');
+  var root = document.getElementById('print-org-root');
+  if(root){ root.innerHTML=''; root.style.zoom=''; }
+});
 // ── Org Charts Tab ────────────────────────────────────────────────────────────
 var _orgSelected=null,_orgCoSearch='';
 function renderOrgCharts(){
