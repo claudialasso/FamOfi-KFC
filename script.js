@@ -281,6 +281,7 @@ function applyLoaded(d){
     if(!c.custom) c.custom=[];
     if(!c.documents) c.documents=[];
     if(!c.yearFounded && c.year) c.yearFounded=String(c.year);
+recomputeCurrent(c);
   });
   data.investments.forEach(function(inv){
     if(inv.commitment==null) inv.commitment=0;
@@ -295,6 +296,66 @@ if(!Array.isArray(inv.companyIds)){ inv.companyIds = inv.companyId ? [inv.compan
 if(!inv.companyId) inv.companyId = inv.companyIds[0] || '';
   });
 }
+function parseFlexDate(str){
+  if(!str) return '1900-01-01';
+  str=String(str).trim();
+  var m;
+  m = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if(m){ return m[3]+'-'+('0'+m[2]).slice(-2)+'-'+('0'+m[1]).slice(-2); }
+  m = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if(m) return str;
+  var months={jan:'01',feb:'02',mar:'03',apr:'04',may:'05',jun:'06',jul:'07',aug:'08',sep:'09',oct:'10',nov:'11',dec:'12'};
+  m = str.match(/^([A-Za-z]{3,})\.?\s+(\d{4})$/);
+  if(m){ var mm=months[m[1].toLowerCase().slice(0,3)]; if(mm) return m[2]+'-'+mm+'-01'; }
+  m = str.match(/(\d{4})/);
+  if(m) return m[1]+'-01-01';
+  return '1900-01-01';
+}
+function _histLatestPerSlot(history){
+  var bySlot={};
+  (history||[]).forEach(function(e,idx){
+    var cur=bySlot[e.slotId];
+    if(!cur || e.effectiveDate>cur.entry.effectiveDate || (e.effectiveDate===cur.entry.effectiveDate && idx>cur.idx)){
+      bySlot[e.slotId]={entry:e,idx:idx};
+    }
+  });
+  var out={};
+  Object.keys(bySlot).forEach(function(k){ out[k]=bySlot[k].entry; });
+  return out;
+}
+function ensureHistory(c){
+  if(!Array.isArray(c.shareholderHistory)){
+    var fb=parseFlexDate(c.yearFounded||c.year||'');
+    c.shareholderHistory=(c.shareholders||[]).map(function(s){
+      return {id:uid(),slotId:s.id||uid(),effectiveDate:fb,person:s.person,pct:s.pct,class:s.class||'',type:s.type||'individual',shares:(s.shares!=null?s.shares:''),notes:'',removed:false};
+    });
+  }
+  if(!Array.isArray(c.directorHistory)){
+    var fb2=parseFlexDate(c.yearFounded||c.year||'');
+    c.directorHistory=[];
+    if(c.director){
+      c.directorHistory.push({id:uid(),slotId:uid(),effectiveDate:fb2,name:c.director,position:'Director',notes:'',removed:false});
+    }
+  }
+}
+function recomputeCurrent(c){
+  ensureHistory(c);
+  var shBySlot=_histLatestPerSlot(c.shareholderHistory);
+  var shOrder=[]; var shSeen={};
+  c.shareholderHistory.forEach(function(e){ if(!shSeen[e.slotId]){ shSeen[e.slotId]=true; shOrder.push(e.slotId); } });
+  c.shareholders=shOrder.map(function(sid){ return shBySlot[sid]; }).filter(function(e){ return e && !e.removed; }).map(function(e){
+    return {id:e.slotId,person:e.person,pct:e.pct,class:e.class||'',type:e.type||'individual'};
+  });
+  var drBySlot=_histLatestPerSlot(c.directorHistory);
+  var drOrder=[]; var drSeen={};
+  c.directorHistory.forEach(function(e){ if(!drSeen[e.slotId]){ drSeen[e.slotId]=true; drOrder.push(e.slotId); } });
+  c.directors=drOrder.map(function(sid){ return drBySlot[sid]; }).filter(function(e){ return e && !e.removed; }).map(function(e){
+    return {id:e.slotId,name:e.name,position:e.position||'Director',notes:e.notes||''};
+  });
+  c.director=c.directors.map(function(d){return d.name;}).join(', ');
+}
+
+
 
 function seedData(){
   var i1=uid(),i2=uid(),i3=uid(),i4=uid(),i5=uid();
@@ -316,6 +377,7 @@ function seedData(){
      banking:[{id:uid(),bank:'Bank of America',account:'****9910',routing:'026009593',swift:'BOFAUS3N',bankAddr:'Miami, FL',currency:'USD',type:'Checking'}],
      custom:[{id:uid(),name:'State',value:'Florida'}],documents:[]}
   ];
+data.companies.forEach(recomputeCurrent);
   data.investments=[
     {id:uid(),companyId:i1,name:'Vanguard S&P 500 ETF',fund:'Ochoa Family Fund',family:'Ochoa',type:'Fund',commitment:500000,calls:320000,distributions:0,marketValue:450000,status:'active',notes:'Long-term holding',fields:[{id:uid(),name:'Ticker',value:'VOO'}]},
     {id:uid(),companyId:i4,name:'Office Building Panama City',fund:'Real Estate Fund I',family:'Ochoa',type:'Real Estate',commitment:900000,calls:850000,distributions:50000,marketValue:1200000,status:'active',notes:'Fully leased',fields:[{id:uid(),name:'Area m2',value:'820'}]},
@@ -665,27 +727,49 @@ function openCompany(id){
     +dr('EIN',esc(c.ein))+dr(t('irs'),esc(c.irs))+dr(t('director'),esc(c.director))
     +dr(t('registeredAgent'),esc(c.agent))+dr(t('address'),esc(c.address))
     +dr(t('tags'),esc(c.tags))+dr(t('notes'),esc(c.notes));
-  var shP='<div style="display:flex;justify-content:flex-end;margin-bottom:10px">';
-  if(isAdmin()) shP+='<button class="btn btn-primary btn-sm" onclick="openAddSHForm('+q(id)+')">'+t('addShareholder')+'</button>';
-  shP+='</div>';
-  if(c.shareholders.length){
-    shP+='<canvas id="sh-pie" style="max-height:170px;margin-bottom:16px"></canvas>';
-    shP+='<table><thead><tr><th>'+t('ownerType')+'</th><th>'+t('shareholders2')+'</th><th>'+t('ownership')+'</th><th>'+t('shareClass')+'</th><th></th></tr></thead><tbody>';
-    c.shareholders.forEach(function(s,si){
-      shP+='<tr><td><span class="badge '+(s.type==='company'?'badge-jur':'badge-active')+'" style="font-size:10px">'+(s.type==='company'?'Empresa':'Persona')+'</span></td>';
-      if(s.type==='company'){ shP+='<td style="cursor:pointer;color:var(--accent);font-weight:600" onclick="closeModal();openCompany('+q(s.person)+')">'+esc(resolveOwner(s))+'</td>'; }
-      else { shP+='<td>'+esc(resolveOwner(s))+'</td>'; }
-      shP+='<td><div style="font-weight:600">'+s.pct+'%</div><div class="ownership-bar" style="width:100px"><div class="ownership-fill" style="width:'+s.pct+'%"></div></div></td>';
-      shP+='<td style="color:var(--text2)">'+esc(s.class||'—')+'</td><td style="white-space:nowrap">';
-      if(isAdmin()){
-        shP+='<button class="btn btn-outline btn-sm" onclick="openEditSHForm('+q(id)+','+si+')" style="margin-right:4px">'+t('editCompany')+'</button>';
-        shP+='<button class="btn btn-danger btn-sm" onclick="delShareholder('+q(id)+','+si+')">x</button>';
-      }
-      shP+='</td></tr>';
-    });
-    shP+='</tbody></table>';
-  } else { shP+='<div class="empty">'+t('noShareholders')+'</div>'; }
-  var subP='';
+  var shP='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">';
+shP+='<div style="font-size:12px;color:var(--text3)">'+(lang==='en'?'Showing current shareholders.':'Mostrando accionistas actuales.')+'</div>';
+shP+='<div style="display:flex;gap:6px">';
+shP+='<button class="btn btn-outline btn-sm" onclick="openHistoryModal('+q(id)+',\'sh\')">'+(lang==='en'?'View History':'Ver Historial')+'</button>';
+if(isAdmin()) shP+='<button class="btn btn-primary btn-sm" onclick="openAddSHForm('+q(id)+')">'+t('addShareholder')+'</button>';
+shP+='</div></div>';
+if(c.shareholders.length){
+shP+='<canvas id="sh-pie" style="max-height:170px;margin-bottom:16px"></canvas>';
+shP+='<table><thead><tr><th>'+t('ownerType')+'</th><th>'+t('shareholders2')+'</th><th>'+t('ownership')+'</th><th>'+t('shareClass')+'</th><th></th></tr></thead><tbody>';
+c.shareholders.forEach(function(s){
+shP+='<tr><td><span class="badge '+(s.type==='company'?'badge-jur':'badge-active')+'" style="font-size:10px">'+(s.type==='company'?'Empresa':'Persona')+'</span></td>';
+if(s.type==='company'){ shP+='<td style="cursor:pointer;color:var(--accent);font-weight:600" onclick="closeModal();openCompany('+q(s.person)+')">'+esc(resolveOwner(s))+'</td>'; }
+else { shP+='<td>'+esc(resolveOwner(s))+'</td>'; }
+shP+='<td><div style="font-weight:600">'+s.pct+'%</div><div class="ownership-bar" style="width:100px"><div class="ownership-fill" style="width:'+s.pct+'%"></div></div></td>';
+shP+='<td style="color:var(--text2)">'+esc(s.class||'-')+'</td><td style="white-space:nowrap">';
+if(isAdmin()){
+shP+='<button class="btn btn-outline btn-sm" onclick="openEditSHForm('+q(id)+','+q(s.id)+')" style="margin-right:4px">'+(lang==='en'?'Update':'Actualizar')+'</button>';
+shP+='<button class="btn btn-danger btn-sm" onclick="removeSHCurrent('+q(id)+','+q(s.id)+')">'+(lang==='en'?'Remove':'Quitar')+'</button>';
+}
+shP+='</td></tr>';
+});
+shP+='</tbody></table>';
+} else { shP+='<div class="empty">'+t('noShareholders')+'</div>'; }
+
+var dirP='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">';
+dirP+='<div style="font-size:12px;color:var(--text3)">'+(lang==='en'?'Showing current directors.':'Mostrando directores actuales.')+'</div>';
+dirP+='<div style="display:flex;gap:6px">';
+dirP+='<button class="btn btn-outline btn-sm" onclick="openHistoryModal('+q(id)+',\'dir\')">'+(lang==='en'?'View History':'Ver Historial')+'</button>';
+if(isAdmin()) dirP+='<button class="btn btn-primary btn-sm" onclick="openAddDirForm('+q(id)+')">+ '+(lang==='en'?'Director':'Director')+'</button>';
+dirP+='</div></div>';
+if(c.directors && c.directors.length){
+dirP+='<table><thead><tr><th>'+(lang==='en'?'Name':'Nombre')+'</th><th>'+(lang==='en'?'Position':'Cargo')+'</th><th></th></tr></thead><tbody>';
+c.directors.forEach(function(dd){
+dirP+='<tr><td style="font-weight:600">'+esc(dd.name)+'</td><td style="color:var(--text2)">'+esc(dd.position||'Director')+'</td><td style="white-space:nowrap">';
+if(isAdmin()){
+dirP+='<button class="btn btn-outline btn-sm" onclick="openEditDirForm('+q(id)+','+q(dd.id)+')" style="margin-right:4px">'+(lang==='en'?'Update':'Actualizar')+'</button>';
+dirP+='<button class="btn btn-danger btn-sm" onclick="removeDirCurrent('+q(id)+','+q(dd.id)+')">'+(lang==='en'?'Remove':'Quitar')+'</button>';
+}
+dirP+='</td></tr>';
+});
+dirP+='</tbody></table>';
+} else { dirP+='<div class="empty">'+(lang==='en'?'No directors recorded.':'Sin directores.')+'</div>'; }
+var subP='';
   if(subs.length){
     subP='<div style="font-size:12px;color:var(--text2);margin-bottom:12px;padding:8px 12px;background:var(--teal-bg);border-radius:var(--radius-sm)">'+esc(c.name)+(lang==='en'?' owns:':' es propietaria de:')+'</div>';
     subP+='<table><thead><tr><th>'+t('name')+'</th><th>'+t('jurisdiction')+'</th><th>'+t('ownership')+'</th><th>'+t('status')+'</th><th></th></tr></thead><tbody>';
@@ -758,6 +842,8 @@ function openCompany(id){
   h+='<div class="tabs">';
   h+='<button class="tab active" onclick="switchTab(this,\'td-d\')">'+t('details')+'</button>';
   h+='<button class="tab" onclick="switchTab(this,\'td-sh\');buildSHPie('+q(id)+')">'+t('shareholders2')+' ('+c.shareholders.length+')</button>';
+
+h+='<button class="tab" onclick="switchTab(this,\'td-dir\')">'+(lang==='en'?'Directors':'Directores')+' ('+(c.directors?c.directors.length:0)+')</button>';
   h+='<button class="tab" onclick="switchTab(this,\'td-sub\')">'+t('subsidiaries')+' ('+subs.length+')</button>';
   h+='<button class="tab" onclick="switchTab(this,\'td-org\');activateOrgChartTab()">'+t('orgChart')+'</button>';
   h+='<button class="tab" onclick="switchTab(this,\'td-inv\')">'+t('investments')+' ('+invs.length+')</button>';
@@ -767,6 +853,9 @@ function openCompany(id){
   h+='</div>';
   h+='<div id="td-d" class="tab-panel active">'+det+'</div>';
   h+='<div id="td-sh" class="tab-panel">'+shP+'</div>';
+
+h+='<div id="td-dir" class="tab-panel">'+dirP+'</div>';
+  
   h+='<div id="td-sub" class="tab-panel">'+subP+'</div>';
   h+='<div id="td-org" class="tab-panel" style="overflow-x:auto;padding:8px 0">'+orgP+'</div>';
   h+='<div id="td-inv" class="tab-panel">'+invP+'</div>';
@@ -1405,60 +1494,293 @@ function filterOrgCompanyList(q){
 
 // ── SH add/edit ───────────────────────────────────────────────────────────────
 function openAddSHForm(cid){
-  var opts=''; data.companies.filter(function(x){return x.id!==cid;}).forEach(function(x){opts+='<option value="'+x.id+'">'+esc(x.name)+'</option>';});
-  var h='<div class="modal-header"><div class="modal-title">'+t('addShareholder')+'</div><button class="close-btn" onclick="closeModal();openCompany('+q(cid)+')">x</button></div>';
-  h+='<div class="modal-body"><div class="form-grid">';
-  h+='<div class="form-group"><label class="lbl">'+t('ownerType')+'</label><select id="sh-type" class="inp" onchange="toggleSHInput()"><option value="individual">'+t('individual')+'</option><option value="company">'+t('company')+'</option></select></div>';
-  var shNames=[...new Set(data.companies.reduce(function(a,c){c.shareholders.forEach(function(s){if(s.type==='individual'&&s.person)a.push(s.person);});return a;},[]))].sort();
-  var shOpts=shNames.map(function(n){return '<option value="'+esc(n)+'">'+esc(n)+'</option>';}).join('');
-  h+='<div class="form-group"><label class="lbl">Name</label><input id="sh-person-text" class="inp" list="sh-person-list" placeholder="Type or select..."><datalist id="sh-person-list">'+shOpts+'</datalist><select id="sh-person-select" class="inp" style="display:none"><option value="">— select —</option>'+opts+'</select></div>';
-  h+='<div class="form-group"><label class="lbl">'+t('ownership')+'</label><input id="sh-pct" class="inp" type="number" min="0" max="100"></div>';
-  h+='<div class="form-group"><label class="lbl">'+t('shareClass')+'</label><input id="sh-class" class="inp"></div></div>';
-  h+='<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">';
-  h+='<button class="btn btn-outline" onclick="closeModal();openCompany('+q(cid)+')">'+t('cancel')+'</button>';
-  h+='<button class="btn btn-primary" onclick="commitAddSH('+q(cid)+')">'+t('save')+'</button></div></div>';
-  showModal(h);
+var h='<div class="modal-header"><div class="modal-title">'+t('addShareholder')+'</div><button class="close-btn" onclick="closeModal();openCompany('+q(cid)+')">x</button></div>';
+h+='<div class="modal-body"><div class="form-grid">';
+h+='<div class="form-group"><label class="lbl">'+t('ownerType')+'</label><select id="sh-type" class="inp" onchange="toggleSHInput()"><option value="individual">'+t('individual')+'</option><option value="company">'+t('company')+'</option></select></div>';
+var shNames=[...new Set(data.companies.reduce(function(a,c){c.shareholders.forEach(function(s){if(s.type==='individual'&&s.person)a.push(s.person);});return a;},[]))].sort();
+var shOpts=shNames.map(function(n){return '<option value="'+esc(n)+'">'+esc(n)+'</option>';}).join('');
+var opts=''; data.companies.filter(function(x){return x.id!==cid;}).forEach(function(x){opts+='<option value="'+x.id+'">'+esc(x.name)+'</option>';});
+h+='<div class="form-group"><label class="lbl">Name</label><input id="sh-person-text" class="inp" list="sh-person-list" placeholder="Type or select..."><datalist id="sh-person-list">'+shOpts+'</datalist><select id="sh-person-select" class="inp" style="display:none"><option value="">- select -</option>'+opts+'</select></div>';
+h+='<div class="form-group"><label class="lbl">'+t('ownership')+'</label><input id="sh-pct" class="inp" type="number" min="0" max="100"></div>';
+h+='<div class="form-group"><label class="lbl">'+t('shareClass')+'</label><input id="sh-class" class="inp"></div>';
+h+='<div class="form-group"><label class="lbl">'+(lang==='en'?'Shares':'Acciones')+'</label><input id="sh-shares" class="inp"></div>';
+h+='<div class="form-group"><label class="lbl">'+(lang==='en'?'Effective Date':'Fecha Efectiva')+'</label><input id="sh-effdate" class="inp" type="date" value="'+new Date().toISOString().slice(0,10)+'"></div>';
+h+='<div class="form-group"><label class="lbl">'+t('notes')+'</label><input id="sh-notes" class="inp"></div>';
+h+='</div>';
+h+='<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">';
+h+='<button class="btn btn-outline" onclick="closeModal();openCompany('+q(cid)+')">'+t('cancel')+'</button>';
+h+='<button class="btn btn-primary" onclick="commitAddSH('+q(cid)+')">'+t('save')+'</button></div></div>';
+showModal(h);
 }
 function toggleSHInput(){ var tp=document.getElementById('sh-type').value; document.getElementById('sh-person-text').style.display=tp==='company'?'none':'block'; document.getElementById('sh-person-select').style.display=tp==='company'?'block':'none'; }
 function commitAddSH(cid){
-  var c=data.companies.find(function(x){return x.id===cid;}); if(!c) return;
-  var tp=document.getElementById('sh-type').value||'individual';
-  var person=tp==='company'?document.getElementById('sh-person-select').value:document.getElementById('sh-person-text').value;
-  var pct=parseFloat(document.getElementById('sh-pct').value)||0;
-  var cls=document.getElementById('sh-class').value||'';
-  if(!person) return;
-  c.shareholders.push({id:uid(),person:person,pct:pct,class:cls,type:tp});
-  save(); closeModal(); openCompany(cid);
+var c=data.companies.find(function(x){return x.id===cid;}); if(!c) return;
+var tp=document.getElementById('sh-type').value||'individual';
+var person=tp==='company'?document.getElementById('sh-person-select').value:document.getElementById('sh-person-text').value;
+var pct=parseFloat(document.getElementById('sh-pct').value)||0;
+var cls=document.getElementById('sh-class').value||'';
+var shares=document.getElementById('sh-shares').value||'';
+var dt=document.getElementById('sh-effdate').value;
+var notes=document.getElementById('sh-notes').value||'';
+if(!person) return;
+if(!dt){ alert(lang==='en'?'Please enter a valid effective date.':'Por favor ingrese una fecha efectiva valida.'); return; }
+ensureHistory(c);
+c.shareholderHistory.push({id:uid(),slotId:uid(),effectiveDate:dt,person:person,pct:pct,class:cls,type:tp,shares:shares,notes:notes,removed:false});
+recomputeCurrent(c); save(); closeModal(); openCompany(cid);
 }
-function openEditSHForm(cid,idx){
-  var c=data.companies.find(function(x){return x.id===cid;}); if(!c) return;
-  var s=c.shareholders[idx]; if(!s) return;
-  var opts=''; data.companies.filter(function(x){return x.id!==cid;}).forEach(function(x){opts+='<option value="'+x.id+'"'+(s.person===x.id?' selected':'')+'>'+esc(x.name)+'</option>';});
-  var h='<div class="modal-header"><div class="modal-title">'+t('editShareholder')+'</div><button class="close-btn" onclick="closeModal();openCompany('+q(cid)+')">x</button></div>';
-  h+='<div class="modal-body"><div class="form-grid">';
-  h+='<div class="form-group"><label class="lbl">'+t('ownerType')+'</label><select id="sh-type-e" class="inp" onchange="toggleSHInputE()"><option value="individual"'+(s.type==='individual'?' selected':'')+'>'+t('individual')+'</option><option value="company"'+(s.type==='company'?' selected':'')+'>'+t('company')+'</option></select></div>';
-  var shNamesE=[...new Set(data.companies.reduce(function(a,c){c.shareholders.forEach(function(s){if(s.type==='individual'&&s.person)a.push(s.person);});return a;},[]))].sort();
-  var shOptsE=shNamesE.map(function(n){return '<option value="'+esc(n)+'">'+esc(n)+'</option>';}).join('');
-  h+='<div class="form-group"><label class="lbl">Name</label><input id="sh-person-text-e" class="inp" list="sh-person-list-e" value="'+esc(s.type==='individual'?s.person:'')+'" style="'+(s.type==='company'?'display:none':'')+'" placeholder="Type or select..."><datalist id="sh-person-list-e">'+shOptsE+'</datalist><select id="sh-person-select-e" class="inp" style="'+(s.type==='individual'?'display:none':'')+'"><option value="">— select —</option>'+opts+'</select></div>';
-  h+='<div class="form-group"><label class="lbl">'+t('ownership')+'</label><input id="sh-pct-e" class="inp" type="number" min="0" max="100" value="'+s.pct+'"></div>';
-  h+='<div class="form-group"><label class="lbl">'+t('shareClass')+'</label><input id="sh-class-e" class="inp" value="'+esc(s.class||'')+'"></div></div>';
-  h+='<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">';
-  h+='<button class="btn btn-outline" onclick="closeModal();openCompany('+q(cid)+')">'+t('cancel')+'</button>';
-  h+='<button class="btn btn-primary" onclick="commitEditSH('+q(cid)+','+idx+')">'+t('save')+'</button></div></div>';
-  showModal(h);
+function openEditSHForm(cid,slotId){
+var c=data.companies.find(function(x){return x.id===cid;}); if(!c) return;
+ensureHistory(c);
+var cur=_histLatestPerSlot(c.shareholderHistory)[slotId]; if(!cur) return;
+var opts=''; data.companies.filter(function(x){return x.id!==cid;}).forEach(function(x){opts+='<option value="'+x.id+'"'+(cur.person===x.id?' selected':'')+'>'+esc(x.name)+'</option>';});
+var h='<div class="modal-header"><div class="modal-title">'+t('editShareholder')+'</div><button class="close-btn" onclick="closeModal();openCompany('+q(cid)+')">x</button></div>';
+h+='<div class="modal-body"><div class="form-grid">';
+h+='<div class="form-group"><label class="lbl">'+t('ownerType')+'</label><select id="sh-type-e" class="inp" onchange="toggleSHInputE()"><option value="individual"'+(cur.type==='individual'?' selected':'')+'>'+t('individual')+'</option><option value="company"'+(cur.type==='company'?' selected':'')+'>'+t('company')+'</option></select></div>';
+var shNamesE=[...new Set(data.companies.reduce(function(a,c2){c2.shareholders.forEach(function(s){if(s.type==='individual'&&s.person)a.push(s.person);});return a;},[]))].sort();
+var shOptsE=shNamesE.map(function(n){return '<option value="'+esc(n)+'">'+esc(n)+'</option>';}).join('');
+h+='<div class="form-group"><label class="lbl">Name</label><input id="sh-person-text-e" class="inp" list="sh-person-list-e" value="'+esc(cur.type==='individual'?cur.person:'')+'" style="'+(cur.type==='company'?'display:none':'')+'" placeholder="Type or select..."><datalist id="sh-person-list-e">'+shOptsE+'</datalist><select id="sh-person-select-e" class="inp" style="'+(cur.type==='individual'?'display:none':'')+'"><option value="">- select -</option>'+opts+'</select></div>';
+h+='<div class="form-group"><label class="lbl">'+t('ownership')+'</label><input id="sh-pct-e" class="inp" type="number" min="0" max="100" value="'+cur.pct+'"></div>';
+h+='<div class="form-group"><label class="lbl">'+t('shareClass')+'</label><input id="sh-class-e" class="inp" value="'+esc(cur.class||'')+'"></div>';
+h+='<div class="form-group"><label class="lbl">'+(lang==='en'?'Shares':'Acciones')+'</label><input id="sh-shares-e" class="inp" value="'+esc(cur.shares!=null?cur.shares:'')+'"></div>';
+h+='<div class="form-group"><label class="lbl">'+(lang==='en'?'New Effective Date':'Nueva Fecha Efectiva')+'</label><input id="sh-effdate-e" class="inp" type="date" value="'+new Date().toISOString().slice(0,10)+'"></div>';
+h+='<div class="form-group"><label class="lbl">'+t('notes')+'</label><input id="sh-notes-e" class="inp" value="'+esc(cur.notes||'')+'"></div>';
+h+='</div>';
+h+='<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">';
+h+='<button class="btn btn-outline" onclick="closeModal();openCompany('+q(cid)+')">'+t('cancel')+'</button>';
+h+='<button class="btn btn-primary" onclick="commitEditSH('+q(cid)+','+q(slotId)+')">'+t('save')+'</button></div></div>';
+showModal(h);
 }
 function toggleSHInputE(){ var tp=document.getElementById('sh-type-e').value; document.getElementById('sh-person-text-e').style.display=tp==='company'?'none':'block'; document.getElementById('sh-person-select-e').style.display=tp==='company'?'block':'none'; }
-function commitEditSH(cid,idx){
-  var c=data.companies.find(function(x){return x.id===cid;}); if(!c) return;
-  var tp=document.getElementById('sh-type-e').value||'individual';
-  var person=tp==='company'?document.getElementById('sh-person-select-e').value:document.getElementById('sh-person-text-e').value;
-  var pct=parseFloat(document.getElementById('sh-pct-e').value)||0;
-  var cls=document.getElementById('sh-class-e').value||'';
-  if(!person) return;
-  c.shareholders[idx]={id:c.shareholders[idx].id,person:person,pct:pct,class:cls,type:tp};
-  save(); closeModal(); openCompany(cid);
+function commitEditSH(cid,slotId){
+var c=data.companies.find(function(x){return x.id===cid;}); if(!c) return;
+var tp=document.getElementById('sh-type-e').value||'individual';
+var person=tp==='company'?document.getElementById('sh-person-select-e').value:document.getElementById('sh-person-text-e').value;
+var pct=parseFloat(document.getElementById('sh-pct-e').value)||0;
+var cls=document.getElementById('sh-class-e').value||'';
+var shares=document.getElementById('sh-shares-e').value||'';
+var dt=document.getElementById('sh-effdate-e').value;
+var notes=document.getElementById('sh-notes-e').value||'';
+if(!person) return;
+if(!dt){ alert(lang==='en'?'Please enter a valid effective date.':'Por favor ingrese una fecha efectiva valida.'); return; }
+ensureHistory(c);
+c.shareholderHistory.push({id:uid(),slotId:slotId,effectiveDate:dt,person:person,pct:pct,class:cls,type:tp,shares:shares,notes:notes,removed:false});
+recomputeCurrent(c); save(); closeModal(); openCompany(cid);
 }
-function delShareholder(cid,idx){ if(!confirm('Remove shareholder?')) return; var c=data.companies.find(function(x){return x.id===cid;}); if(!c) return; c.shareholders.splice(idx,1); save(); closeModal(); openCompany(cid); }
+function removeSHCurrent(cid,slotId){
+var c=data.companies.find(function(x){return x.id===cid;}); if(!c) return;
+ensureHistory(c);
+var cur=_histLatestPerSlot(c.shareholderHistory)[slotId]; if(!cur) return;
+var h='<div class="modal-header"><div class="modal-title">'+(lang==='en'?'Remove Shareholder':'Quitar Accionista')+'</div><button class="close-btn" onclick="closeModal();openCompany('+q(cid)+')">x</button></div>';
+h+='<div class="modal-body">';
+h+='<div style="margin-bottom:12px">'+(lang==='en'?'This will mark ':'Esto marcara a ')+'<b>'+esc(cur.person||'')+'</b>'+(lang==='en'?' as no longer a current shareholder as of the date below. The history will be preserved.':' como ya no accionista actual a partir de la fecha indicada. El historial se conservara.')+'</div>';
+h+='<div class="form-grid">';
+h+='<div class="form-group"><label class="lbl">'+(lang==='en'?'Effective Date':'Fecha Efectiva')+'</label><input id="sh-rm-date" class="inp" type="date" value="'+new Date().toISOString().slice(0,10)+'"></div>';
+h+='<div class="form-group"><label class="lbl">'+t('notes')+'</label><input id="sh-rm-notes" class="inp"></div>';
+h+='</div></div>';
+h+='<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">';
+h+='<button class="btn btn-outline" onclick="closeModal();openCompany('+q(cid)+')">'+t('cancel')+'</button>';
+h+='<button class="btn btn-danger" onclick="commitRemoveSH('+q(cid)+','+q(slotId)+')">'+(lang==='en'?'Remove':'Quitar')+'</button></div>';
+h+='</div>';
+showModal(h);
+}
+function commitRemoveSH(cid,slotId){
+var c=data.companies.find(function(x){return x.id===cid;}); if(!c) return;
+ensureHistory(c);
+var cur=_histLatestPerSlot(c.shareholderHistory)[slotId]; if(!cur) return;
+var dt=document.getElementById('sh-rm-date').value;
+if(!dt){ alert(lang==='en'?'Please enter a valid effective date.':'Por favor ingrese una fecha efectiva valida.'); return; }
+var notes=document.getElementById('sh-rm-notes').value||'';
+c.shareholderHistory.push({id:uid(),slotId:slotId,effectiveDate:dt,person:cur.person,pct:cur.pct,class:cur.class,type:cur.type,shares:cur.shares,notes:notes,removed:true});
+recomputeCurrent(c); save(); closeModal(); openCompany(cid);
+}
+
+function openAddDirForm(cid){
+var h='<div class="modal-header"><div class="modal-title">'+(lang==='en'?'Add Director':'Agregar Director')+'</div><button class="close-btn" onclick="closeModal();openCompany('+q(cid)+')">x</button></div>';
+h+='<div class="modal-body"><div class="form-grid">';
+h+='<div class="form-group"><label class="lbl">Name</label><input id="dir-name" class="inp"></div>';
+h+='<div class="form-group"><label class="lbl">'+(lang==='en'?'Position':'Cargo')+'</label><input id="dir-position" class="inp" value="Director" placeholder="Director, Alternate Director, Manager, Member..."></div>';
+h+='<div class="form-group"><label class="lbl">'+(lang==='en'?'Effective Date':'Fecha Efectiva')+'</label><input id="dir-effdate" class="inp" type="date" value="'+new Date().toISOString().slice(0,10)+'"></div>';
+h+='<div class="form-group"><label class="lbl">'+t('notes')+'</label><input id="dir-notes" class="inp"></div>';
+h+='</div>';
+h+='<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">';
+h+='<button class="btn btn-outline" onclick="closeModal();openCompany('+q(cid)+')">'+t('cancel')+'</button>';
+h+='<button class="btn btn-primary" onclick="commitAddDir('+q(cid)+')">'+t('save')+'</button></div></div>';
+showModal(h);
+}
+function commitAddDir(cid){
+var c=data.companies.find(function(x){return x.id===cid;}); if(!c) return;
+var name=document.getElementById('dir-name').value||'';
+var position=document.getElementById('dir-position').value||'Director';
+var dt=document.getElementById('dir-effdate').value;
+var notes=document.getElementById('dir-notes').value||'';
+if(!name) return;
+if(!dt){ alert(lang==='en'?'Please enter a valid effective date.':'Por favor ingrese una fecha efectiva valida.'); return; }
+ensureHistory(c);
+c.directorHistory.push({id:uid(),slotId:uid(),effectiveDate:dt,name:name,position:position,notes:notes,removed:false});
+recomputeCurrent(c); save(); closeModal(); openCompany(cid);
+}
+function openEditDirForm(cid,slotId){
+var c=data.companies.find(function(x){return x.id===cid;}); if(!c) return;
+ensureHistory(c);
+var cur=_histLatestPerSlot(c.directorHistory)[slotId]; if(!cur) return;
+var h='<div class="modal-header"><div class="modal-title">'+(lang==='en'?'Update Director':'Actualizar Director')+'</div><button class="close-btn" onclick="closeModal();openCompany('+q(cid)+')">x</button></div>';
+h+='<div class="modal-body"><div class="form-grid">';
+h+='<div class="form-group"><label class="lbl">Name</label><input id="dir-name-e" class="inp" value="'+esc(cur.name||'')+'"></div>';
+h+='<div class="form-group"><label class="lbl">'+(lang==='en'?'Position':'Cargo')+'</label><input id="dir-position-e" class="inp" value="'+esc(cur.position||'Director')+'"></div>';
+h+='<div class="form-group"><label class="lbl">'+(lang==='en'?'New Effective Date':'Nueva Fecha Efectiva')+'</label><input id="dir-effdate-e" class="inp" type="date" value="'+new Date().toISOString().slice(0,10)+'"></div>';
+h+='<div class="form-group"><label class="lbl">'+t('notes')+'</label><input id="dir-notes-e" class="inp" value="'+esc(cur.notes||'')+'"></div>';
+h+='</div>';
+h+='<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">';
+h+='<button class="btn btn-outline" onclick="closeModal();openCompany('+q(cid)+')">'+t('cancel')+'</button>';
+h+='<button class="btn btn-primary" onclick="commitEditDir('+q(cid)+','+q(slotId)+')">'+t('save')+'</button></div></div>';
+showModal(h);
+}
+function commitEditDir(cid,slotId){
+var c=data.companies.find(function(x){return x.id===cid;}); if(!c) return;
+var name=document.getElementById('dir-name-e').value||'';
+var position=document.getElementById('dir-position-e').value||'Director';
+var dt=document.getElementById('dir-effdate-e').value;
+var notes=document.getElementById('dir-notes-e').value||'';
+if(!name) return;
+if(!dt){ alert(lang==='en'?'Please enter a valid effective date.':'Por favor ingrese una fecha efectiva valida.'); return; }
+ensureHistory(c);
+c.directorHistory.push({id:uid(),slotId:slotId,effectiveDate:dt,name:name,position:position,notes:notes,removed:false});
+recomputeCurrent(c); save(); closeModal(); openCompany(cid);
+}
+function removeDirCurrent(cid,slotId){
+var c=data.companies.find(function(x){return x.id===cid;}); if(!c) return;
+ensureHistory(c);
+var cur=_histLatestPerSlot(c.directorHistory)[slotId]; if(!cur) return;
+var h='<div class="modal-header"><div class="modal-title">'+(lang==='en'?'Remove Director':'Quitar Director')+'</div><button class="close-btn" onclick="closeModal();openCompany('+q(cid)+')">x</button></div>';
+h+='<div class="modal-body">';
+h+='<div style="margin-bottom:12px">'+(lang==='en'?'This will mark ':'Esto marcara a ')+'<b>'+esc(cur.name||'')+'</b>'+(lang==='en'?' as no longer a current director as of the date below. The history will be preserved.':' como ya no director actual a partir de la fecha indicada. El historial se conservara.')+'</div>';
+h+='<div class="form-grid">';
+h+='<div class="form-group"><label class="lbl">'+(lang==='en'?'Effective Date':'Fecha Efectiva')+'</label><input id="dir-rm-date" class="inp" type="date" value="'+new Date().toISOString().slice(0,10)+'"></div>';
+h+='<div class="form-group"><label class="lbl">'+t('notes')+'</label><input id="dir-rm-notes" class="inp"></div>';
+h+='</div></div>';
+h+='<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">';
+h+='<button class="btn btn-outline" onclick="closeModal();openCompany('+q(cid)+')">'+t('cancel')+'</button>';
+h+='<button class="btn btn-danger" onclick="commitRemoveDir('+q(cid)+','+q(slotId)+')">'+(lang==='en'?'Remove':'Quitar')+'</button></div>';
+h+='</div>';
+showModal(h);
+}
+function commitRemoveDir(cid,slotId){
+var c=data.companies.find(function(x){return x.id===cid;}); if(!c) return;
+ensureHistory(c);
+var cur=_histLatestPerSlot(c.directorHistory)[slotId]; if(!cur) return;
+var dt=document.getElementById('dir-rm-date').value;
+if(!dt){ alert(lang==='en'?'Please enter a valid effective date.':'Por favor ingrese una fecha efectiva valida.'); return; }
+var notes=document.getElementById('dir-rm-notes').value||'';
+c.directorHistory.push({id:uid(),slotId:slotId,effectiveDate:dt,name:cur.name,position:cur.position,notes:notes,removed:true});
+recomputeCurrent(c); save(); closeModal(); openCompany(cid);
+}
+
+function openHistoryModal(cid,kind){
+var c=data.companies.find(function(x){return x.id===cid;}); if(!c) return;
+ensureHistory(c);
+var key=cid+'_'+kind;
+window._histSort=window._histSort||{};
+if(!window._histSort[key]) window._histSort[key]='desc';
+var title = kind==='sh' ? (lang==='en'?'Shareholder History':'Historial de Accionistas') : (lang==='en'?'Director History':'Historial de Directores');
+var h='<div class="modal-header"><div class="modal-title">'+esc(title)+' - '+esc(c.name)+'</div><button class="close-btn" onclick="closeModal();openCompany('+q(cid)+')">x</button></div>';
+h+='<div class="modal-body">';
+h+='<div style="display:flex;justify-content:flex-end;margin-bottom:10px"><button class="btn btn-outline btn-sm" onclick="toggleHistSort('+q(cid)+','+q(kind)+')">'+(lang==='en'?'Sort: ':'Orden: ')+(window._histSort[key]==='asc'?(lang==='en'?'Oldest first':'Mas antiguo primero'):(lang==='en'?'Newest first':'Mas reciente primero'))+'</button></div>';
+h+='<table><thead><tr>';
+if(kind==='sh'){
+h+='<th>'+(lang==='en'?'Effective Date':'Fecha Efectiva')+'</th><th>'+t('shareholders2')+'</th><th>'+t('ownership')+'</th><th>'+(lang==='en'?'Shares':'Acciones')+'</th><th>'+t('notes')+'</th><th>'+(lang==='en'?'Status':'Estado')+'</th><th></th>';
+} else {
+h+='<th>'+(lang==='en'?'Effective Date':'Fecha Efectiva')+'</th><th>'+(lang==='en'?'Name':'Nombre')+'</th><th>'+(lang==='en'?'Position':'Cargo')+'</th><th>'+t('notes')+'</th><th>'+(lang==='en'?'Status':'Estado')+'</th><th></th>';
+}
+h+='</tr></thead><tbody id="hist-tbody">'+renderHistTable(cid,kind)+'</tbody></table>';
+h+='</div>';
+showModal(h,true);
+}
+function toggleHistSort(cid,kind){
+var key=cid+'_'+kind;
+window._histSort=window._histSort||{};
+window._histSort[key]=(window._histSort[key]==='asc')?'desc':'asc';
+openHistoryModal(cid,kind);
+}
+function renderHistTable(cid,kind){
+var c=data.companies.find(function(x){return x.id===cid;}); if(!c) return '';
+var arr = kind==='sh' ? (c.shareholderHistory||[]) : (c.directorHistory||[]);
+var key = cid+'_'+kind;
+window._histSort=window._histSort||{};
+var dir = window._histSort[key] || 'desc';
+var sorted = arr.slice().sort(function(a,b){
+if(a.effectiveDate<b.effectiveDate) return dir==='asc'?-1:1;
+if(a.effectiveDate>b.effectiveDate) return dir==='asc'?1:-1;
+return 0;
+});
+var ncols = kind==='sh'?7:6;
+var rows='';
+sorted.forEach(function(e){
+if(kind==='sh'){
+rows+='<tr'+(e.removed?' style="opacity:0.55"':'')+'><td>'+esc(e.effectiveDate)+'</td><td>'+esc(e.person||'')+'</td><td>'+(e.pct!=null?e.pct+'%':'')+'</td><td>'+esc(e.shares!=null?e.shares:'')+'</td><td>'+esc(e.notes||'')+'</td><td>'+(e.removed?(lang==='en'?'Removed':'Retirado'):(lang==='en'?'Active':'Activo'))+'</td><td style="white-space:nowrap">';
+} else {
+rows+='<tr'+(e.removed?' style="opacity:0.55"':'')+'><td>'+esc(e.effectiveDate)+'</td><td>'+esc(e.name||'')+'</td><td>'+esc(e.position||'')+'</td><td>'+esc(e.notes||'')+'</td><td>'+(e.removed?(lang==='en'?'Removed':'Retirado'):(lang==='en'?'Active':'Activo'))+'</td><td style="white-space:nowrap">';
+}
+if(isAdmin()){
+rows+='<button class="btn btn-outline btn-sm" onclick="openEditHistEntry('+q(cid)+','+q(kind)+','+q(e.id)+')" style="margin-right:4px">'+(lang==='en'?'Edit':'Editar')+'</button>';
+rows+='<button class="btn btn-danger btn-sm" onclick="delHistEntry('+q(cid)+','+q(kind)+','+q(e.id)+')">'+(lang==='en'?'Delete':'Eliminar')+'</button>';
+}
+rows+='</td></tr>';
+});
+if(!rows) rows='<tr><td colspan="'+ncols+'" class="empty">'+(lang==='en'?'No history yet.':'Sin historial.')+'</td></tr>';
+return rows;
+}
+function openEditHistEntry(cid,kind,entryId){
+var c=data.companies.find(function(x){return x.id===cid;}); if(!c) return;
+var arr = kind==='sh'?c.shareholderHistory:c.directorHistory;
+var e = arr.find(function(x){return x.id===entryId;}); if(!e) return;
+var h='<div class="modal-header"><div class="modal-title">'+(lang==='en'?'Edit History Entry':'Editar Entrada de Historial')+'</div><button class="close-btn" onclick="closeModal();openHistoryModal('+q(cid)+','+q(kind)+')">x</button></div>';
+h+='<div class="modal-body"><div class="form-grid">';
+h+='<div class="form-group"><label class="lbl">'+(lang==='en'?'Effective Date':'Fecha Efectiva')+'</label><input id="hist-e-date" class="inp" type="date" value="'+esc(e.effectiveDate)+'"></div>';
+if(kind==='sh'){
+h+='<div class="form-group"><label class="lbl">Name</label><input id="hist-e-person" class="inp" value="'+esc(e.person||'')+'"></div>';
+h+='<div class="form-group"><label class="lbl">'+t('ownership')+'</label><input id="hist-e-pct" class="inp" type="number" min="0" max="100" value="'+(e.pct!=null?e.pct:'')+'"></div>';
+h+='<div class="form-group"><label class="lbl">'+(lang==='en'?'Shares':'Acciones')+'</label><input id="hist-e-shares" class="inp" value="'+esc(e.shares!=null?e.shares:'')+'"></div>';
+h+='<div class="form-group"><label class="lbl">'+t('shareClass')+'</label><input id="hist-e-class" class="inp" value="'+esc(e.class||'')+'"></div>';
+} else {
+h+='<div class="form-group"><label class="lbl">Name</label><input id="hist-e-name" class="inp" value="'+esc(e.name||'')+'"></div>';
+h+='<div class="form-group"><label class="lbl">'+(lang==='en'?'Position':'Cargo')+'</label><input id="hist-e-position" class="inp" value="'+esc(e.position||'Director')+'"></div>';
+}
+h+='<div class="form-group"><label class="lbl">'+t('notes')+'</label><input id="hist-e-notes" class="inp" value="'+esc(e.notes||'')+'"></div>';
+h+='<div class="form-group"><label class="lbl">'+(lang==='en'?'Removed?':'Retirado?')+'</label><select id="hist-e-removed" class="inp"><option value="0"'+(!e.removed?' selected':'')+'>'+(lang==='en'?'No':'No')+'</option><option value="1"'+(e.removed?' selected':'')+'>'+(lang==='en'?'Yes':'Si')+'</option></select></div>';
+h+='</div>';
+h+='<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">';
+h+='<button class="btn btn-outline" onclick="closeModal();openHistoryModal('+q(cid)+','+q(kind)+')">'+t('cancel')+'</button>';
+h+='<button class="btn btn-primary" onclick="commitEditHistEntry('+q(cid)+','+q(kind)+','+q(entryId)+')">'+t('save')+'</button></div></div>';
+showModal(h);
+}
+function commitEditHistEntry(cid,kind,entryId){
+var c=data.companies.find(function(x){return x.id===cid;}); if(!c) return;
+var arr = kind==='sh'?c.shareholderHistory:c.directorHistory;
+var e = arr.find(function(x){return x.id===entryId;}); if(!e) return;
+var dt=document.getElementById('hist-e-date').value;
+if(!dt){ alert(lang==='en'?'Please enter a valid effective date.':'Por favor ingrese una fecha efectiva valida.'); return; }
+e.effectiveDate=dt;
+e.notes=document.getElementById('hist-e-notes').value||'';
+e.removed=document.getElementById('hist-e-removed').value==='1';
+if(kind==='sh'){
+e.person=document.getElementById('hist-e-person').value||'';
+e.pct=parseFloat(document.getElementById('hist-e-pct').value)||0;
+e.shares=document.getElementById('hist-e-shares').value||'';
+e.class=document.getElementById('hist-e-class').value||'';
+} else {
+e.name=document.getElementById('hist-e-name').value||'';
+e.position=document.getElementById('hist-e-position').value||'Director';
+}
+recomputeCurrent(c); save(); closeModal(); openHistoryModal(cid,kind);
+}
+function delHistEntry(cid,kind,entryId){
+if(!confirm(lang==='en'?'Delete this history entry? This cannot be undone.':'Eliminar esta entrada de historial? Esto no se puede deshacer.')) return;
+var c=data.companies.find(function(x){return x.id===cid;}); if(!c) return;
+var arr = kind==='sh'?c.shareholderHistory:c.directorHistory;
+var i = arr.findIndex(function(x){return x.id===entryId;}); if(i<0) return;
+arr.splice(i,1);
+recomputeCurrent(c); save(); openHistoryModal(cid,kind);
+}
 function delSubLink(subId,pid){ if(!confirm('Remove link? Company stays.')) return; var s=data.companies.find(function(x){return x.id===subId;}); if(!s) return; s.shareholders=s.shareholders.filter(function(sh){return !(sh.type==='company'&&sh.person===pid);}); save(); closeModal(); openCompany(pid); }
 function delInvFromModal(invId,cid){ if(!confirm('Delete investment?')) return; data.investments=data.investments.filter(function(x){return x.id!==invId;}); save(); closeModal(); openCompany(cid); }
 function delBankAccount(cid,idx){ if(!confirm('Delete bank account?')) return; var c=data.companies.find(function(x){return x.id===cid;}); if(!c) return; c.banking.splice(idx,1); save(); var el=document.getElementById('bank-view-list'); if(el) el.innerHTML=renderBankView(cid); }
