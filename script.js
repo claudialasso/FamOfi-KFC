@@ -713,8 +713,8 @@ function renderCompanies(){
   h+='<input type="text" id="co-search-input" placeholder="'+t('search')+'" value="'+esc(cSearch)+'" oninput="cSearch=this.value;rerenderMain()"></div>';
   h+='<select class="filter" id="co-jur-filter" onchange="cJur=this.value;rerenderMain()"><option value="">'+t('allJurisdictions')+'</option>';
   jurs.forEach(function(j){h+='<option value="'+esc(j)+'"'+(cJur===j?' selected':'')+'>'+esc(j)+'</option>';});
-  h+='</select><select class="filter" id="co-status-filter" onchange="cStatus=this.value;rerenderMain()"><option value="">'+t('allStatus')+'</option>';
-  h+='<option value="active">'+t('active')+'</option><option value="liquidated">'+t('liquidated')+'</option><option value="liquidation">'+t('liquidation')+'</option></select></div>';
+h+='</select><select class="filter" id="co-status-filter" onchange="cStatus=this.value;rerenderMain()"><option value=""'+(cStatus===''?' selected':'')+'>'+t('allStatus')+'</option>';
+  h+='<option value="active"'+(cStatus==='active'?' selected':'')+'>'+t('active')+'</option><option value="liquidated"'+(cStatus==='liquidated'?' selected':'')+'>'+t('liquidated')+'</option><option value="liquidation"'+(cStatus==='liquidation'?' selected':'')+'>'+t('liquidation')+'</option></select></div>';
   h+='<div class="card" style="padding:0"><table><thead><tr><th style="width:36px"><input type="checkbox" id="co-select-all" onclick="toggleAllCoSelect(this)" style="cursor:pointer"></th><th>'+t('name')+'</th><th>'+t('jurisdiction')+'</th><th>'+t('yearFounded')+'</th><th>'+t('director')+'</th><th>'+t('shareholders2')+'</th><th>'+t('status')+'</th><th></th></tr></thead><tbody>';
   if(!cs.length){ h+='<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text3)">'+t('noCompanies')+'</td></tr>'; }
   else { cs.forEach(function(c){
