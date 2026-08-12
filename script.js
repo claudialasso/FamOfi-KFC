@@ -1623,7 +1623,7 @@ function openEditSHForm(cid,slotId){
   h+='<div class="form-group"><label class="lbl">'+t('ownership')+'</label><input id="sh-pct-e" class="inp" type="number" min="0" max="100" value="'+cur.pct+'"></div>';
   h+='<div class="form-group"><label class="lbl">'+t('shareClass')+'</label><input id="sh-class-e" class="inp" value="'+esc(cur.class||'')+'"></div>';
   h+='<div class="form-group"><label class="lbl">'+(lang==='en'?'Shares':'Acciones')+'</label><input id="sh-shares-e" class="inp" value="'+esc(cur.shares!=null?cur.shares:'')+'"></div>';
-  h+='<div class="form-group"><label class="lbl">'+(lang==='en'?'New Start Date':'Nueva Fecha de Inicio')+'</label><input id="sh-effdate-e" class="inp" type="date" value="'+new Date().toISOString().slice(0,10)+'"></div>';
+  h+='<div class="form-group"><label class="lbl">'+(lang==='en'?'New Start Date':'Nueva Fecha de Inicio')+'</label><input id="sh-effdate-e" class="inp" type="date" value="'+esc(cur.effectiveDate||'')+'"></div>';
   h+='<div class="form-group"><label class="lbl">'+(lang==='en'?'Cease Date (optional)':'Fecha de Cese (opcional)')+'</label><input id="sh-ceasedate-e" class="inp" type="date"></div>';
   h+='<div class="form-group"><label class="lbl">'+t('notes')+'</label><input id="sh-notes-e" class="inp" value="'+esc(cur.notes||'')+'"></div>';
   h+='</div>';
@@ -1646,8 +1646,13 @@ function commitEditSH(cid,slotId){
   if(!person) return;
   if(!dt){ alert(lang==='en'?'Please enter a valid start date.':'Por favor ingrese una fecha de inicio valida.'); return; }
   if(ceaseDt && ceaseDt<dt){ alert(lang==='en'?'Cease date cannot be before the start date.':'La fecha de cese no puede ser anterior a la fecha de inicio.'); return; }
-  ensureHistory(c);
-  c.shareholderHistory.push({id:uid(),slotId:slotId,effectiveDate:dt,person:person,pct:pct,class:cls,type:tp,shares:shares,notes:notes,removed:false});
+ensureHistory(c);
+  var latest=_histLatestPerSlot(c.shareholderHistory)[slotId];
+  if(latest && latest.effectiveDate===dt && !latest.removed){
+    latest.person=person; latest.pct=pct; latest.class=cls; latest.type=tp; latest.shares=shares; latest.notes=notes;
+  } else {
+    c.shareholderHistory.push({id:uid(),slotId:slotId,effectiveDate:dt,person:person,pct:pct,class:cls,type:tp,shares:shares,notes:notes,removed:false});
+  }
   if(ceaseDt){
     c.shareholderHistory.push({id:uid(),slotId:slotId,effectiveDate:ceaseDt,person:person,pct:pct,class:cls,type:tp,shares:shares,notes:notes,removed:true});
   }
