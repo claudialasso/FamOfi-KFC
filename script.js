@@ -2617,6 +2617,7 @@ function printCompany(id){
  
 // ── Modal ────────────────────────────────────────────────────────────────────
 function showModal(html,lg){
+  document.querySelectorAll('#modal-overlay').forEach(function(o){ o.remove(); });
   var ov=document.createElement('div'); ov.className='overlay'; ov.id='modal-overlay';
   var m=document.createElement('div'); m.className='modal'+(lg?' modal-lg':''); m.innerHTML=html;
   ov.appendChild(m); document.body.appendChild(ov);
@@ -2624,8 +2625,12 @@ function showModal(html,lg){
 }
 // Pass rerender=true only when closing after a data-mutating action.
 // This prevents unnecessary full re-renders on every modal close (the main lag source).
+// All overlays share id/selector 'modal-overlay'; showModal/closeModal always clear ALL
+// matching overlays (not just the first) so stale/orphaned modals never stack or block clicks.
 function closeModal(rerender){
-  var ov=document.getElementById('modal-overlay');
-  if(ov) ov.remove();
+  document.querySelectorAll('#modal-overlay').forEach(function(o){ o.remove(); });
   if(rerender) render();
 }
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape' && document.getElementById('modal-overlay')) closeModal();
+});
