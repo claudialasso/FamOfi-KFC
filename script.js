@@ -974,13 +974,15 @@ buildTabLazy(panel);
 }// -- Org Chart: filters state ------------------------------------------------
 
 // -- Org Chart: per-company selection state ---------------------------------
-var _orgSelOrder = [];
+var _orgActiveCompanyId = null;
 var _orgSelSettings = {};
 var _orgCoSearch = '';
 
-function orgDefaultSettings(){ return { show:true, shareholders:true, subsidiaries:true, investments:true, invIds:null }; }
+function orgDefaultSettings(){ return { shareholders:true, subsidiaries:true, investments:true, invIds:null, shIds:null, subIds:null }; }
 function orgEnsureSettings(id){ if(!_orgSelSettings[id]) _orgSelSettings[id]=orgDefaultSettings(); return _orgSelSettings[id]; }
 function orgCompanyInvestments(cid){ return data.investments.filter(function(i){ return invCoIds(i).indexOf(cid)!==-1; }); }
+function orgCompanyShareholders(cid){ var c=data.companies.find(function(x){return x.id===cid;}); return c?c.shareholders:[]; }
+function orgCompanySubsidiaries(cid){ return getSubs(cid); }
 
 // -- Org Chart: graph builder (each entity appears exactly once) ------------
 function orgBuildGraph(cid, opts){
@@ -989,6 +991,8 @@ function orgBuildGraph(cid, opts){
   var showDown = opts.subsidiaries !== false;
   var showInv = opts.investments !== false;
   var invFilter = opts.invIds || null;
+var shFilter = opts.shIds || null;
+var subFilter = opts.subIds || null;
   var companies = _sanitizedCompanies();
   var byId = {};
   companies.forEach(function(c){ byId[c.id]=c; });
@@ -1011,11 +1015,12 @@ function orgBuildGraph(cid, opts){
     while(frontierUp.length && depth<MAXD){
       depth++;
       var next=[];
-      frontierUp.forEach(function(fid){
-        var comp=byId[fid];
-        if(!comp) return;
-        (comp.shareholders||[]).forEach(function(s){
-          if(s.type==='company'){
+frontierUp.forEach(function(fid){
+var comp=byId[fid];
+if(!comp) return;
+(comp.shareholders||[]).forEach(function(s){
+if(fid===cid && shFilter && !shFilter.has(s.id)) return;
+if(s.type==='company'){
             var pid=s.person;
             if(!byId[pid]) return;
             var key='co:'+pid;
@@ -1055,9 +1060,10 @@ function orgBuildGraph(cid, opts){
     while(frontierDown.length && depth2<MAXD2){
       depth2++;
       var next2=[];
-      frontierDown.forEach(function(fid){
-        getSubs(fid).forEach(function(sc){
-          var key='co:'+sc.id;
+frontierDown.forEach(function(fid){
+getSubs(fid).forEach(function(sc){
+if(fid===cid && subFilter && !subFilter.has(sc.id)) return;
+var key='co:'+sc.id;
           if(!nodes[key]){
             nodes[key]={key:key,kind:'subsidiary',refId:sc.id,coId:sc.id,name:sc.name,jur:sc.jurisdiction,sub:'',rank:depth2};
             next2.push(sc.id);
@@ -1230,10 +1236,10 @@ function buildFullOrgChart(cid){
   return orgRenderGraphHTML(g.nodes, g.edges, g.focalKey);
 }
 function buildFilteredOrgChart(cid, settings){
-  settings = settings || {};
-  var g = orgBuildGraph(cid, {shareholders:settings.shareholders!==false, subsidiaries:settings.subsidiaries!==false, investments:settings.investments!==false, invIds:settings.invIds||null});
-  if(!g) return '';
-  return orgRenderGraphHTML(g.nodes, g.edges, g.focalKey);
+settings = settings || {};
+var g = orgBuildGraph(cid, {shareholders:settings.shareholders!==false, subsidiaries:settings.subsidiaries!==false, investments:settings.investments!==false, invIds:settings.invIds||null, shIds:settings.shIds||null, subIds:settings.subIds||null});
+if(!g) return '';
+return orgRenderGraphHTML(g.nodes, g.edges, g.focalKey);
 }
 
 function orgChartDirectCards(el){
@@ -1647,114 +1653,129 @@ window.addEventListener('afterprint', function(){
 });
 
 // -- Org Charts Tab -----------------------------------------------------------
-function orgAddSelectedCompany(id){
-  if(_orgSelOrder.indexOf(id)===-1){ _orgSelOrder.push(id); orgEnsureSettings(id); }
-  var m=document.getElementById('main'); if(m) m.innerHTML=renderOrgCharts();
-}
-function orgRemoveSelectedCompany(id){
-  var idx=_orgSelOrder.indexOf(id);
-  if(idx!==-1) _orgSelOrder.splice(idx,1);
-  delete _orgSelSettings[id];
-  var m=document.getElementById('main'); if(m) m.innerHTML=renderOrgCharts();
+function orgSelectCompany(id){
+_orgActiveCompanyId = id;
+orgEnsureSettings(id);
+var m=document.getElementById('main'); if(m) m.innerHTML=renderOrgCharts();
 }
 function orgSetCompanySetting(id, field, val){
-  var st=orgEnsureSettings(id);
-  st[field]=val;
-  var m=document.getElementById('main'); if(m) m.innerHTML=renderOrgCharts();
+var st=orgEnsureSettings(id);
+st[field]=val;
+var m=document.getElementById('main'); if(m) m.innerHTML=renderOrgCharts();
 }
-function orgToggleCompanyInvestment(id, invId, checked){
-  var st=orgEnsureSettings(id);
-  if(!st.invIds){ st.invIds = new Set(orgCompanyInvestments(id).map(function(i){ return i.id; })); }
-  if(checked) st.invIds.add(invId); else st.invIds.delete(invId);
-  var all = orgCompanyInvestments(id).map(function(i){ return i.id; });
-  if(all.length && st.invIds.size===all.length) st.invIds=null;
-  var m=document.getElementById('main'); if(m) m.innerHTML=renderOrgCharts();
+function orgToggleCompanyNode(id, kind, nodeId, checked){
+var st=orgEnsureSettings(id);
+var field, allItems;
+if(kind==='sh'){ field='shIds'; allItems=orgCompanyShareholders(id).map(function(s){ return s.id; }); }
+else if(kind==='sub'){ field='subIds'; allItems=orgCompanySubsidiaries(id).map(function(s){ return s.id; }); }
+else { field='invIds'; allItems=orgCompanyInvestments(id).map(function(i){ return i.id; }); }
+if(!st[field]){ st[field] = new Set(allItems); }
+if(checked) st[field].add(nodeId); else st[field].delete(nodeId);
+if(allItems.length && st[field].size===allItems.length) st[field]=null;
+var m=document.getElementById('main'); if(m) m.innerHTML=renderOrgCharts();
 }
 function filterOrgCompanyList(qv){
-  var list=document.getElementById('org-co-list');
-  if(!list) return;
-  var btns=list.querySelectorAll('button');
-  var search=(qv||'').toLowerCase().trim();
-  btns.forEach(function(btn){ btn.style.display=(!search||btn.textContent.toLowerCase().includes(search))?'flex':'none'; });
+var list=document.getElementById('org-co-list');
+if(!list) return;
+var btns=list.querySelectorAll('button');
+var search=(qv||'').toLowerCase().trim();
+btns.forEach(function(btn){ btn.style.display=(!search||btn.textContent.toLowerCase().includes(search))?'flex':'none'; });
 }
 function renderOrgCharts(){
-  var cs=data.companies.slice().sort(function(a,b){ var an=a.name.toLowerCase(), bn=b.name.toLowerCase(); return an<bn?-1:an>bn?1:0; });
-  var h='<div class="section-header"><div class="section-title">'+t('orgcharts')+'</div></div>';
-  h+='<div class="org-charts-layout">';
-  h+='<div class="org-filter-sidebar">';
-  h+='<div class="card org-filter-section">';
-  h+='<div class="org-filter-title">'+(lang==='en'?'Add Company':'Agregar Empresa')+'</div>';
-  h+='<input type="text" placeholder="'+(lang==='en'?'Search companies...':'Buscar empresas...')+'" value="'+esc(_orgCoSearch)+'" oninput="_orgCoSearch=this.value;filterOrgCompanyList(this.value)" style="width:100%;padding:6px 10px;border-radius:var(--radius-sm);border:1.5px solid var(--border);font-size:12px;margin-bottom:8px;box-sizing:border-box">';
-  h+='<div class="org-filter-list" id="org-co-list" style="max-height:180px">';
-  var addable=cs.filter(function(c){ return _orgSelOrder.indexOf(c.id)===-1; });
-  addable.forEach(function(c){
-    h+='<button onclick="orgAddSelectedCompany('+q(c.id)+')" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:7px 11px;border-radius:var(--radius-sm);font-size:13px;cursor:pointer;font-family:inherit;border:none;background:transparent;color:var(--text);margin-bottom:1px">';
-    h+='<span style="flex:1">'+esc(c.name)+'</span>';
-    if(c.jurisdiction) h+='<span style="font-size:11px;padding:1px 7px;border-radius:10px;background:var(--border);color:var(--text2)">'+esc(c.jurisdiction)+'</span>';
-    h+='</button>';
-  });
-  if(!addable.length) h+='<div style="padding:10px;color:var(--text3);font-size:12px">'+(cs.length?(lang==='en'?'All companies added':'Todas las empresas agregadas'):t('noCompanies'))+'</div>';
-  h+='</div></div>';
-  h+='<div class="card org-filter-section">';
-  h+='<div class="org-filter-title">'+(lang==='en'?'Selected Companies':'Empresas Seleccionadas')+'</div>';
-  if(!_orgSelOrder.length){
-    h+='<div style="padding:10px;color:var(--text3);font-size:12px">'+(lang==='en'?'Add a company above to get started':'Agregue una empresa arriba para comenzar')+'</div>';
-  } else {
-    _orgSelOrder.forEach(function(id){
-      var c=cs.find(function(x){ return x.id===id; });
-      if(!c) return;
-      var st=orgEnsureSettings(id);
-      h+='<div style="border:1px solid var(--border);border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:8px;background:var(--bg)">';
-      h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">';
-      h+='<span style="font-size:12.5px;font-weight:700">'+esc(c.name)+'</span>';
-      h+='<button onclick="orgRemoveSelectedCompany('+q(id)+')" title="'+(lang==='en'?'Remove':'Quitar')+'" style="border:none;background:transparent;color:var(--text3);cursor:pointer;font-size:15px;line-height:1;padding:0 2px">×</button>';
-      h+='</div>';
-      h+='<label class="org-filter-option"><input type="checkbox" '+(st.show?'checked':'')+' onchange="orgSetCompanySetting('+q(id)+',\'show\',this.checked)"> <span>'+(lang==='en'?'Show company':'Mostrar empresa')+'</span></label>';
-      h+='<label class="org-filter-option"><input type="checkbox" '+(st.shareholders?'checked':'')+' onchange="orgSetCompanySetting('+q(id)+',\'shareholders\',this.checked)"> <span>'+(lang==='en'?'Show shareholders':'Mostrar accionistas')+'</span></label>';
-      h+='<label class="org-filter-option"><input type="checkbox" '+(st.subsidiaries?'checked':'')+' onchange="orgSetCompanySetting('+q(id)+',\'subsidiaries\',this.checked)"> <span>'+(lang==='en'?'Show subsidiaries':'Mostrar subsidiarias')+'</span></label>';
-      h+='<label class="org-filter-option"><input type="checkbox" '+(st.investments?'checked':'')+' onchange="orgSetCompanySetting('+q(id)+',\'investments\',this.checked)"> <span>'+(lang==='en'?'Show investments':'Mostrar inversiones')+'</span></label>';
-      if(st.investments){
-        var invs=orgCompanyInvestments(id);
-        if(invs.length){
-          h+='<div style="margin-left:18px;margin-top:2px">';
-          invs.forEach(function(inv){
-            var incl=!st.invIds || st.invIds.has(inv.id);
-            h+='<label class="org-filter-option" style="padding:2px 2px"><input type="checkbox" '+(incl?'checked':'')+' onchange="orgToggleCompanyInvestment('+q(id)+','+q(inv.id)+',this.checked)"> <span style="font-size:12px">'+esc(inv.name)+'</span></label>';
-          });
-          h+='</div>';
-        } else {
-          h+='<div style="margin-left:18px;color:var(--text3);font-size:11.5px">'+t('noData')+'</div>';
-        }
-      }
-      h+='</div>';
-    });
-  }
-  h+='</div>';
-  h+='</div>';
-  h+='<div class="org-chart-main" style="flex:1;min-width:0">';
-  var visibleIds=_orgSelOrder.filter(function(id){ var st=orgEnsureSettings(id); return st.show!==false; });
-  if(!visibleIds.length){
-    h+='<div class="card" style="text-align:center;padding:48px;color:var(--text3)">';
-    h+='<div style="font-size:32px;margin-bottom:12px">🏢</div>';
-    h+='<div style="font-size:15px">'+t('selectCompany')+'</div></div>';
-  } else {
-    visibleIds.forEach(function(id){
-      var c=cs.find(function(x){ return x.id===id; });
-      if(!c) return;
-      var st=orgEnsureSettings(id);
-      h+='<div class="card" style="margin-bottom:14px;padding:12px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">';
-      h+='<div style="font-size:13px;font-weight:600">'+esc(c.name)+' — '+t('orgChart')+'</div>';
-      h+='<div style="display:flex;gap:8px">';
-      h+='<button class="btn btn-teal btn-sm" onclick="printOrgChart('+q(c.id)+')">🖨 '+t('printChart')+'</button>';
-      h+='<button class="btn btn-outline btn-sm" onclick="printOrgChart('+q(c.id)+')">⭳ PDF / PNG</button>';
-      h+='</div></div>';
-      h+='<div class="card org-chart-card" style="margin-bottom:20px">'+buildFilteredOrgChart(c.id, st)+'</div>';
-    });
-  }
-  h+='</div>';
-  h+='</div>';
-  setTimeout(function(){ if(window.activateOrgChartTab) window.activateOrgChartTab(); filterOrgCompanyList(_orgCoSearch); }, 0);
-  return h;
+var cs=data.companies.slice().sort(function(a,b){ var an=a.name.toLowerCase(), bn=b.name.toLowerCase(); return an<bn?-1:an>bn?1:0; });
+if(_orgActiveCompanyId && !cs.find(function(x){ return x.id===_orgActiveCompanyId; })) _orgActiveCompanyId=null;
+var h='<div class="section-header"><div class="section-title">'+t('orgcharts')+'</div></div>';
+h+='<div class="org-charts-layout">';
+h+='<div class="org-filter-sidebar">';
+h+='<div class="card org-filter-section">';
+h+='<div class="org-filter-title">'+(lang==='en'?'Companies':'Empresas')+'</div>';
+h+='<input type="text" placeholder="'+(lang==='en'?'Search companies...':'Buscar empresas...')+'" value="'+esc(_orgCoSearch)+'" oninput="_orgCoSearch=this.value;filterOrgCompanyList(this.value)" style="width:100%;padding:6px 10px;border-radius:var(--radius-sm);border:1.5px solid var(--border);font-size:12px;margin-bottom:8px;box-sizing:border-box">';
+h+='<div class="org-filter-list" id="org-co-list" style="max-height:220px">';
+cs.forEach(function(c){
+var isActive=(_orgActiveCompanyId===c.id);
+h+='<button onclick="orgSelectCompany('+q(c.id)+')" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:7px 11px;border-radius:var(--radius-sm);font-size:13px;cursor:pointer;font-family:inherit;border:none;background:'+(isActive?'var(--accent-bg)':'transparent')+';color:'+(isActive?'var(--accent)':'var(--text)')+';font-weight:'+(isActive?'700':'400')+';margin-bottom:1px">';
+h+='<span style="flex:1">'+esc(c.name)+'</span>';
+if(c.jurisdiction) h+='<span style="font-size:11px;padding:1px 7px;border-radius:10px;background:var(--border);color:var(--text2)">'+esc(c.jurisdiction)+'</span>';
+h+='</button>';
+});
+if(!cs.length) h+='<div style="padding:10px;color:var(--text3);font-size:12px">'+t('noCompanies')+'</div>';
+h+='</div></div>';
+h+='<div class="card org-filter-section">';
+h+='<div class="org-filter-title">'+(lang==='en'?'Chart Settings':'Configuracion del Grafico')+'</div>';
+if(!_orgActiveCompanyId){
+h+='<div style="padding:10px;color:var(--text3);font-size:12px">'+(lang==='en'?'Select a company above to configure its chart':'Seleccione una empresa arriba para configurar su grafico')+'</div>';
+} else {
+var activeId=_orgActiveCompanyId;
+var ac=cs.find(function(x){ return x.id===activeId; });
+var st=orgEnsureSettings(activeId);
+h+='<div style="font-size:12.5px;font-weight:700;margin-bottom:8px">'+esc(ac.name)+'</div>';
+h+='<label class="org-filter-option"><input type="checkbox" '+(st.shareholders?'checked':'')+' onchange="orgSetCompanySetting('+q(activeId)+',\'shareholders\',this.checked)"> <span>'+(lang==='en'?'Show shareholders':'Mostrar accionistas')+'</span></label>';
+if(st.shareholders){
+var shs=orgCompanyShareholders(activeId);
+if(shs.length){
+h+='<div style="margin-left:18px;margin-top:2px">';
+shs.forEach(function(s){
+var incl=!st.shIds || st.shIds.has(s.id);
+h+='<label class="org-filter-option" style="padding:2px 2px"><input type="checkbox" '+(incl?'checked':'')+' onchange="orgToggleCompanyNode('+q(activeId)+',\'sh\','+q(s.id)+',this.checked)"> <span style="font-size:12px">'+esc(resolveOwner(s))+'</span></label>';
+});
+h+='</div>';
+} else {
+h+='<div style="margin-left:18px;color:var(--text3);font-size:11.5px">'+t('noData')+'</div>';
+}
+}
+h+='<label class="org-filter-option"><input type="checkbox" '+(st.subsidiaries?'checked':'')+' onchange="orgSetCompanySetting('+q(activeId)+',\'subsidiaries\',this.checked)"> <span>'+(lang==='en'?'Show subsidiaries':'Mostrar subsidiarias')+'</span></label>';
+if(st.subsidiaries){
+var subs=orgCompanySubsidiaries(activeId);
+if(subs.length){
+h+='<div style="margin-left:18px;margin-top:2px">';
+subs.forEach(function(sc){
+var incl=!st.subIds || st.subIds.has(sc.id);
+h+='<label class="org-filter-option" style="padding:2px 2px"><input type="checkbox" '+(incl?'checked':'')+' onchange="orgToggleCompanyNode('+q(activeId)+',\'sub\','+q(sc.id)+',this.checked)"> <span style="font-size:12px">'+esc(sc.name)+'</span></label>';
+});
+h+='</div>';
+} else {
+h+='<div style="margin-left:18px;color:var(--text3);font-size:11.5px">'+t('noData')+'</div>';
+}
+}
+h+='<label class="org-filter-option"><input type="checkbox" '+(st.investments?'checked':'')+' onchange="orgSetCompanySetting('+q(activeId)+',\'investments\',this.checked)"> <span>'+(lang==='en'?'Show investments':'Mostrar inversiones')+'</span></label>';
+if(st.investments){
+var invs=orgCompanyInvestments(activeId);
+if(invs.length){
+h+='<div style="margin-left:18px;margin-top:2px">';
+invs.forEach(function(inv){
+var incl=!st.invIds || st.invIds.has(inv.id);
+h+='<label class="org-filter-option" style="padding:2px 2px"><input type="checkbox" '+(incl?'checked':'')+' onchange="orgToggleCompanyNode('+q(activeId)+',\'inv\','+q(inv.id)+',this.checked)"> <span style="font-size:12px">'+esc(inv.name)+'</span></label>';
+});
+h+='</div>';
+} else {
+h+='<div style="margin-left:18px;color:var(--text3);font-size:11.5px">'+t('noData')+'</div>';
+}
+}
+}
+h+='</div>';
+h+='</div>';
+h+='<div class="org-chart-main" style="flex:1;min-width:0">';
+if(!_orgActiveCompanyId){
+h+='<div class="card" style="text-align:center;padding:48px;color:var(--text3)">';
+h+='<div style="font-size:32px;margin-bottom:12px">\uD83C\uDFE2</div>';
+h+='<div style="font-size:15px">'+t('selectCompany')+'</div></div>';
+} else {
+var c=cs.find(function(x){ return x.id===_orgActiveCompanyId; });
+if(c){
+var st2=orgEnsureSettings(c.id);
+h+='<div class="card" style="margin-bottom:14px;padding:12px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">';
+h+='<div style="font-size:13px;font-weight:600">'+esc(c.name)+' \u2014 '+t('orgChart')+'</div>';
+h+='<div style="display:flex;gap:8px">';
+h+='<button class="btn btn-teal btn-sm" onclick="printOrgChart('+q(c.id)+')">\uD83D\uDDA8 '+t('printChart')+'</button>';
+h+='<button class="btn btn-outline btn-sm" onclick="printOrgChart('+q(c.id)+')">\u2B73 PDF / PNG</button>';
+h+='</div></div>';
+h+='<div class="card org-chart-card" style="margin-bottom:20px">'+buildFilteredOrgChart(c.id, st2)+'</div>';
+}
+}
+h+='</div>';
+h+='</div>';
+setTimeout(function(){ if(window.activateOrgChartTab) window.activateOrgChartTab(); filterOrgCompanyList(_orgCoSearch); }, 0);
+return h;
 }
 function openAddSHForm(cid){
   var h='<div class="modal-header"><div class="modal-title">'+t('addShareholder')+'</div><button class="close-btn" onclick="closeModal();openCompany('+q(cid)+')">x</button></div>';
