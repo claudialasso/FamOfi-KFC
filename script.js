@@ -1221,8 +1221,7 @@ var subFilter = opts.subIds || null;
     var n=nodes[key];
     if(n.kind==='investment' || n.kind==='focal') return;
     var rec=incoming[key];
-    var pctStr=(rec && rec.count===1 && rec.pct!=null) ? (rec.pct+'% ') : '';
-    n.sub = (pctStr+(n.jur||'')).trim();
+    n.sub = (n.jur||'').trim();
   });
   return {nodes:nodes, edges:edges, focalKey:focalKey};
 }
@@ -1290,7 +1289,7 @@ function orgRenderGraphHTML(nodes, edges, focalKey){
   edges.forEach(function(e){
     var a=nodes[e.from], b=nodes[e.to];
     if(!a||!b) return;
-    htmlEdges.push(orgEdgePath(e.from, e.to, a._cx, a._cy, b._cx, b._cy));
+    htmlEdges.push(orgEdgePath(e.from, e.to, a._cx, a._cy, b._cx, b._cy, e.pct));
   });
   var legend='<div class="org-legend" style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-bottom:20px;font-size:12px;font-weight:600">'
     +'<span style="color:var(--amber)">Individual Shareholder</span>'
@@ -1332,12 +1331,20 @@ return '<div class="'+cls+'" data-node-key="'+esc(node.key)+'" style="'+style+'"
 +(node.sub?'<div class="org-card-sub">'+esc(node.sub)+'</div>':'')
 +'</div>';
 }
-function orgEdgePath(fromKey,toKey,x1,y1,x2,y2){
+function orgEdgePath(fromKey,toKey,x1,y1,x2,y2,pct){
 var top = y1<=y2 ? {x:x1,y:y1+ORG_CARD_H/2} : {x:x2,y:y2+ORG_CARD_H/2};
 var bot = y1<=y2 ? {x:x2,y:y2-ORG_CARD_H/2} : {x:x1,y:y1-ORG_CARD_H/2};
 var midY=(top.y+bot.y)/2;
 var d='M '+top.x+' '+top.y+' L '+top.x+' '+midY+' L '+bot.x+' '+midY+' L '+bot.x+' '+bot.y;
-return '<path d="'+d+'" fill="none" stroke="var(--border2,#c7cbe0)" stroke-width="1.5" data-edge-from="'+esc(fromKey)+'" data-edge-to="'+esc(toKey)+'"></path>';
+var pathEl='<path d="'+d+'" fill="none" stroke="var(--border2,#c7cbe0)" stroke-width="1.5" data-edge-from="'+esc(fromKey)+'" data-edge-to="'+esc(toKey)+'"></path>';
+if(pct==null) return pathEl;
+var labelText=pct+'%';
+var charW=7, pw=Math.max(labelText.length*charW+10,28), ph=16;
+// Place label on the segment descending into the "to" node — unique per child, never ambiguous
+var lx=x2, edgeOfTo=y1<=y2?(y2-ORG_CARD_H/2):(y2+ORG_CARD_H/2), ly=(midY+edgeOfTo)/2;
+var label='<rect x="'+(lx-pw/2)+'" y="'+(ly-ph/2)+'" width="'+pw+'" height="'+ph+'" rx="8" ry="8" fill="var(--surface,#fff)" stroke="var(--border2,#c5ccdf)" stroke-width="1"></rect>'
++'<text x="'+lx+'" y="'+(ly+4)+'" text-anchor="middle" font-size="10" font-weight="600" font-family="system-ui,sans-serif" fill="var(--text2,#5a6080)">'+esc(labelText)+'</text>';
+return pathEl+label;
 }
 
 
