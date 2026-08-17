@@ -1340,8 +1340,8 @@ var pathEl='<path d="'+d+'" fill="none" stroke="var(--border2,#c7cbe0)" stroke-w
 if(pct==null) return pathEl;
 var labelText=pct+'%';
 var charW=7, pw=Math.max(labelText.length*charW+10,28), ph=16;
-// Place label on the segment descending into the "to" node — unique per child, never ambiguous
-var lx=x2, edgeOfTo=y1<=y2?(y2-ORG_CARD_H/2):(y2+ORG_CARD_H/2), ly=(midY+edgeOfTo)/2;
+// Place label at midpoint of horizontal segment: unique per edge in all topologies
+var lx=(top.x+bot.x)/2, ly=midY;
 var label='<rect x="'+(lx-pw/2)+'" y="'+(ly-ph/2)+'" width="'+pw+'" height="'+ph+'" rx="8" ry="8" fill="var(--surface,#fff)" stroke="var(--border2,#c5ccdf)" stroke-width="1"></rect>'
 +'<text x="'+lx+'" y="'+(ly+4)+'" text-anchor="middle" font-size="10" font-weight="600" font-family="system-ui,sans-serif" fill="var(--text2,#5a6080)">'+esc(labelText)+'</text>';
 return pathEl+label;
