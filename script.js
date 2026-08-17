@@ -1512,46 +1512,67 @@ var vp = (btn && btn.closest) ? btn.closest('.org-chart-viewport') : document.qu
 if(!vp) return;
 orgChartFit(vp, vp.__orgCanvas);
 }
+function orgChartClickSuppress(e){
+e.stopPropagation();
+e.preventDefault();
+this.removeEventListener('click', orgChartClickSuppress, true);
+}
 function orgChartPointerDown(e){
-  if(e.target && e.target.closest && e.target.closest('.org-chart-controls')) return;
-  var vp = e.currentTarget;
-  var p = e.touches ? e.touches[0] : e;
-  window.__orgChartPan.active = { viewport: vp, lastX: p.clientX, lastY: p.clientY };
-  vp.classList.add('grabbing');
-  if(e.cancelable) e.preventDefault();
+if(e.button && e.button !== 0) return;
+if(e.target && e.target.closest && e.target.closest('.org-chart-controls')) return;
+var vp = e.currentTarget;
+var p = e.touches ? e.touches[0] : e;
+if(!window.__orgChartPan) window.__orgChartPan = {active:null};
+window.__orgChartPan.active = { viewport: vp, lastX: p.clientX, lastY: p.clientY, moved: false };
+if(e.cancelable) e.preventDefault();
 }
 function orgChartPointerMove(e){
-  var a = window.__orgChartPan.active;
-  if(!a) return;
-  var p = e.touches ? e.touches[0] : e;
-  if(!p) return;
-  var dx = p.clientX - a.lastX, dy = p.clientY - a.lastY;
-  a.lastX = p.clientX; a.lastY = p.clientY;
-  var st = a.viewport.__orgState;
-  if(st){ st.x += dx; st.y += dy; orgChartApply(a.viewport); }
-  if(e.cancelable) e.preventDefault();
+if(!window.__orgChartPan) return;
+var a = window.__orgChartPan.active;
+if(!a) return;
+var p = e.touches ? e.touches[0] : e;
+if(!p) return;
+var dx = p.clientX - a.lastX, dy = p.clientY - a.lastY;
+a.lastX = p.clientX; a.lastY = p.clientY;
+if(!a.moved && Math.abs(dx) + Math.abs(dy) < 4) return;
+if(!a.moved){ a.moved = true; a.viewport.classList.add('grabbing'); }
+var st = a.viewport.__orgState;
+if(st){ st.x += dx; st.y += dy; orgChartApply(a.viewport); }
+if(e.cancelable) e.preventDefault();
 }
 function orgChartPointerUp(){
-  var a = window.__orgChartPan.active;
-  if(a && a.viewport) a.viewport.classList.remove('grabbing');
-  window.__orgChartPan.active = null;
+if(!window.__orgChartPan) return;
+var a = window.__orgChartPan.active;
+if(a && a.viewport){
+a.viewport.classList.remove('grabbing');
+if(a.moved){
+a.viewport.addEventListener('click', orgChartClickSuppress, true);
+}
+}
+window.__orgChartPan.active = null;
 }
 function orgChartWheel(e){
-  var vp = e.currentTarget;
-  var st = vp.__orgState;
-  if(!st) return;
-  if(!e.ctrlKey && !e.metaKey) return;
-  e.preventDefault();
-  var rect = vp.getBoundingClientRect();
-  var mx = e.clientX - rect.left, my = e.clientY - rect.top;
-  var delta = e.deltaY < 0 ? 1.12 : 0.89;
-  var newScale = Math.min(Math.max(st.scale*delta, 0.12), 3);
-  var ratio = newScale/st.scale;
-  st.x = mx - (mx-st.x)*ratio;
-  st.y = my - (my-st.y)*ratio;
-  st.scale = newScale;
-  orgChartApply(vp);
+var vp = e.currentTarget;
+var st = vp.__orgState;
+if(!st) return;
+e.preventDefault();
+if(e.ctrlKey || e.metaKey){
+var rect = vp.getBoundingClientRect();
+var mx = e.clientX - rect.left, my = e.clientY - rect.top;
+var delta = e.deltaY < 0 ? 1.12 : 0.89;
+var newScale = Math.min(Math.max(st.scale*delta, 0.12), 3);
+var ratio = newScale/st.scale;
+st.x = mx - (mx-st.x)*ratio;
+st.y = my - (my-st.y)*ratio;
+st.scale = newScale;
+orgChartApply(vp);
+} else {
+st.x -= e.deltaX;
+st.y -= e.deltaY;
+orgChartApply(vp);
 }
+}
+
 function orgChartRefit(){
 var vps = document.querySelectorAll('.org-chart-viewport');
 vps.forEach(function(vp){
