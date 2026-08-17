@@ -1335,9 +1335,8 @@ return '<div class="'+cls+'" data-node-key="'+esc(node.key)+'" style="'+style+'"
 +'</div>';
 }
 function orgEdgePath(fromKey,toKey,x1,y1,x2,y2,pct){
-// top = the node whose center is higher (smaller y); bot = the lower node.
-// The connector is always drawn top→bot as an L-shape:
-//   top.x,top.y → top.x,midY → bot.x,midY → bot.x,bot.y
+// top = the upper node (owner in a normal org chart); bot = the lower node (owned).
+// Path shape: M top.x top.y → L top.x midY → L bot.x midY → L bot.x bot.y
 var top = y1<=y2 ? {x:x1,y:y1+ORG_CARD_H/2} : {x:x2,y:y2+ORG_CARD_H/2};
 var bot = y1<=y2 ? {x:x2,y:y2-ORG_CARD_H/2} : {x:x1,y:y1-ORG_CARD_H/2};
 var midY=(top.y+bot.y)/2;
@@ -1350,48 +1349,27 @@ if(pct==null){
 
 var labelText=pct+'%';
 var charW=7, pw=Math.max(labelText.length*charW+12,32), ph=18;
-var gap=3; // clearance in px between label edge and path cut
-// Label sits at the midpoint of the horizontal connector segment.
-// For vertical paths (top.x==bot.x) it sits at the midpoint of the vertical.
-// In both cases lx encodes BOTH node x-positions, making it unique per edge.
-var lx=(top.x+bot.x)/2, ly=midY;
+var gap=2; // px gap between owner node bottom edge and top of label
+
+// PLACEMENT RULE: label sits directly below the owner (top) node at top.x.
+// The connector exits the owner at (top.x, top.y).
+// Label center: lx=top.x, ly=top.y+gap+ph/2
+// Line starts below the label (no line passes through the label).
+var lx=top.x;
+var ly=top.y+gap+ph/2;
+var lineStart=ly+ph/2+gap; // y where the connector line begins, below the label
 
 var pathsHTML='';
-var isVertical=(Math.abs(top.x-bot.x)<1);
-
-if(isVertical){
-  // Straight vertical -- split around label's y-extent
-  var cutTop=ly-ph/2-gap, cutBot=ly+ph/2+gap;
-  if(cutTop>top.y+4 && cutBot<bot.y-4){
-    pathsHTML+='<path d="M '+top.x+' '+top.y+' L '+top.x+' '+cutTop+'"'+eAttrs+'></path>';
-    pathsHTML+='<path d="M '+top.x+' '+cutBot+' L '+top.x+' '+bot.y+'"'+eAttrs+'></path>';
-  } else {
-    // Too short to split -- draw full path; label sits on top
-    pathsHTML+='<path d="M '+top.x+' '+top.y+' L '+top.x+' '+bot.y+'"'+eAttrs+'></path>';
-  }
+if(lineStart>=midY-2){
+  // Connector too short to show line above midY: draw full path, label is on top
+  var d='M '+top.x+' '+top.y+' L '+top.x+' '+midY+' L '+bot.x+' '+midY+' L '+bot.x+' '+bot.y;
+  pathsHTML='<path d="'+d+'"'+eAttrs+'></path>';
 } else {
-  // L-shaped -- split the horizontal segment around label's x-extent
-  var hCutL=lx-pw/2-gap, hCutR=lx+pw/2+gap;
-  var hLeft=Math.min(top.x,bot.x), hRight=Math.max(top.x,bot.x);
-  if(hCutL>hLeft+4 && hCutR<hRight-4){
-    // Draw two partial paths with a gap for the label
-    if(top.x<=bot.x){
-      // top-node is to the left; path goes right along horizontal
-      pathsHTML+='<path d="M '+top.x+' '+top.y+' L '+top.x+' '+midY+' L '+hCutL+' '+midY+'"'+eAttrs+'></path>';
-      pathsHTML+='<path d="M '+hCutR+' '+midY+' L '+bot.x+' '+midY+' L '+bot.x+' '+bot.y+'"'+eAttrs+'></path>';
-    } else {
-      // top-node is to the right; path goes left along horizontal
-      pathsHTML+='<path d="M '+top.x+' '+top.y+' L '+top.x+' '+midY+' L '+hCutR+' '+midY+'"'+eAttrs+'></path>';
-      pathsHTML+='<path d="M '+hCutL+' '+midY+' L '+bot.x+' '+midY+' L '+bot.x+' '+bot.y+'"'+eAttrs+'></path>';
-    }
-  } else {
-    // Horizontal segment too short to split -- draw full path
-    var d='M '+top.x+' '+top.y+' L '+top.x+' '+midY+' L '+bot.x+' '+midY+' L '+bot.x+' '+bot.y;
-    pathsHTML+='<path d="'+d+'"'+eAttrs+'></path>';
-  }
+  // Line starts below the label and continues normally
+  pathsHTML='<path d="M '+top.x+' '+lineStart+' L '+top.x+' '+midY+' L '+bot.x+' '+midY+' L '+bot.x+' '+bot.y+'"'+eAttrs+'></path>';
 }
 
-// Label: pill with white fill -- always rendered on top of all paths (see orgRenderGraphHTML)
+// Label pill -- rendered on top of all paths via orgRenderGraphHTML layering
 var labelHTML='<rect x="'+(lx-pw/2)+'" y="'+(ly-ph/2)+'" width="'+pw+'" height="'+ph+'" rx="9" ry="9" fill="var(--surface,#fff)" stroke="var(--border2,#c5ccdf)" stroke-width="1.2"></rect>'
 +'<text x="'+lx+'" y="'+(ly+5)+'" text-anchor="middle" font-size="10" font-weight="600" font-family="system-ui,sans-serif" fill="var(--text2,#5a6080)">'+esc(labelText)+'</text>';
 return {path:pathsHTML, label:labelHTML};
