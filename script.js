@@ -1281,7 +1281,7 @@ function orgFinalizePositions(nodes){
 function orgRenderGraphHTML(nodes, edges, focalKey){
   orgLayoutGraph(nodes, edges, focalKey);
   var dims = orgFinalizePositions(nodes);
-  var htmlCards=[], htmlEdges=[];
+  var htmlCards=[], edgePaths=[], edgeLabels=[];
   Object.keys(nodes).forEach(function(k){
     var n=nodes[k];
     htmlCards.push(orgCardHTML(n, n._cx, n._cy, k===focalKey));
@@ -1289,7 +1289,9 @@ function orgRenderGraphHTML(nodes, edges, focalKey){
   edges.forEach(function(e){
     var a=nodes[e.from], b=nodes[e.to];
     if(!a||!b) return;
-    htmlEdges.push(orgEdgePath(e.from, e.to, a._cx, a._cy, b._cx, b._cy, e.pct));
+    var result=orgEdgePath(e.from, e.to, a._cx, a._cy, b._cx, b._cy, e.pct);
+    edgePaths.push(result.path);
+    if(result.label) edgeLabels.push(result.label);
   });
   var legend='<div class="org-legend" style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-bottom:20px;font-size:12px;font-weight:600">'
     +'<span style="color:var(--amber)">Individual Shareholder</span>'
@@ -1298,7 +1300,8 @@ function orgRenderGraphHTML(nodes, edges, focalKey){
     +'<span style="color:var(--teal)">Subsidiary</span>'
     +'<span style="color:var(--coral)">Investment</span>'
     +'</div>';
-  var svg='<svg class="org-static-edges" width="'+dims.width+'" height="'+dims.height+'" style="position:absolute;left:0;top:0;overflow:visible;pointer-events:none">'+htmlEdges.join('')+'</svg>';
+  // Render all path segments first, all labels last -- labels are always on top of every line
+  var svg='<svg class="org-static-edges" width="'+dims.width+'" height="'+dims.height+'" style="position:absolute;left:0;top:0;overflow:visible;pointer-events:none">'+edgePaths.join('')+edgeLabels.join('')+'</svg>';
   var tree='<div class="org-chart-tree" style="position:relative;width:'+dims.width+'px;height:'+dims.height+'px;margin:0 auto">'+svg+htmlCards.join('')+'</div>';
   var h='<div class="org-chart-scroll" data-static-edges="1">';
   h+='<div style="text-align:center;font-family:system-ui,sans-serif">';
@@ -1332,19 +1335,66 @@ return '<div class="'+cls+'" data-node-key="'+esc(node.key)+'" style="'+style+'"
 +'</div>';
 }
 function orgEdgePath(fromKey,toKey,x1,y1,x2,y2,pct){
+// top = the node whose center is higher (smaller y); bot = the lower node.
+// The connector is always drawn top→bot as an L-shape:
+//   top.x,top.y → top.x,midY → bot.x,midY → bot.x,bot.y
 var top = y1<=y2 ? {x:x1,y:y1+ORG_CARD_H/2} : {x:x2,y:y2+ORG_CARD_H/2};
 var bot = y1<=y2 ? {x:x2,y:y2-ORG_CARD_H/2} : {x:x1,y:y1-ORG_CARD_H/2};
 var midY=(top.y+bot.y)/2;
-var d='M '+top.x+' '+top.y+' L '+top.x+' '+midY+' L '+bot.x+' '+midY+' L '+bot.x+' '+bot.y;
-var pathEl='<path d="'+d+'" fill="none" stroke="var(--border2,#c7cbe0)" stroke-width="1.5" data-edge-from="'+esc(fromKey)+'" data-edge-to="'+esc(toKey)+'"></path>';
-if(pct==null) return pathEl;
+var eAttrs=' fill="none" stroke="var(--border2,#c7cbe0)" stroke-width="1.5" data-edge-from="'+esc(fromKey)+'" data-edge-to="'+esc(toKey)+'"';
+
+if(pct==null){
+  var d='M '+top.x+' '+top.y+' L '+top.x+' '+midY+' L '+bot.x+' '+midY+' L '+bot.x+' '+bot.y;
+  return {path:'<path d="'+d+'"'+eAttrs+'></path>', label:''};
+}
+
 var labelText=pct+'%';
-var charW=7, pw=Math.max(labelText.length*charW+10,28), ph=16;
-// Place label at midpoint of horizontal segment: unique per edge in all topologies
+var charW=7, pw=Math.max(labelText.length*charW+12,32), ph=18;
+var gap=3; // clearance in px between label edge and path cut
+// Label sits at the midpoint of the horizontal connector segment.
+// For vertical paths (top.x==bot.x) it sits at the midpoint of the vertical.
+// In both cases lx encodes BOTH node x-positions, making it unique per edge.
 var lx=(top.x+bot.x)/2, ly=midY;
-var label='<rect x="'+(lx-pw/2)+'" y="'+(ly-ph/2)+'" width="'+pw+'" height="'+ph+'" rx="8" ry="8" fill="var(--surface,#fff)" stroke="var(--border2,#c5ccdf)" stroke-width="1"></rect>'
-+'<text x="'+lx+'" y="'+(ly+4)+'" text-anchor="middle" font-size="10" font-weight="600" font-family="system-ui,sans-serif" fill="var(--text2,#5a6080)">'+esc(labelText)+'</text>';
-return pathEl+label;
+
+var pathsHTML='';
+var isVertical=(Math.abs(top.x-bot.x)<1);
+
+if(isVertical){
+  // Straight vertical -- split around label's y-extent
+  var cutTop=ly-ph/2-gap, cutBot=ly+ph/2+gap;
+  if(cutTop>top.y+4 && cutBot<bot.y-4){
+    pathsHTML+='<path d="M '+top.x+' '+top.y+' L '+top.x+' '+cutTop+'"'+eAttrs+'></path>';
+    pathsHTML+='<path d="M '+top.x+' '+cutBot+' L '+top.x+' '+bot.y+'"'+eAttrs+'></path>';
+  } else {
+    // Too short to split -- draw full path; label sits on top
+    pathsHTML+='<path d="M '+top.x+' '+top.y+' L '+top.x+' '+bot.y+'"'+eAttrs+'></path>';
+  }
+} else {
+  // L-shaped -- split the horizontal segment around label's x-extent
+  var hCutL=lx-pw/2-gap, hCutR=lx+pw/2+gap;
+  var hLeft=Math.min(top.x,bot.x), hRight=Math.max(top.x,bot.x);
+  if(hCutL>hLeft+4 && hCutR<hRight-4){
+    // Draw two partial paths with a gap for the label
+    if(top.x<=bot.x){
+      // top-node is to the left; path goes right along horizontal
+      pathsHTML+='<path d="M '+top.x+' '+top.y+' L '+top.x+' '+midY+' L '+hCutL+' '+midY+'"'+eAttrs+'></path>';
+      pathsHTML+='<path d="M '+hCutR+' '+midY+' L '+bot.x+' '+midY+' L '+bot.x+' '+bot.y+'"'+eAttrs+'></path>';
+    } else {
+      // top-node is to the right; path goes left along horizontal
+      pathsHTML+='<path d="M '+top.x+' '+top.y+' L '+top.x+' '+midY+' L '+hCutR+' '+midY+'"'+eAttrs+'></path>';
+      pathsHTML+='<path d="M '+hCutL+' '+midY+' L '+bot.x+' '+midY+' L '+bot.x+' '+bot.y+'"'+eAttrs+'></path>';
+    }
+  } else {
+    // Horizontal segment too short to split -- draw full path
+    var d='M '+top.x+' '+top.y+' L '+top.x+' '+midY+' L '+bot.x+' '+midY+' L '+bot.x+' '+bot.y;
+    pathsHTML+='<path d="'+d+'"'+eAttrs+'></path>';
+  }
+}
+
+// Label: pill with white fill -- always rendered on top of all paths (see orgRenderGraphHTML)
+var labelHTML='<rect x="'+(lx-pw/2)+'" y="'+(ly-ph/2)+'" width="'+pw+'" height="'+ph+'" rx="9" ry="9" fill="var(--surface,#fff)" stroke="var(--border2,#c5ccdf)" stroke-width="1.2"></rect>'
++'<text x="'+lx+'" y="'+(ly+5)+'" text-anchor="middle" font-size="10" font-weight="600" font-family="system-ui,sans-serif" fill="var(--text2,#5a6080)">'+esc(labelText)+'</text>';
+return {path:pathsHTML, label:labelHTML};
 }
 
 
