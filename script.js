@@ -1407,9 +1407,12 @@ if(pct==null){
 var labelText=pct+'%';
 var charW=7, pw=Math.max(labelText.length*charW+12,32), ph=18;
 
-// PLACEMENT RULE: label sits at the midpoint of the horizontal segment.
-// Each parent->child connection gets its own unique (lx,ly) since bot.x differs per child.
-var lx=(top.x+bot.x)/2;
+// PLACEMENT RULE: label sits at (bot.x, midY) — the elbow corner at the top of the
+// branch descending to the child. Each label is anchored at the x-column of its own
+// child node, making it unambiguously "for this specific connection." One parent with
+// multiple children: each label fans out at a different bot.x, same midY — one pill
+// directly above each child branch. The white background breaks the line for readability.
+var lx=bot.x;
 var ly=midY;
 
 // Label pill -- rendered on top of all paths via orgRenderGraphHTML layering
