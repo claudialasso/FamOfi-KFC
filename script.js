@@ -265,6 +265,15 @@ function getSubs(pid){
   __getSubsCache[pid]=result;
   return result;
 }
+var __allGetSubsCache=null, __allGetSubsCacheSrc=null;
+function _allGetSubs(pid){
+  var comps=_sanitizedCompanies();
+  if(__allGetSubsCacheSrc!==comps){ __allGetSubsCache={}; __allGetSubsCacheSrc=comps; }
+  if(__allGetSubsCache[pid]) return __allGetSubsCache[pid];
+  var result=comps.filter(function(c){ return c.shareholders.some(function(s){ return s.type==='company'&&s.person===pid; }); });
+  __allGetSubsCache[pid]=result;
+  return result;
+}
 function getParents(cid){ return data.companies.filter(function(p){ return getSubs(p.id).some(function(s){ return s.id===cid; }); }); }
 // Org-chart-only helpers: exclude liquidated companies from display (data is preserved)
 var __orgActiveCacheSrc=null, __orgActiveCache=null;
@@ -1152,7 +1161,12 @@ function orgBuildGraph(cid, opts){
   var invFilter = opts.invIds || null;
 var shFilter = opts.shIds || null;
 var subFilter = opts.subIds || null;
-  var companies = _orgActiveCompanies();
+  var _allComps=_sanitizedCompanies(), _allById={};
+  _allComps.forEach(function(c){ _allById[c.id]=c; });
+  var _focalTest=_allById[cid];
+  var _rootIsLiquidated=(_focalTest && _focalTest.status==='liquidated');
+  var companies = _rootIsLiquidated ? _allComps : _orgActiveCompanies();
+  var getSubsFn  = _rootIsLiquidated ? _allGetSubs  : _orgGetSubs;
   var byId = {};
   companies.forEach(function(c){ byId[c.id]=c; });
   var focal = byId[cid];
@@ -1224,7 +1238,7 @@ var subFilter = opts.subIds || null;
       depth2++;
       var next2=[];
       frontierDown.forEach(function(fid){
-        _orgGetSubs(fid).forEach(function(sc){
+        getSubsFn(fid).forEach(function(sc){
           var passesSub = !subFilter || subFilter.has(sc.id);
           var key='co:'+sc.id;
           if(passesSub && !nodes[key]){
@@ -1242,7 +1256,7 @@ var subFilter = opts.subIds || null;
     Object.keys(nodes).forEach(function(key){
       var n=nodes[key];
       if(n.rank<0 || n.kind==='individual' || n.kind==='investment') return;
-      _orgGetSubs(n.refId).forEach(function(sc){
+      getSubsFn(n.refId).forEach(function(sc){
         var cKey='co:'+sc.id;
         if(!nodes[cKey]) return;
         var sh=(sc.shareholders||[]).find(function(x){ return x.type==='company' && x.person===n.refId; });
@@ -1902,7 +1916,7 @@ var search=(qv||'').toLowerCase().trim();
 btns.forEach(function(btn){ btn.style.display=(!search||btn.textContent.toLowerCase().includes(search))?'flex':'none'; });
 }
 function renderOrgChartsContent(){
-var cs=data.companies.filter(function(c){ return c.status!=='liquidated'; }).sort(function(a,b){ var an=a.name.toLowerCase(), bn=b.name.toLowerCase(); return an<bn?-1:an>bn?1:0; });
+var cs=data.companies.slice().sort(function(a,b){ var an=a.name.toLowerCase(), bn=b.name.toLowerCase(); return an<bn?-1:an>bn?1:0; });
 if(_orgActiveCompanyId && !cs.find(function(x){ return x.id===_orgActiveCompanyId; })) _orgActiveCompanyId=null;
 var h='<div class="org-charts-layout">';
 h+='<div class="org-filter-sidebar">';
@@ -1912,12 +1926,13 @@ h+='<input type="text" placeholder="'+(lang==='en'?'Search companies...':'Buscar
 h+='<div class="org-filter-list" id="org-co-list" style="max-height:220px">';
 cs.forEach(function(c){
 var isActive=(_orgActiveCompanyId===c.id);
-h+='<button onclick="orgSelectCompany('+q(c.id)+')" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:7px 11px;border-radius:var(--radius-sm);font-size:13px;cursor:pointer;font-family:inherit;border:none;background:'+(isActive?'var(--accent-bg)':'transparent')+';color:'+(isActive?'var(--accent)':'var(--text)')+';font-weight:'+(isActive?'700':'400')+';margin-bottom:1px">';
+var isLiq=(c.status==='liquidated');
+h+='<button onclick="orgSelectCompany('+q(c.id)+')" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:7px 11px;border-radius:var(--radius-sm);font-size:13px;cursor:pointer;font-family:inherit;border:none;background:'+(isActive?'var(--accent-bg)':'transparent')+';color:'+(isActive?'var(--accent)':(isLiq?'var(--text3)':'var(--text)'))+';font-weight:'+(isActive?'700':'400')+';margin-bottom:1px">';
 h+='<span style="flex:1">'+esc(c.name)+'</span>';
-if(c.jurisdiction) h+='<span style="font-size:11px;padding:1px 7px;border-radius:10px;background:var(--border);color:var(--text2)">'+esc(c.jurisdiction)+'</span>';
+if(isLiq) h+='<span style="font-size:10px;padding:1px 6px;border-radius:10px;background:var(--border);color:var(--text3);font-style:italic">'+(lang==='en'?'Liquidated':'Liquidada')+'</span>';
+else if(c.jurisdiction) h+='<span style="font-size:11px;padding:1px 7px;border-radius:10px;background:var(--border);color:var(--text2)">'+esc(c.jurisdiction)+'</span>';
 h+='</button>';
-});
-if(!cs.length) h+='<div style="padding:10px;color:var(--text3);font-size:12px">'+t('noCompanies')+'</div>';
+});if(!cs.length) h+='<div style="padding:10px;color:var(--text3);font-size:12px">'+t('noCompanies')+'</div>';
 h+='</div></div>';
 h+='<div class="card org-filter-section">';
 h+='<div class="org-filter-title">'+(lang==='en'?'Chart Settings':'Configuracion del Grafico')+'</div>';
