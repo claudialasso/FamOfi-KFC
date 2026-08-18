@@ -266,6 +266,22 @@ function getSubs(pid){
   return result;
 }
 function getParents(cid){ return data.companies.filter(function(p){ return getSubs(p.id).some(function(s){ return s.id===cid; }); }); }
+// Org-chart-only helpers: exclude liquidated companies from display (data is preserved)
+var __orgActiveCacheSrc=null, __orgActiveCache=null;
+function _orgActiveCompanies(){
+  var src=_sanitizedCompanies();
+  if(__orgActiveCacheSrc!==src){ __orgActiveCache=src.filter(function(c){ return c.status!=='liquidated'; }); __orgActiveCacheSrc=src; }
+  return __orgActiveCache;
+}
+var __orgGetSubsCache=null, __orgGetSubsCacheSrc=null;
+function _orgGetSubs(pid){
+  var comps=_orgActiveCompanies();
+  if(__orgGetSubsCacheSrc!==comps){ __orgGetSubsCache={}; __orgGetSubsCacheSrc=comps; }
+  if(__orgGetSubsCache[pid]) return __orgGetSubsCache[pid];
+  var result=comps.filter(function(c){ return c.shareholders.some(function(s){ return s.type==='company'&&s.person===pid; }); });
+  __orgGetSubsCache[pid]=result;
+  return result;
+}
 function fmtD(n){ return (n!=null&&n!=='') ? '$'+(+n).toLocaleString() : '—'; }
 function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function q(id){ return "'"+id+"'"; }
@@ -607,6 +623,34 @@ function go(p){ page=p; render(); }
 var COLORS = ['#4f6ef7','#0e9f6e','#f59e0b','#7c3aed','#e3403a','#1d83e2','#10b981','#f97316','#8b5cf6','#ef4444'];
 var charts = {};
 function destroyCharts(){ Object.values(charts).forEach(function(c){ try{c.destroy();}catch(e){} }); charts={}; }
+var _doughnutLabelPlugin = {
+  id: 'famDoughnutLabels',
+  afterDraw: function(chart) {
+    if(chart.config.type !== 'doughnut') return;
+    var ctx = chart.ctx;
+    chart.data.datasets.forEach(function(ds, i) {
+      var meta = chart.getDatasetMeta(i);
+      if(meta.hidden) return;
+      meta.data.forEach(function(arc, j) {
+        var val = ds.data[j];
+        if(!val) return;
+        var segAngle = (arc.endAngle - arc.startAngle);
+        if(segAngle < 0.25) return;
+        var midAngle = arc.startAngle + segAngle / 2;
+        var r = arc.innerRadius + (arc.outerRadius - arc.innerRadius) * 0.65;
+        var x = arc.x + Math.cos(midAngle) * r;
+        var y = arc.y + Math.sin(midAngle) * r;
+        ctx.save();
+        ctx.fillStyle = '#fff';
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(val), x, y);
+        ctx.restore();
+      });
+    });
+  }
+};
 function mkChart(id,type,labels,values){
   var ctx=document.getElementById(id); if(!ctx) return;
   if(charts[id]) charts[id].destroy();
@@ -615,7 +659,8 @@ function mkChart(id,type,labels,values){
     options:{responsive:true,maintainAspectRatio:false,
       plugins:{legend:{display:type!=='bar',position:'bottom',labels:{boxWidth:10,font:{size:10},padding:8}}},
       scales:type==='bar'?{x:{grid:{display:false},ticks:{font:{size:10}}},y:{grid:{color:'#eef0f8'},ticks:{font:{size:10},stepSize:1}}}:undefined
-    }
+    },
+    plugins: type==='doughnut' ? [_doughnutLabelPlugin] : []
   });
 }
 
@@ -702,14 +747,20 @@ function buildOvCharts(){
 }
 
 // ── Companies ─────────────────────────────────────────────────────────────────
-var cSearch='',cJur='',cStatus='';
+var cSearch='',cJur='',cStatus='',cType='';
+var CO_TYPES=['Holding Company','Operating Company','Investment Company','LLC','Corporation','Partnership','Trust','Other'];
 function renderCompanies(){
   var jurs=[...new Set(data.companies.map(function(c){return c.jurisdiction;}))].sort();
   var cs=data.companies.filter(function(c){
     var q2=cSearch.toLowerCase();
     return(!q2||(c.name+c.director+c.jurisdiction).toLowerCase().includes(q2))
-      &&(!cJur||c.jurisdiction===cJur)&&(!cStatus||c.status===cStatus);
+      &&(!cJur||c.jurisdiction===cJur)&&(!cStatus||c.status===cStatus)
+      &&(!cType||(c.companyType||'')===cType);
   }).sort(function(a,b){var an=(a.name||'').toLowerCase(),bn=(b.name||'').toLowerCase();return an<bn?-1:an>bn?1:0;});
+  var filteredIds=cs.map(function(c){return c.id;});
+  var filtInvs=data.investments.filter(function(i){return invCoIds(i).some(function(id){return filteredIds.indexOf(id)!==-1;});});
+  var totalMV=filtInvs.reduce(function(a,i){return a+(i.marketValue||0);},0);
+  var totalCommit=filtInvs.reduce(function(a,i){return a+(i.commitment||0);},0);
   var h=roBanner();
   h+='<div class="section-header"><div class="section-title">'+t('companies')+' <span style="color:var(--text3);font-weight:400;font-size:14px">('+data.companies.length+')</span></div>';
   h+='<div style="display:flex;gap:8px"><button class="btn btn-teal btn-sm" onclick="exportAllCSV()">'+t('export')+'</button>';
@@ -720,7 +771,14 @@ function renderCompanies(){
   h+='<select class="filter" id="co-jur-filter" onchange="cJur=this.value;rerenderMain()"><option value="">'+t('allJurisdictions')+'</option>';
   jurs.forEach(function(j){h+='<option value="'+esc(j)+'"'+(cJur===j?' selected':'')+'>'+esc(j)+'</option>';});
 h+='</select><select class="filter" id="co-status-filter" onchange="cStatus=this.value;rerenderMain()"><option value=""'+(cStatus===''?' selected':'')+'>'+t('allStatus')+'</option>';
-  h+='<option value="active"'+(cStatus==='active'?' selected':'')+'>'+t('active')+'</option><option value="liquidated"'+(cStatus==='liquidated'?' selected':'')+'>'+t('liquidated')+'</option><option value="liquidation"'+(cStatus==='liquidation'?' selected':'')+'>'+t('liquidation')+'</option></select></div>';
+  h+='<option value="active"'+(cStatus==='active'?' selected':'')+'>'+t('active')+'</option><option value="liquidated"'+(cStatus==='liquidated'?' selected':'')+'>'+t('liquidated')+'</option><option value="liquidation"'+(cStatus==='liquidation'?' selected':'')+'>'+t('liquidation')+'</option></select>';
+  h+='<select class="filter" id="co-type-filter" onchange="cType=this.value;rerenderMain()"><option value=""'+(cType===''?' selected':'')+'>All Types</option>';
+  CO_TYPES.forEach(function(tp){h+='<option value="'+esc(tp)+'"'+(cType===tp?' selected':'')+'>'+esc(tp)+'</option>';});
+  h+='</select></div>';
+  h+='<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 14px;background:var(--accent-bg);border-radius:var(--radius-sm);margin-bottom:10px;font-size:12px;color:var(--text2)">';
+  h+='<span><b style="color:var(--text)">Showing '+cs.length+'</b> of '+data.companies.length+' companies</span>';
+  if(filtInvs.length){h+='<span style="display:flex;gap:16px"><span>Portfolio MV: <b style="color:var(--accent)">'+fmtD(totalMV)+'</b></span><span>Total Commitment: <b style="color:var(--text)">'+fmtD(totalCommit)+'</b></span></span>';}
+  h+='</div>';
   h+='<div class="card" style="padding:0"><table><thead><tr><th style="width:36px"><input type="checkbox" id="co-select-all" onclick="toggleAllCoSelect(this)" style="cursor:pointer"></th><th>'+t('name')+'</th><th>'+t('jurisdiction')+'</th><th>'+t('yearFounded')+'</th><th>'+t('director')+'</th><th>'+t('shareholders2')+'</th><th>'+t('status')+'</th><th></th></tr></thead><tbody>';
   if(!cs.length){ h+='<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--text3)">'+t('noCompanies')+'</td></tr>'; }
   else { cs.forEach(function(c){
@@ -1096,7 +1154,7 @@ function orgBuildGraph(cid, opts){
   var invFilter = opts.invIds || null;
 var shFilter = opts.shIds || null;
 var subFilter = opts.subIds || null;
-  var companies = _sanitizedCompanies();
+  var companies = _orgActiveCompanies();
   var byId = {};
   companies.forEach(function(c){ byId[c.id]=c; });
   var focal = byId[cid];
@@ -1168,7 +1226,7 @@ var subFilter = opts.subIds || null;
       depth2++;
       var next2=[];
       frontierDown.forEach(function(fid){
-        getSubs(fid).forEach(function(sc){
+        _orgGetSubs(fid).forEach(function(sc){
           var passesSub = !subFilter || subFilter.has(sc.id);
           var key='co:'+sc.id;
           if(passesSub && !nodes[key]){
@@ -1186,7 +1244,7 @@ var subFilter = opts.subIds || null;
     Object.keys(nodes).forEach(function(key){
       var n=nodes[key];
       if(n.rank<0 || n.kind==='individual' || n.kind==='investment') return;
-      getSubs(n.refId).forEach(function(sc){
+      _orgGetSubs(n.refId).forEach(function(sc){
         var cKey='co:'+sc.id;
         if(!nodes[cKey]) return;
         var sh=(sc.shareholders||[]).find(function(x){ return x.type==='company' && x.person===n.refId; });
@@ -1849,7 +1907,7 @@ var search=(qv||'').toLowerCase().trim();
 btns.forEach(function(btn){ btn.style.display=(!search||btn.textContent.toLowerCase().includes(search))?'flex':'none'; });
 }
 function renderOrgCharts(){
-var cs=data.companies.slice().sort(function(a,b){ var an=a.name.toLowerCase(), bn=b.name.toLowerCase(); return an<bn?-1:an>bn?1:0; });
+var cs=data.companies.filter(function(c){ return c.status!=='liquidated'; }).sort(function(a,b){ var an=a.name.toLowerCase(), bn=b.name.toLowerCase(); return an<bn?-1:an>bn?1:0; });
 if(_orgActiveCompanyId && !cs.find(function(x){ return x.id===_orgActiveCompanyId; })) _orgActiveCompanyId=null;
 var h='<div class="section-header"><div class="section-title">'+t('orgcharts')+'</div></div>';
 h+='<div class="org-charts-layout">';
@@ -2341,6 +2399,9 @@ function openCompanyForm(id){
   h+='<div class="form-group full"><label class="lbl">'+t('name')+'</label><input id="f-name" class="inp" value="'+esc(c?c.name:'')+'"></div>';
   h+='<div class="form-group"><label class="lbl">'+t('jurisdiction')+'</label><input id="f-jur" class="inp" list="jl" value="'+esc(c?c.jurisdiction:'')+'"><datalist id="jl"><option>BVI</option><option>Uruguay</option><option>Singapore</option><option>USA</option><option>Panama</option><option>Ecuador</option><option>Cayman Islands</option></datalist></div>';
   h+='<div class="form-group"><label class="lbl">'+t('status')+'</label><select id="f-status" class="inp"><option value="active"'+(c&&c.status==='active'?' selected':'')+'>'+t('active')+'</option><option value="liquidated"'+(c&&c.status==='liquidated'?' selected':'')+'>'+t('liquidated')+'</option><option value="liquidation"'+(c&&c.status==='liquidation'?' selected':'')+'>'+t('liquidation')+'</option></select></div>';
+  h+='<div class="form-group"><label class="lbl">Type of Company</label><select id="f-company-type" class="inp"><option value="">— Select type —</option>';
+  CO_TYPES.forEach(function(tp){h+='<option value="'+esc(tp)+'"'+((c&&c.companyType===tp)?' selected':'')+'>'+esc(tp)+'</option>';});
+  h+='</select></div>';
   h+='<div class="form-group"><label class="lbl">'+t('yearFounded')+'</label><input id="f-year" class="inp" value="'+esc(c?(c.yearFounded||c.year||''):'')+'" placeholder="'+t('dateHelp')+'"><span style="font-size:11px;color:var(--text3)">'+t('dateHelp')+'</span></div>';
   h+='<div class="form-group"><label class="lbl">'+t('purpose')+'</label><input id="f-purpose" class="inp" list="pl" value="'+esc(c?c.purpose:'')+'"><datalist id="pl"><option>Holding</option><option>Operating</option><option>IP / Royalties</option><option>Real Estate</option></datalist></div>';
   h+='<div class="form-group"><label class="lbl">'+t('tags')+'</label><input id="f-tags" class="inp" value="'+esc(c?c.tags:'')+'"></div>';
@@ -2426,7 +2487,7 @@ function saveCompany(id){
   var banking=id?(data.companies.find(function(c){return c.id===id;})||{banking:[]}).banking:[];
   var custom=id?(data.companies.find(function(c){return c.id===id;})||{custom:[]}).custom:[];
   var documents=id?(data.companies.find(function(c){return c.id===id;})||{documents:[]}).documents:[];
-  var obj={id:id||uid(),name:gv('f-name'),jurisdiction:gv('f-jur'),status:gv('f-status'),yearFounded:gv('f-year'),
+  var obj={id:id||uid(),name:gv('f-name'),jurisdiction:gv('f-jur'),status:gv('f-status'),companyType:gv('f-company-type'),yearFounded:gv('f-year'),
     purpose:gv('f-purpose'),tags:gv('f-tags'),fiscalId:gv('f-fiscal'),ein:gv('f-ein'),irs:gv('f-irs'),
     director:gv('f-director'),agent:gv('f-agent'),address:gv('f-address'),notes:gv('f-notes'),
     shareholders:window._fSH,banking:banking,custom:custom,documents:documents};
