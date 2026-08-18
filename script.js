@@ -629,7 +629,8 @@ var pages = ['overview','companies','shareholders','investments','orgcharts','ne
 function go(p){ page=p; render(); }
 
 // ── Charts ────────────────────────────────────────────────────────────────────
-var COLORS = ['#4f6ef7','#0e9f6e','#f59e0b','#7c3aed','#e3403a','#1d83e2','#10b981','#f97316','#8b5cf6','#ef4444'];
+var COLORS = ['#4f6ef7','#0e9f6e','#f59e0b','#7c3aed','#e3403a','#1d83e2','#10b981','#f97316','#8b5cf6','#ef4444','#06b6d4','#84cc16','#f43f5e','#a78bfa','#fb923c','#34d399','#60a5fa','#fbbf24','#c084fc','#f87171'];
+function chartColors(n){ var out=[]; for(var i=0;i<n;i++) out.push(COLORS[i%COLORS.length]); return out; }
 var charts = {};
 function destroyCharts(){ Object.values(charts).forEach(function(c){ try{c.destroy();}catch(e){} }); charts={}; }
 var _doughnutLabelPlugin = {
@@ -724,20 +725,22 @@ var _doughnutLabelPlugin = {
     drawOuterLabels(outerLeft,  resolveOverlap(outerLeft));
   }
 };
-function mkChart(id,type,labels,values){
+function mkChart(id,type,labels,values,opts){
+  opts=opts||{};
   var ctx=document.getElementById(id); if(!ctx) return;
   if(charts[id]) charts[id].destroy();
+  var lFsz=opts.legendSize||10;
+  var lPad=opts.legendPad||8;
   charts[id]=new Chart(ctx,{type:type,
-    data:{labels:labels,datasets:[{data:values,backgroundColor:COLORS.slice(0,labels.length),borderWidth:0,borderRadius:type==='bar'?5:0}]},
+    data:{labels:labels,datasets:[{data:values,backgroundColor:chartColors(labels.length),borderWidth:0,borderRadius:type==='bar'?5:0}]},
     options:{responsive:true,maintainAspectRatio:false,
-      layout: type==='doughnut' ? {padding:24} : undefined,
-      plugins:{legend:{display:type!=='bar',position:'bottom',labels:{boxWidth:10,font:{size:10},padding:8}}},
+      layout: type==='doughnut' ? {padding:28} : undefined,
+      plugins:{legend:{display:type!=='bar',position:'bottom',labels:{boxWidth:12,font:{size:lFsz},padding:lPad}}},
       scales:type==='bar'?{x:{grid:{display:false},ticks:{font:{size:10}}},y:{grid:{color:'#eef0f8'},ticks:{font:{size:10},stepSize:1}}}:undefined
     },
     plugins: type==='doughnut' ? [_doughnutLabelPlugin] : []
   });
 }
-
 // ── Render ────────────────────────────────────────────────────────────────────
 function render(){
   // If current page is not allowed for this user, redirect to first allowed tab
@@ -793,9 +796,9 @@ var ovSort='asc'; function toggleOvSort(){ ovSort=ovSort==='asc'?'desc':'asc'; r
   h+='<div class="kpi"><div class="kpi-label">'+t('jurisdictions')+'</div><div class="kpi-val">'+jurs+'</div></div>';
   h+='<div class="kpi"><div class="kpi-label">'+t('totalShareholders')+'</div><div class="kpi-val">'+shSet.size+'</div></div>';
   h+='<div class="kpi"><div class="kpi-label">'+t('totalInvestments')+'</div><div class="kpi-val">'+inv.length+'</div><div class="kpi-sub">'+fmtD(totalMV)+' MV</div></div></div>';
-  h+='<div class="charts-row">';
-  h+='<div class="chart-card"><div class="chart-title">'+t('byJurisdiction')+'</div><div class="chart-wrap"><canvas id="ch-jur"></canvas></div></div>';
-  h+='<div class="chart-card"><div class="chart-title">'+t('byStatus')+'</div><div class="chart-wrap"><canvas id="ch-status"></canvas></div></div>';
+  h+='<div class="charts-row" style="grid-template-columns:2fr 1fr;margin-bottom:18px">';
+  h+='<div class="chart-card"><div class="chart-title">'+t('byJurisdiction')+'</div><div class="chart-wrap" style="height:320px"><canvas id="ch-jur"></canvas></div></div>';
+  h+='<div class="chart-card"><div class="chart-title">'+t('byStatus')+'</div><div class="chart-wrap" style="height:320px"><canvas id="ch-status"></canvas></div></div>';
   h+='</div>';
   var csSorted=cs.slice().sort(function(a,b){var an=(a.name||'').toLowerCase(),bn=(b.name||'').toLowerCase();var cmp=an<bn?-1:an>bn?1:0;return ovSort==='desc'?-cmp:cmp;}); var sortIcon=ovSort==='asc'?'▲':'▼'; h+='<div class="card" style="padding:0;width:100%"><table><thead><tr><th style="cursor:pointer;user-select:none" onclick="toggleOvSort()">'+t('name')+' <span style="font-size:9px;color:var(--accent)">'+sortIcon+'</span></th><th>'+t('jurisdiction')+'</th><th>'+t('status')+'</th><th>'+t('shareholders2')+'</th><th>'+t('subsidiaries')+'</th><th>'+t('investments')+'</th></tr></thead><tbody>';
   if(!csSorted.length){ h+='<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text3)">'+t('noCompanies')+'</td></tr>'; }
@@ -814,13 +817,21 @@ var ovSort='asc'; function toggleOvSort(){ ovSort=ovSort==='asc'?'desc':'asc'; r
 }
 function buildOvCharts(){
   var cs=data.companies;
+  function sortedPairs(map){
+    var pairs=Object.keys(map).map(function(k){return [k,map[k]];});
+    pairs.sort(function(a,b){return b[1]-a[1];});
+    return {labels:pairs.map(function(p){return p[0];}),values:pairs.map(function(p){return p[1];})};
+  }
+  // By Jurisdiction: active companies only, sorted largest first
   var activeCs=cs.filter(function(c){ return c.status==='active'; });
   var jm={}; activeCs.forEach(function(c){jm[c.jurisdiction]=(jm[c.jurisdiction]||0)+1;});
-  mkChart('ch-jur','doughnut',Object.keys(jm),Object.values(jm));
+  var jd=sortedPairs(jm);
+  mkChart('ch-jur','doughnut',jd.labels,jd.values,{legendSize:12,legendPad:10});
+  // By Status: all companies, sorted largest first
   var sm={}; cs.forEach(function(c){var k=t(c.status);sm[k]=(sm[k]||0)+1;});
-  mkChart('ch-status','doughnut',Object.keys(sm),Object.values(sm));
+  var sd=sortedPairs(sm);
+  mkChart('ch-status','doughnut',sd.labels,sd.values,{legendSize:12,legendPad:10});
 }
-
 // ── Companies ─────────────────────────────────────────────────────────────────
 var cSearch='',cJur='',cStatus='',cType='';
 var CO_TYPES=['Holding Company','Operating Company','Investment Company','LLC','Corporation','Partnership','Trust','Other'];
