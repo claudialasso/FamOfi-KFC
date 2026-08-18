@@ -637,27 +637,91 @@ var _doughnutLabelPlugin = {
   afterDraw: function(chart) {
     if(chart.config.type !== 'doughnut') return;
     var ctx = chart.ctx;
+    var INNER_MIN = 0.35;
+    var LINE_LEN  = 12;
+    var LABEL_GAP = 14;
+    var outerRight = [], outerLeft = [];
     chart.data.datasets.forEach(function(ds, i) {
       var meta = chart.getDatasetMeta(i);
       if(meta.hidden) return;
       meta.data.forEach(function(arc, j) {
         var val = ds.data[j];
         if(!val) return;
-        var segAngle = (arc.endAngle - arc.startAngle);
-        if(segAngle < 0.25) return;
+        var segAngle = arc.endAngle - arc.startAngle;
         var midAngle = arc.startAngle + segAngle / 2;
-        var r = arc.innerRadius + (arc.outerRadius - arc.innerRadius) * 0.65;
-        var x = arc.x + Math.cos(midAngle) * r;
-        var y = arc.y + Math.sin(midAngle) * r;
-        ctx.save();
-        ctx.fillStyle = '#fff';
-        ctx.font = 'bold 11px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(String(val), x, y);
-        ctx.restore();
+        var cx = arc.x, cy = arc.y;
+        if(segAngle >= INNER_MIN) {
+          var r = arc.innerRadius + (arc.outerRadius - arc.innerRadius) * 0.65;
+          var x = cx + Math.cos(midAngle) * r;
+          var y = cy + Math.sin(midAngle) * r;
+          ctx.save();
+          ctx.fillStyle = '#fff';
+          ctx.font = 'bold 11px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(String(val), x, y);
+          ctx.restore();
+        } else {
+          var item = {arc:arc, val:val, midAngle:midAngle, cx:cx, cy:cy};
+          if(Math.cos(midAngle) >= 0) outerRight.push(item);
+          else outerLeft.push(item);
+        }
       });
     });
+    function sortByIdealY(arr) {
+      arr.sort(function(a,b){
+        var ya = a.cy + Math.sin(a.midAngle)*(a.arc.outerRadius+LINE_LEN);
+        var yb = b.cy + Math.sin(b.midAngle)*(b.arc.outerRadius+LINE_LEN);
+        return ya - yb;
+      });
+    }
+    function resolveOverlap(arr) {
+      var ys = arr.map(function(it){
+        return it.cy + Math.sin(it.midAngle)*(it.arc.outerRadius+LINE_LEN);
+      });
+      for(var pass=0; pass<40; pass++){
+        var moved=false;
+        for(var k=1; k<ys.length; k++){
+          if(ys[k]-ys[k-1] < LABEL_GAP){
+            var mid=(ys[k]+ys[k-1])/2;
+            ys[k-1]=mid-LABEL_GAP/2;
+            ys[k]=mid+LABEL_GAP/2;
+            moved=true;
+          }
+        }
+        if(!moved) break;
+      }
+      return ys;
+    }
+    function drawOuterLabels(arr, ys) {
+      arr.forEach(function(it, k) {
+        var arc = it.arc;
+        var cx = it.cx, cy = it.cy;
+        var outerR = arc.outerRadius;
+        var mx = Math.cos(it.midAngle), my = Math.sin(it.midAngle);
+        var lx1 = cx + mx*(outerR+2);
+        var ly1 = cy + my*(outerR+2);
+        var lx2 = cx + mx*(outerR+LINE_LEN);
+        var ly2 = ys[k];
+        var tx = lx2 + (mx >= 0 ? 5 : -5);
+        ctx.save();
+        ctx.strokeStyle = 'rgba(100,110,160,0.5)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(lx1, ly1);
+        ctx.lineTo(lx2, ly2);
+        ctx.stroke();
+        ctx.fillStyle = '#4a5070';
+        ctx.font = 'bold 10px system-ui,sans-serif';
+        ctx.textAlign = mx >= 0 ? 'left' : 'right';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(String(it.val), tx, ly2);
+        ctx.restore();
+      });
+    }
+    sortByIdealY(outerRight); sortByIdealY(outerLeft);
+    drawOuterLabels(outerRight, resolveOverlap(outerRight));
+    drawOuterLabels(outerLeft,  resolveOverlap(outerLeft));
   }
 };
 function mkChart(id,type,labels,values){
@@ -666,6 +730,7 @@ function mkChart(id,type,labels,values){
   charts[id]=new Chart(ctx,{type:type,
     data:{labels:labels,datasets:[{data:values,backgroundColor:COLORS.slice(0,labels.length),borderWidth:0,borderRadius:type==='bar'?5:0}]},
     options:{responsive:true,maintainAspectRatio:false,
+      layout: type==='doughnut' ? {padding:24} : undefined,
       plugins:{legend:{display:type!=='bar',position:'bottom',labels:{boxWidth:10,font:{size:10},padding:8}}},
       scales:type==='bar'?{x:{grid:{display:false},ticks:{font:{size:10}}},y:{grid:{color:'#eef0f8'},ticks:{font:{size:10},stepSize:1}}}:undefined
     },
@@ -749,7 +814,8 @@ var ovSort='asc'; function toggleOvSort(){ ovSort=ovSort==='asc'?'desc':'asc'; r
 }
 function buildOvCharts(){
   var cs=data.companies;
-  var jm={}; cs.forEach(function(c){jm[c.jurisdiction]=(jm[c.jurisdiction]||0)+1;});
+  var activeCs=cs.filter(function(c){ return c.status==='active'; });
+  var jm={}; activeCs.forEach(function(c){jm[c.jurisdiction]=(jm[c.jurisdiction]||0)+1;});
   mkChart('ch-jur','doughnut',Object.keys(jm),Object.values(jm));
   var sm={}; cs.forEach(function(c){var k=t(c.status);sm[k]=(sm[k]||0)+1;});
   mkChart('ch-status','doughnut',Object.keys(sm),Object.values(sm));
