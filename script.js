@@ -1345,7 +1345,8 @@ function orgRenderGraphHTML(nodes, edges, focalKey){
   edges.forEach(function(e){
     var a=nodes[e.from], b=nodes[e.to];
     if(!a||!b) return;
-    var result=orgEdgePath(e.from, e.to, a._cx, a._cy, b._cx, b._cy, e.pct);
+    var labelSide = (a.rank < 0) ? 'top' : 'bot';
+    var result=orgEdgePath(e.from, e.to, a._cx, a._cy, b._cx, b._cy, e.pct, labelSide);
     edgePaths.push(result.path);
     if(result.label) edgeLabels.push(result.label);
   });
@@ -1390,7 +1391,7 @@ return '<div class="'+cls+'" data-node-key="'+esc(node.key)+'" style="'+style+'"
 +(node.sub?'<div class="org-card-sub">'+esc(node.sub)+'</div>':'')
 +'</div>';
 }
-function orgEdgePath(fromKey,toKey,x1,y1,x2,y2,pct){
+function orgEdgePath(fromKey,toKey,x1,y1,x2,y2,pct,labelSide){
 // top = the upper node (owner in a normal org chart); bot = the lower node (owned).
 // Path shape: M top.x top.y → L top.x midY → L bot.x midY → L bot.x bot.y
 var top = y1<=y2 ? {x:x1,y:y1+ORG_CARD_H/2} : {x:x2,y:y2+ORG_CARD_H/2};
@@ -1405,15 +1406,21 @@ if(pct==null){
 }
 
 var labelText=pct+'%';
-var charW=7, pw=Math.max(labelText.length*charW+12,32), ph=18;
+var charW=7, pw=Math.max(labelText.length*charW+12,32), ph=18, gap=2;
 
 // PLACEMENT RULE: label sits at (bot.x, midY) — the elbow corner at the top of the
 // branch descending to the child. Each label is anchored at the x-column of its own
 // child node, making it unambiguously "for this specific connection." One parent with
 // multiple children: each label fans out at a different bot.x, same midY — one pill
 // directly above each child branch. The white background breaks the line for readability.
-var lx=bot.x;
-var ly=midY;
+var lx, ly;
+if(labelSide==='top'){
+  lx = top.x;
+  ly = top.y + gap + ph/2;
+} else {
+  lx = bot.x;
+  ly = midY;
+}
 
 // Label pill -- rendered on top of all paths via orgRenderGraphHTML layering
 var labelHTML='<rect x="'+(lx-pw/2)+'" y="'+(ly-ph/2)+'" width="'+pw+'" height="'+ph+'" rx="9" ry="9" fill="var(--surface,#fff)" stroke="var(--border2,#c5ccdf)" stroke-width="1.2"></rect>'
