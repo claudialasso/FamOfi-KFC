@@ -946,10 +946,8 @@ subP+='</tbody></table><div style="font-size:11px;color:var(--text3);margin-top:
 return subP;
 }
 function buildOrgTabHTML(id){
-return '<div style="display:flex;gap:8px;margin-bottom:14px">'
-+'<button class="btn btn-teal btn-sm" onclick="printOrgChart('+q(id)+')">&#128424; '+t('printChart')+'</button>'
-+'<button class="btn btn-outline btn-sm" onclick="printOrgChart('+q(id)+')">&#8659; PDF / PNG</button>'
-+'</div>'+buildFullOrgChart(id);
+  _orgActiveCompanyId = id;
+  return renderOrgChartsContent();
 }
 function buildInvestmentsTabHTML(id){
 var invs=data.investments.filter(function(i){return invCoIds(i).indexOf(id)!==-1;});
@@ -1400,37 +1398,24 @@ var bot = y1<=y2 ? {x:x2,y:y2-ORG_CARD_H/2} : {x:x1,y:y1-ORG_CARD_H/2};
 var midY=(top.y+bot.y)/2;
 var eAttrs=' fill="none" stroke="var(--border2,#c7cbe0)" stroke-width="1.5" data-edge-from="'+esc(fromKey)+'" data-edge-to="'+esc(toKey)+'"';
 
+var d='M '+top.x+' '+top.y+' L '+top.x+' '+midY+' L '+bot.x+' '+midY+' L '+bot.x+' '+bot.y;
+
 if(pct==null){
-  var d='M '+top.x+' '+top.y+' L '+top.x+' '+midY+' L '+bot.x+' '+midY+' L '+bot.x+' '+bot.y;
   return {path:'<path d="'+d+'"'+eAttrs+'></path>', label:''};
 }
 
 var labelText=pct+'%';
 var charW=7, pw=Math.max(labelText.length*charW+12,32), ph=18;
-var gap=2; // px gap between owner node bottom edge and top of label
 
-// PLACEMENT RULE: label sits directly below the owner (top) node at top.x.
-// The connector exits the owner at (top.x, top.y).
-// Label center: lx=top.x, ly=top.y+gap+ph/2
-// Line starts below the label (no line passes through the label).
-var lx=top.x;
-var ly=top.y+gap+ph/2;
-var lineStart=ly+ph/2+gap; // y where the connector line begins, below the label
-
-var pathsHTML='';
-if(lineStart>=midY-2){
-  // Connector too short to show line above midY: draw full path, label is on top
-  var d='M '+top.x+' '+top.y+' L '+top.x+' '+midY+' L '+bot.x+' '+midY+' L '+bot.x+' '+bot.y;
-  pathsHTML='<path d="'+d+'"'+eAttrs+'></path>';
-} else {
-  // Line starts below the label and continues normally
-  pathsHTML='<path d="M '+top.x+' '+lineStart+' L '+top.x+' '+midY+' L '+bot.x+' '+midY+' L '+bot.x+' '+bot.y+'"'+eAttrs+'></path>';
-}
+// PLACEMENT RULE: label sits at the midpoint of the horizontal segment.
+// Each parent->child connection gets its own unique (lx,ly) since bot.x differs per child.
+var lx=(top.x+bot.x)/2;
+var ly=midY;
 
 // Label pill -- rendered on top of all paths via orgRenderGraphHTML layering
 var labelHTML='<rect x="'+(lx-pw/2)+'" y="'+(ly-ph/2)+'" width="'+pw+'" height="'+ph+'" rx="9" ry="9" fill="var(--surface,#fff)" stroke="var(--border2,#c5ccdf)" stroke-width="1.2"></rect>'
 +'<text x="'+lx+'" y="'+(ly+5)+'" text-anchor="middle" font-size="10" font-weight="600" font-family="system-ui,sans-serif" fill="var(--text2,#5a6080)">'+esc(labelText)+'</text>';
-return {path:pathsHTML, label:labelHTML};
+return {path:'<path d="'+d+'"'+eAttrs+'></path>', label:labelHTML};
 }
 
 
@@ -1906,11 +1891,10 @@ var btns=list.querySelectorAll('button');
 var search=(qv||'').toLowerCase().trim();
 btns.forEach(function(btn){ btn.style.display=(!search||btn.textContent.toLowerCase().includes(search))?'flex':'none'; });
 }
-function renderOrgCharts(){
+function renderOrgChartsContent(){
 var cs=data.companies.filter(function(c){ return c.status!=='liquidated'; }).sort(function(a,b){ var an=a.name.toLowerCase(), bn=b.name.toLowerCase(); return an<bn?-1:an>bn?1:0; });
 if(_orgActiveCompanyId && !cs.find(function(x){ return x.id===_orgActiveCompanyId; })) _orgActiveCompanyId=null;
-var h='<div class="section-header"><div class="section-title">'+t('orgcharts')+'</div></div>';
-h+='<div class="org-charts-layout">';
+var h='<div class="org-charts-layout">';
 h+='<div class="org-filter-sidebar">';
 h+='<div class="card org-filter-section">';
 h+='<div class="org-filter-title">'+(lang==='en'?'Companies':'Empresas')+'</div>';
@@ -1989,6 +1973,11 @@ h+='<div class="card org-chart-card" style="margin-bottom:20px">'+buildFilteredO
 }
 h+='</div>';
 h+='</div>';
+return h;
+}
+function renderOrgCharts(){
+var h='<div class="section-header"><div class="section-title">'+t('orgcharts')+'</div></div>';
+h+=renderOrgChartsContent();
 setTimeout(function(){ if(window.activateOrgChartTab) window.activateOrgChartTab(); filterOrgCompanyList(_orgCoSearch); }, 0);
 return h;
 }
