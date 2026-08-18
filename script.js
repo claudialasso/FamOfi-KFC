@@ -734,8 +734,8 @@ function mkChart(id,type,labels,values,opts){
   charts[id]=new Chart(ctx,{type:type,
     data:{labels:labels,datasets:[{data:values,backgroundColor:chartColors(labels.length),borderWidth:0,borderRadius:type==='bar'?5:0}]},
     options:{responsive:true,maintainAspectRatio:false,
-      layout: type==='doughnut' ? {padding:28} : undefined,
-      plugins:{legend:{display:type!=='bar',position:'bottom',labels:{boxWidth:12,font:{size:lFsz},padding:lPad}}},
+      layout: type==='doughnut' ? {padding:{top:28,right:28,bottom:28,left:8}} : undefined,
+      plugins:{legend:{display:type!=='bar',position:type==='doughnut'?'left':'bottom',maxWidth:140,labels:{boxWidth:11,font:{size:lFsz},padding:lPad}}},
       scales:type==='bar'?{x:{grid:{display:false},ticks:{font:{size:10}}},y:{grid:{color:'#eef0f8'},ticks:{font:{size:10},stepSize:1}}}:undefined
     },
     plugins: type==='doughnut' ? [_doughnutLabelPlugin] : []
@@ -797,8 +797,8 @@ var ovSort='asc'; function toggleOvSort(){ ovSort=ovSort==='asc'?'desc':'asc'; r
   h+='<div class="kpi"><div class="kpi-label">'+t('totalShareholders')+'</div><div class="kpi-val">'+shSet.size+'</div></div>';
   h+='<div class="kpi"><div class="kpi-label">'+t('totalInvestments')+'</div><div class="kpi-val">'+inv.length+'</div><div class="kpi-sub">'+fmtD(totalMV)+' MV</div></div></div>';
   h+='<div class="charts-row" style="grid-template-columns:2fr 1fr;margin-bottom:18px">';
-  h+='<div class="chart-card"><div class="chart-title">'+t('byJurisdiction')+'</div><div class="chart-wrap" style="height:320px"><canvas id="ch-jur"></canvas></div></div>';
-  h+='<div class="chart-card"><div class="chart-title">'+t('byStatus')+'</div><div class="chart-wrap" style="height:320px"><canvas id="ch-status"></canvas></div></div>';
+  h+='<div class="chart-card"><div class="chart-title">'+t('byJurisdiction')+'</div><div class="chart-wrap" style="height:220px"><canvas id="ch-jur"></canvas></div></div>';
+  h+='<div class="chart-card"><div class="chart-title">'+t('byStatus')+'</div><div class="chart-wrap" style="height:220px"><canvas id="ch-status"></canvas></div></div>';
   h+='</div>';
   var csSorted=cs.slice().sort(function(a,b){var an=(a.name||'').toLowerCase(),bn=(b.name||'').toLowerCase();var cmp=an<bn?-1:an>bn?1:0;return ovSort==='desc'?-cmp:cmp;}); var sortIcon=ovSort==='asc'?'▲':'▼'; h+='<div class="card" style="padding:0;width:100%"><table><thead><tr><th style="cursor:pointer;user-select:none" onclick="toggleOvSort()">'+t('name')+' <span style="font-size:9px;color:var(--accent)">'+sortIcon+'</span></th><th>'+t('jurisdiction')+'</th><th>'+t('status')+'</th><th>'+t('shareholders2')+'</th><th>'+t('subsidiaries')+'</th><th>'+t('investments')+'</th></tr></thead><tbody>';
   if(!csSorted.length){ h+='<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text3)">'+t('noCompanies')+'</td></tr>'; }
