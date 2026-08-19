@@ -637,10 +637,11 @@ var _doughnutLabelPlugin = {
   afterDraw: function(chart) {
     if(chart.config.type !== 'doughnut') return;
     var ctx = chart.ctx;
-    var INNER_MIN = 0.35;
-    var LINE_LEN  = 12;
-    var LABEL_GAP = 14;
-    var outerRight = [], outerLeft = [];
+    var cW = chart.width, cH = chart.height;
+    var MARGIN = 8;
+    var FS = 11;
+
+    var items = [];
     chart.data.datasets.forEach(function(ds, i) {
       var meta = chart.getDatasetMeta(i);
       if(meta.hidden) return;
@@ -649,79 +650,46 @@ var _doughnutLabelPlugin = {
         if(!val) return;
         var segAngle = arc.endAngle - arc.startAngle;
         var midAngle = arc.startAngle + segAngle / 2;
-        var cx = arc.x, cy = arc.y;
-        if(segAngle >= INNER_MIN) {
-          var r = arc.innerRadius + (arc.outerRadius - arc.innerRadius) * 0.65;
-          var x = cx + Math.cos(midAngle) * r;
-          var y = cy + Math.sin(midAngle) * r;
-          ctx.save();
-          ctx.fillStyle = '#fff';
-          ctx.font = 'bold 11px sans-serif';
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.fillText(String(val), x, y);
-          ctx.restore();
-        } else {
-          var item = {arc:arc, val:val, midAngle:midAngle, cx:cx, cy:cy};
-          if(Math.cos(midAngle) >= 0) outerRight.push(item);
-          else outerLeft.push(item);
-        }
+        var r = arc.innerRadius + (arc.outerRadius - arc.innerRadius) * 0.60;
+        items.push({ val: val, str: String(val), angle: midAngle, r: r, cx: arc.x, cy: arc.y });
       });
     });
-    function sortByIdealY(arr) {
-      arr.sort(function(a,b){
-        var ya = a.cy + Math.sin(a.midAngle)*(a.arc.outerRadius+LINE_LEN);
-        var yb = b.cy + Math.sin(b.midAngle)*(b.arc.outerRadius+LINE_LEN);
-        return ya - yb;
-      });
-    }
-    function resolveOverlap(arr) {
-      var ys = arr.map(function(it){
-        return it.cy + Math.sin(it.midAngle)*(it.arc.outerRadius+LINE_LEN);
-      });
-      for(var pass=0; pass<40; pass++){
-        var moved=false;
-        for(var k=1; k<ys.length; k++){
-          if(ys[k]-ys[k-1] < LABEL_GAP){
-            var mid=(ys[k]+ys[k-1])/2;
-            ys[k-1]=mid-LABEL_GAP/2;
-            ys[k]=mid+LABEL_GAP/2;
-            moved=true;
-          }
+    if(!items.length) return;
+
+    items.sort(function(a,b){ return a.angle - b.angle; });
+
+    var minGap = (FS + 4) / (items[0].r || 50);
+    for(var pass = 0; pass < 80; pass++) {
+      var moved = false;
+      for(var k = 1; k < items.length; k++) {
+        if(items[k].angle - items[k-1].angle < minGap) {
+          var mid = (items[k].angle + items[k-1].angle) / 2;
+          items[k-1].angle = mid - minGap/2;
+          items[k].angle = mid + minGap/2;
+          moved = true;
         }
-        if(!moved) break;
       }
-      return ys;
+      if(!moved) break;
     }
-    function drawOuterLabels(arr, ys) {
-      arr.forEach(function(it, k) {
-        var arc = it.arc;
-        var cx = it.cx, cy = it.cy;
-        var outerR = arc.outerRadius;
-        var mx = Math.cos(it.midAngle), my = Math.sin(it.midAngle);
-        var lx1 = cx + mx*(outerR+2);
-        var ly1 = cy + my*(outerR+2);
-        var lx2 = cx + mx*(outerR+LINE_LEN);
-        var ly2 = ys[k];
-        var tx = lx2 + (mx >= 0 ? 5 : -5);
-        ctx.save();
-        ctx.strokeStyle = 'rgba(100,110,160,0.5)';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        ctx.moveTo(lx1, ly1);
-        ctx.lineTo(lx2, ly2);
-        ctx.stroke();
-        ctx.fillStyle = '#4a5070';
-        ctx.font = 'bold 10px system-ui,sans-serif';
-        ctx.textAlign = mx >= 0 ? 'left' : 'right';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(String(it.val), tx, ly2);
-        ctx.restore();
-      });
-    }
-    sortByIdealY(outerRight); sortByIdealY(outerLeft);
-    drawOuterLabels(outerRight, resolveOverlap(outerRight));
-    drawOuterLabels(outerLeft,  resolveOverlap(outerLeft));
+
+    ctx.save();
+    ctx.font = 'bold ' + FS + 'px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'rgba(0,0,0,0.55)';
+    ctx.shadowBlur = 2;
+    ctx.fillStyle = '#fff';
+
+    items.forEach(function(item) {
+      var x = item.cx + Math.cos(item.angle) * item.r;
+      var y = item.cy + Math.sin(item.angle) * item.r;
+      var tw = ctx.measureText(item.str).width;
+      x = Math.max(MARGIN + tw/2, Math.min(cW - MARGIN - tw/2, x));
+      y = Math.max(MARGIN + FS/2, Math.min(cH - MARGIN - FS/2, y));
+      ctx.fillText(item.str, x, y);
+    });
+
+    ctx.restore();
   }
 };
 function mkChart(id,type,labels,values,opts){
