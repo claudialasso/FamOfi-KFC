@@ -734,8 +734,8 @@ function mkChart(id,type,labels,values,opts){
   charts[id]=new Chart(ctx,{type:type,
     data:{labels:labels,datasets:[{data:values,backgroundColor:chartColors(labels.length),borderWidth:0,borderRadius:type==='bar'?5:0}]},
     options:{responsive:true,maintainAspectRatio:false,
-      layout: type==='doughnut' ? {padding:{top:28,right:28,bottom:28,left:8}} : undefined,
-      plugins:{legend:{display:type!=='bar',position:type==='doughnut'?'left':'bottom',maxWidth:140,labels:{boxWidth:11,font:{size:lFsz},padding:lPad}}},
+      layout: type==='doughnut' ? {padding: opts.hideLegend ? {top:6,right:6,bottom:6,left:6} : {top:28,right:28,bottom:28,left:8}} : undefined,
+      plugins:{legend:{display:opts.hideLegend?false:(type!=='bar'),position:type==='doughnut'?'left':'bottom',maxWidth:140,labels:{boxWidth:11,font:{size:lFsz},padding:lPad}}},
       scales:type==='bar'?{x:{grid:{display:false},ticks:{font:{size:10}}},y:{grid:{color:'#eef0f8'},ticks:{font:{size:10},stepSize:1}}}:undefined
     },
     plugins: type==='doughnut' ? [_doughnutLabelPlugin] : []
@@ -796,9 +796,9 @@ var ovSort='asc'; function toggleOvSort(){ ovSort=ovSort==='asc'?'desc':'asc'; r
   h+='<div class="kpi"><div class="kpi-label">'+t('jurisdictions')+'</div><div class="kpi-val">'+jurs+'</div></div>';
   h+='<div class="kpi"><div class="kpi-label">'+t('totalShareholders')+'</div><div class="kpi-val">'+shSet.size+'</div></div>';
   h+='<div class="kpi"><div class="kpi-label">'+t('totalInvestments')+'</div><div class="kpi-val">'+inv.length+'</div><div class="kpi-sub">'+fmtD(totalMV)+' MV</div></div></div>';
-  h+='<div class="charts-row" style="grid-template-columns:2fr 1fr;margin-bottom:18px">';
-  h+='<div class="chart-card"><div class="chart-title">'+t('byJurisdiction')+'</div><div class="chart-wrap" style="height:220px"><canvas id="ch-jur"></canvas></div></div>';
-  h+='<div class="chart-card"><div class="chart-title">'+t('byStatus')+'</div><div class="chart-wrap" style="height:220px"><canvas id="ch-status"></canvas></div></div>';
+  h+='<div class="charts-row">';
+  h+='<div class="chart-card"><div class="chart-title">'+t('byJurisdiction')+'</div><div class="chart-body"><div class="ov-legend" id="leg-jur"><div class="ov-legend-row"></div></div><div class="ov-chart-wrap"><canvas id="ch-jur"></canvas></div></div></div>';
+  h+='<div class="chart-card"><div class="chart-title">'+t('byStatus')+'</div><div class="chart-body"><div class="ov-legend" id="leg-status"><div class="ov-legend-row"></div></div><div class="ov-chart-wrap"><canvas id="ch-status"></canvas></div></div></div>';
   h+='</div>';
   var csSorted=cs.slice().sort(function(a,b){var an=(a.name||'').toLowerCase(),bn=(b.name||'').toLowerCase();var cmp=an<bn?-1:an>bn?1:0;return ovSort==='desc'?-cmp:cmp;}); var sortIcon=ovSort==='asc'?'▲':'▼'; h+='<div class="card" style="padding:0;width:100%"><table><thead><tr><th style="cursor:pointer;user-select:none" onclick="toggleOvSort()">'+t('name')+' <span style="font-size:9px;color:var(--accent)">'+sortIcon+'</span></th><th>'+t('jurisdiction')+'</th><th>'+t('status')+'</th><th>'+t('shareholders2')+'</th><th>'+t('subsidiaries')+'</th><th>'+t('investments')+'</th></tr></thead><tbody>';
   if(!csSorted.length){ h+='<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text3)">'+t('noCompanies')+'</td></tr>'; }
@@ -826,11 +826,22 @@ function buildOvCharts(){
   var activeCs=cs.filter(function(c){ return c.status==='active'; });
   var jm={}; activeCs.forEach(function(c){jm[c.jurisdiction]=(jm[c.jurisdiction]||0)+1;});
   var jd=sortedPairs(jm);
-  mkChart('ch-jur','doughnut',jd.labels,jd.values,{legendSize:12,legendPad:10});
+  mkChart('ch-jur','doughnut',jd.labels,jd.values,{legendSize:12,legendPad:10,hideLegend:true});
   // By Status: all companies, sorted largest first
   var sm={}; cs.forEach(function(c){var k=t(c.status);sm[k]=(sm[k]||0)+1;});
   var sd=sortedPairs(sm);
-  mkChart('ch-status','doughnut',sd.labels,sd.values,{legendSize:12,legendPad:10});
+  mkChart('ch-status','doughnut',sd.labels,sd.values,{legendSize:12,legendPad:10,hideLegend:true});
+  // Build custom HTML legends
+  function buildOvLegend(elId, labels, colors) {
+    var el=document.getElementById(elId); if(!el) return;
+    var row=el.querySelector('.ov-legend-row'); if(!row) return;
+    row.innerHTML=labels.map(function(lbl,i){
+      var display=lbl.length>14?lbl.slice(0,12)+'…':lbl;
+      return '<span class="ov-leg-item"><span class="ov-leg-swatch" style="background:'+colors[i]+'"></span><span class="ov-leg-label" title="'+esc(lbl)+'">'+esc(display)+'</span></span>';
+    }).join('');
+  }
+  buildOvLegend('leg-jur',jd.labels,chartColors(jd.labels.length));
+  buildOvLegend('leg-status',sd.labels,chartColors(sd.labels.length));
 }
 // ── Companies ─────────────────────────────────────────────────────────────────
 var cSearch='',cJur='',cStatus='',cType='';
