@@ -638,10 +638,25 @@ var _doughnutLabelPlugin = {
     if(chart.config.type !== 'doughnut') return;
     var ctx = chart.ctx;
     var cW = chart.width, cH = chart.height;
-    var MARGIN = 8;
     var FS = 11;
+    var FONT = 'bold ' + FS + 'px sans-serif';
+    var OUTER_GAP = 12;
+    var LABEL_TICK = 5;
+    var MIN_VERT_GAP = FS + 6;
+    var SIDE_PAD = 3;
 
-    var items = [];
+    var outsideColor = '#555';
+    try {
+      var c = getComputedStyle(document.documentElement).getPropertyValue('--text2').trim();
+      if(c) outsideColor = c;
+    } catch(e) {}
+
+    ctx.save();
+    ctx.font = FONT;
+
+    var insideItems = [];
+    var outsideItems = [];
+
     chart.data.datasets.forEach(function(ds, i) {
       var meta = chart.getDatasetMeta(i);
       if(meta.hidden) return;
@@ -650,44 +665,112 @@ var _doughnutLabelPlugin = {
         if(!val) return;
         var segAngle = arc.endAngle - arc.startAngle;
         var midAngle = arc.startAngle + segAngle / 2;
-        var r = arc.innerRadius + (arc.outerRadius - arc.innerRadius) * 0.60;
-        items.push({ val: val, str: String(val), angle: midAngle, r: r, cx: arc.x, cy: arc.y });
+        var str = String(val);
+        var cx = arc.x, cy = arc.y;
+        var innerR = arc.innerRadius;
+        var outerR = arc.outerRadius;
+        var midR = innerR + (outerR - innerR) * 0.58;
+        var arcLen = segAngle * midR;
+        var textW = ctx.measureText(str).width;
+
+        if(arcLen >= textW + 10 && segAngle >= 0.28) {
+          insideItems.push({ str: str, angle: midAngle, r: midR, cx: cx, cy: cy });
+        } else {
+          outsideItems.push({
+            str: str, angle: midAngle, cx: cx, cy: cy,
+            outerR: outerR, isRight: Math.cos(midAngle) >= 0, textW: textW
+          });
+        }
       });
     });
-    if(!items.length) return;
 
-    items.sort(function(a,b){ return a.angle - b.angle; });
-
-    var minGap = (FS + 4) / (items[0].r || 50);
-    for(var pass = 0; pass < 80; pass++) {
-      var moved = false;
-      for(var k = 1; k < items.length; k++) {
-        if(items[k].angle - items[k-1].angle < minGap) {
-          var mid = (items[k].angle + items[k-1].angle) / 2;
-          items[k-1].angle = mid - minGap/2;
-          items[k].angle = mid + minGap/2;
-          moved = true;
-        }
-      }
-      if(!moved) break;
-    }
-
-    ctx.save();
-    ctx.font = 'bold ' + FS + 'px sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.shadowColor = 'rgba(0,0,0,0.55)';
     ctx.shadowBlur = 2;
     ctx.fillStyle = '#fff';
-
-    items.forEach(function(item) {
+    insideItems.forEach(function(item) {
       var x = item.cx + Math.cos(item.angle) * item.r;
       var y = item.cy + Math.sin(item.angle) * item.r;
-      var tw = ctx.measureText(item.str).width;
-      x = Math.max(MARGIN + tw/2, Math.min(cW - MARGIN - tw/2, x));
-      y = Math.max(MARGIN + FS/2, Math.min(cH - MARGIN - FS/2, y));
       ctx.fillText(item.str, x, y);
     });
+
+    if(!outsideItems.length) { ctx.restore(); return; }
+
+    var refCx = outsideItems[0].cx;
+    var refCy = outsideItems[0].cy;
+    var refOuterR = outsideItems[0].outerR;
+
+    var rightLabelX = Math.min(cW - SIDE_PAD - 2, refCx + refOuterR + OUTER_GAP + LABEL_TICK + 3);
+    var leftLabelX = Math.max(SIDE_PAD + 2, refCx - refOuterR - OUTER_GAP - LABEL_TICK - 3);
+
+    var leftItems = outsideItems.filter(function(it) { return !it.isRight; });
+    var rightItems = outsideItems.filter(function(it) { return it.isRight; });
+
+    leftItems.sort(function(a,b) { return Math.sin(a.angle) - Math.sin(b.angle); });
+    rightItems.sort(function(a,b) { return Math.sin(a.angle) - Math.sin(b.angle); });
+
+    function spaceItems(items) {
+      if(!items.length) return;
+      items.forEach(function(it) {
+        it.labelY = it.cy + Math.sin(it.angle) * (it.outerR + OUTER_GAP);
+        it.labelY = Math.max(FS/2 + SIDE_PAD, Math.min(cH - FS/2 - SIDE_PAD, it.labelY));
+      });
+      for(var pass = 0; pass < 120; pass++) {
+        var moved = false;
+        for(var k = 1; k < items.length; k++) {
+          if(items[k].labelY - items[k-1].labelY < MIN_VERT_GAP) {
+            var mid = (items[k].labelY + items[k-1].labelY) / 2;
+            items[k-1].labelY = mid - MIN_VERT_GAP/2;
+            items[k].labelY = mid + MIN_VERT_GAP/2;
+            moved = true;
+          }
+        }
+        if(!moved) break;
+      }
+      items.forEach(function(it) {
+        it.labelY = Math.max(FS/2 + SIDE_PAD, Math.min(cH - FS/2 - SIDE_PAD, it.labelY));
+      });
+    }
+
+    spaceItems(leftItems);
+    spaceItems(rightItems);
+
+    ctx.shadowBlur = 0;
+
+    function drawOutside(item, labelX, isRight) {
+      var p1x = item.cx + Math.cos(item.angle) * item.outerR;
+      var p1y = item.cy + Math.sin(item.angle) * item.outerR;
+      var p2x = item.cx + Math.cos(item.angle) * (item.outerR + OUTER_GAP);
+      var p2y = item.cy + Math.sin(item.angle) * (item.outerR + OUTER_GAP);
+      var p3x = isRight ? labelX - LABEL_TICK : labelX + LABEL_TICK;
+      var p3y = item.labelY;
+
+      ctx.strokeStyle = 'rgba(155,155,155,0.75)';
+      ctx.lineWidth = 1;
+      ctx.lineJoin = 'round';
+      ctx.beginPath();
+      ctx.moveTo(p1x, p1y);
+      ctx.lineTo(p2x, p2y);
+      ctx.lineTo(p3x, p3y);
+      ctx.stroke();
+
+      ctx.fillStyle = 'rgba(155,155,155,0.85)';
+      ctx.beginPath();
+      ctx.arc(p1x, p1y, 1.5, 0, 2*Math.PI);
+      ctx.fill();
+
+      ctx.textAlign = isRight ? 'left' : 'right';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = outsideColor;
+      ctx.shadowColor = 'rgba(0,0,0,0.1)';
+      ctx.shadowBlur = 1;
+      ctx.fillText(item.str, labelX, item.labelY);
+      ctx.shadowBlur = 0;
+    }
+
+    leftItems.forEach(function(it) { drawOutside(it, leftLabelX, false); });
+    rightItems.forEach(function(it) { drawOutside(it, rightLabelX, true); });
 
     ctx.restore();
   }
