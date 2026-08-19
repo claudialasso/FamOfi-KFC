@@ -1,4 +1,3 @@
-
 var firebaseConfig = {
   apiKey: "AIzaSyBJtmNQV6dUYQ7qBesXrl0zPrlHP2zjngo",
   authDomain: "famofi-empresas.firebaseapp.com",
@@ -734,7 +733,7 @@ function mkChart(id,type,labels,values,opts){
   charts[id]=new Chart(ctx,{type:type,
     data:{labels:labels,datasets:[{data:values,backgroundColor:chartColors(labels.length),borderWidth:0,borderRadius:type==='bar'?5:0}]},
     options:{responsive:true,maintainAspectRatio:false,
-      layout: type==='doughnut' ? {padding: opts.hideLegend ? {top:6,right:6,bottom:6,left:6} : {top:28,right:28,bottom:28,left:8}} : undefined,
+      layout: type==='doughnut' ? {padding: opts.hideLegend ? {top:28,right:36,bottom:28,left:36} : {top:28,right:28,bottom:28,left:8}} : undefined,
       plugins:{legend:{display:opts.hideLegend?false:(type!=='bar'),position:type==='doughnut'?'left':'bottom',maxWidth:140,labels:{boxWidth:11,font:{size:lFsz},padding:lPad}}},
       scales:type==='bar'?{x:{grid:{display:false},ticks:{font:{size:10}}},y:{grid:{color:'#eef0f8'},ticks:{font:{size:10},stepSize:1}}}:undefined
     },
