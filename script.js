@@ -1094,7 +1094,57 @@ return subP;
 }
 function buildOrgTabHTML(id){
   _orgActiveCompanyId = id;
-  return renderOrgChartsContent();
+  // Render org chart for a single company without the company selector list
+  var c = data.companies.find(function(x){ return x.id === id; });
+  if(!c) return '<div class="empty">Company not found.</div>';
+  var st = orgEnsureSettings(id);
+  var h = '<div class="org-charts-layout">';
+  // Settings sidebar (chart settings only, no company list)
+  h += '<div class="org-filter-sidebar">';
+  h += '<div class="card org-filter-section">';
+  h += '<div class="org-filter-title">' + (lang==='en'?'Chart Settings':'Configuracion del Grafico') + '</div>';
+  h += '<div style="font-size:12.5px;font-weight:700;margin-bottom:8px">' + esc(c.name) + '</div>';
+  h += '<label class="org-filter-option"><input type="checkbox" ' + (st.shareholders?'checked':'') + ' onchange="orgSetCompanySetting(' + q(id) + ',\'shareholders\',this.checked)"> <span>' + (lang==='en'?'Show shareholders':'Mostrar accionistas') + '</span></label>';
+  if(st.shareholders){
+    var shTree = orgBuildShTree(id);
+    if(shTree.length){
+      h += '<div style="margin-left:18px;margin-top:2px">' + orgRenderShTreeHTML(id, shTree, st.shIds, 0) + '</div>';
+    } else {
+      h += '<div style="margin-left:18px;color:var(--text3);font-size:11.5px">' + t('noData') + '</div>';
+    }
+  }
+  h += '<label class="org-filter-option"><input type="checkbox" ' + (st.subsidiaries?'checked':'') + ' onchange="orgSetCompanySetting(' + q(id) + ',\'subsidiaries\',this.checked)"> <span>' + (lang==='en'?'Show subsidiaries':'Mostrar subsidiarias') + '</span></label>';
+  if(st.subsidiaries){
+    var subTree = orgBuildSubTree(id);
+    if(subTree.length){
+      h += '<div style="margin-left:18px;margin-top:2px">' + orgRenderSubTreeHTML(id, subTree, st.subIds, 0) + '</div>';
+    } else {
+      h += '<div style="margin-left:18px;color:var(--text3);font-size:11.5px">' + t('noData') + '</div>';
+    }
+  }
+  h += '<label class="org-filter-option"><input type="checkbox" ' + (st.investments?'checked':'') + ' onchange="orgSetCompanySetting(' + q(id) + ',\'investments\',this.checked)"> <span>' + (lang==='en'?'Show investments':'Mostrar inversiones') + '</span></label>';
+  if(st.investments){
+    var invList = orgBuildInvCompanyList(id).filter(function(e){ return e.investments.length; });
+    if(invList.length){
+      h += '<div style="margin-left:18px;margin-top:2px">' + orgRenderInvListHTML(id, invList, st.invIds) + '</div>';
+    } else {
+      h += '<div style="margin-left:18px;color:var(--text3);font-size:11.5px">' + t('noData') + '</div>';
+    }
+  }
+  h += '</div>';
+  h += '</div>';
+  // Main chart area
+  h += '<div class="org-chart-main" style="flex:1;min-width:0">';
+  h += '<div class="card" style="margin-bottom:14px;padding:12px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">';
+  h += '<div style="font-size:13px;font-weight:600">' + esc(c.name) + ' — ' + t('orgChart') + '</div>';
+  h += '<div style="display:flex;gap:8px">';
+  h += '<button class="btn btn-teal btn-sm" onclick="printOrgChart(' + q(c.id) + ')">🖨 ' + t('printChart') + '</button>';
+  h += '<button class="btn btn-outline btn-sm" onclick="printOrgChart(' + q(c.id) + ')">⭳ PDF / PNG</button>';
+  h += '</div></div>';
+  h += '<div class="card org-chart-card" style="margin-bottom:20px">' + buildFilteredOrgChart(c.id, st) + '</div>';
+  h += '</div>';
+  h += '</div>';
+  return h;
 }
 function buildInvestmentsTabHTML(id){
 var invs=data.investments.filter(function(i){return invCoIds(i).indexOf(id)!==-1;});
@@ -2026,16 +2076,26 @@ window.addEventListener('afterprint', function(){
 
 // -- Org Charts Tab -----------------------------------------------------------
 function orgSelectCompany(id){
+var list=document.getElementById('org-co-list');
+var savedScroll=list?list.scrollTop:0;
 _orgActiveCompanyId = id;
 orgEnsureSettings(id);
 var m=document.getElementById('main'); if(m) m.innerHTML=renderOrgCharts();
+var newList=document.getElementById('org-co-list');
+if(newList) newList.scrollTop=savedScroll;
 }
 function orgSetCompanySetting(id, field, val){
+var list=document.getElementById('org-co-list');
+var savedScroll=list?list.scrollTop:0;
 var st=orgEnsureSettings(id);
 st[field]=val;
 var m=document.getElementById('main'); if(m) m.innerHTML=renderOrgCharts();
+var newList=document.getElementById('org-co-list');
+if(newList) newList.scrollTop=savedScroll;
 }
 function orgToggleCompanyNode(id, kind, nodeId, checked){
+var list=document.getElementById('org-co-list');
+var savedScroll=list?list.scrollTop:0;
 var st=orgEnsureSettings(id);
 var field, allItems;
 if(kind==='sh'){ field='shIds'; allItems=orgFlattenShIds(id); }
@@ -2045,6 +2105,8 @@ if(!st[field]){ st[field] = new Set(allItems); }
 if(checked) st[field].add(nodeId); else st[field].delete(nodeId);
 if(allItems.length && st[field].size===allItems.length) st[field]=null;
 var m=document.getElementById('main'); if(m) m.innerHTML=renderOrgCharts();
+var newList=document.getElementById('org-co-list');
+if(newList) newList.scrollTop=savedScroll;
 }
 function filterOrgCompanyList(qv){
 var list=document.getElementById('org-co-list');
