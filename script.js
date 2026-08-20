@@ -1,4 +1,4 @@
-hvar firebaseConfig = {
+var firebaseConfig = {
   apiKey: "AIzaSyBJtmNQV6dUYQ7qBesXrl0zPrlHP2zjngo",
   authDomain: "famofi-empresas.firebaseapp.com",
   projectId: "famofi-empresas",
