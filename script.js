@@ -623,7 +623,7 @@ function startSub(){
 
 // ── Router ────────────────────────────────────────────────────────────────────
 var page = 'overview';
-var pages = ['overview','companies','shareholders','investments','orgcharts','network'];
+var pages = ['overview','companies','orgcharts','shareholders','investments'];
 
 function go(p){ page=p; render(); }
 
