@@ -4,7 +4,7 @@ var firebaseConfig = {
   projectId: "famofi-empresas",
   storageBucket: "famofi-empresas.firebasestorage.app",
   messagingSenderId: "960254126953",
-  appId: "1:960254126953:web:dbeb3be6f02c97288e6bf8"h
+  appId: "1:960254126953:web:dbeb3be6f02c97288e6bf8"
 };
 firebase.initializeApp(firebaseConfig);
 var _auth = firebase.auth();
