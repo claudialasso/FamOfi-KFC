@@ -4,7 +4,7 @@ var firebaseConfig = {
   projectId: "famofi-empresas",
   storageBucket: "famofi-empresas.firebasestorage.app",
   messagingSenderId: "960254126953",
-  appId: "1:960254126953:web:dbeb3be6f02c97288e6bf8"
+  appId: "1:960254126953:web:dbeb3be6f02c97288e6bf8"h
 };
 firebase.initializeApp(firebaseConfig);
 var _auth = firebase.auth();
@@ -33,7 +33,7 @@ var TT = {
     save:'Save', cancel:'Cancel', export:'Export CSV', exportPDF:'Print / PDF',
     totalCompanies:'Total Companies', activeCompanies:'Active', jurisdictions:'Jurisdictions',
     totalShareholders:'Shareholders', totalInvestments:'Investments',
-    byJurisdiction:'By Jurisdiction', byStatus:'By Status', byPurpose:'By Purpose',
+    byJurisdiction:'Active Companies by Jurisdiction', byStatus:'By Status', byPurpose:'By Purpose',
     byFund:'By Family Fund', byType:'By Investment Type',
     noData:'No data yet.', holdingIn:'Holdings in', companies2:'companies', pct:'avg',
     customFields:'Custom Fields', banking:'Banking', details:'Details',
@@ -71,7 +71,7 @@ var TT = {
     save:'Guardar', cancel:'Cancelar', export:'Exportar CSV', exportPDF:'Imprimir / PDF',
     totalCompanies:'Total Empresas', activeCompanies:'Activas', jurisdictions:'Jurisdicciones',
     totalShareholders:'Accionistas', totalInvestments:'Inversiones',
-    byJurisdiction:'Por Jurisdiccion', byStatus:'Por Estado', byPurpose:'Por Proposito',
+    byJurisdiction:'Empresas Activas por Jurisdiccion', byStatus:'Por Estado', byPurpose:'Por Proposito',
     byFund:'Por Fondo Familiar', byType:'Por Tipo',
     noData:'Sin datos.', holdingIn:'Participacion en', companies2:'empresas', pct:'promedio',
     customFields:'Campos', banking:'Banca', details:'Datos',
