@@ -280,7 +280,7 @@ div[style*="repeat(6,1fr)"]{grid-template-columns:1fr 1fr !important}
   /* Drop zones */
   .drop-zone,.drop-upload{padding:14px}
 }
-</style>
+@supports (height:100dvh){#app{height:100dvh}}@media(max-width:1024px){.kpi-grid{grid-template-columns:repeat(3,1fr)}.modal-lg{max-width:94vw}}@media(max-width:820px){header{height:auto;padding:10px 16px;flex-wrap:wrap;gap:8px}.logo{flex:1}nav{width:100%;order:3;overflow-x:auto;flex-wrap:nowrap;padding-bottom:4px;-webkit-overflow-scrolling:touch;scrollbar-width:none}nav::-webkit-scrollbar{display:none}.kpi-grid{grid-template-columns:repeat(3,1fr)}.modal{max-width:96vw}.modal-lg{max-width:98vw}}@media(max-width:600px){input,select,textarea,input.inp,select.inp,textarea.inp,#li-email,#li-pass{font-size:16px!important}nav button{min-height:44px}.btn{min-height:44px}.lang-btn,.logout-btn,#import-btn{min-height:36px;padding:6px 10px}.overlay{padding:0;align-items:flex-end}.modal,.modal-lg{max-width:100%;border-radius:var(--radius) var(--radius) 0 0;max-height:92dvh}.kpi-grid{grid-template-columns:1fr 1fr}.card{overflow-x:auto;-webkit-overflow-scrolling:touch}.login-card{padding:28px 20px;margin:16px}.org-chart-viewport{touch-action:pan-x pan-y;height:min(55vh,400px)}}@media(max-width:390px){.kpi{padding:10px 12px}.kpi-val{font-size:18px}.hdr-right{gap:4px}.lang-btn,.logout-btn,#import-btn{font-size:10px;padding:4px 6px}.login-card{padding:24px 16px}}@media(max-height:500px) and (orientation:landscape){header{padding:4px 12px}.overlay{padding:8px;align-items:center}.modal,.modal-lg{max-height:96dvh;border-radius:var(--radius)}nav button{min-height:36px;padding:5px 10px}main{padding:8px}}</style>
 </head>
 <body>
 
