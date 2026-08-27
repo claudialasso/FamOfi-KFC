@@ -10,7 +10,7 @@ firebase.initializeApp(firebaseConfig);
 var _auth = firebase.auth();
 var _db = firebase.firestore();
 var _storage = firebase.storage();
-var _REF = _db.collection('famofi').doc('main');
+var _REF = _db.collection('famofi').doc('main');h
 var _ROLES_REF = _db.collection('famofi').doc('roles');
 
 
@@ -383,7 +383,7 @@ function buildSHPeriods(c){
       var next=entries[i+1];
       var ceaseDate=next?next.effectiveDate:null;
       var isLast=(i===entries.length-1);
-      periods.push({slotId:slotId,entryId:e.id,person:e.person,pct:e.pct,class:e.class||'',shares:e.shares,notes:e.notes||'',startDate:e.effectiveDate,ceaseDate:ceaseDate,current:isLast&&!e.removed});
+      periods.push({slotId:slotId,entryId:e.id,person:e.person,type:e.type||'individual',pct:e.pct,class:e.class||'',shares:e.shares,notes:e.notes||'',startDate:e.effectiveDate,ceaseDate:ceaseDate,current:isLast&&!e.removed});
     }
   });
   return periods;
@@ -2446,7 +2446,7 @@ function renderHistTable(cid,kind){
     });
     var rows='';
     sortedP.forEach(function(p){
-      rows+='<tr'+(!p.current?' style="opacity:0.55"':'')+'><td>'+esc(p.person||'')+'</td><td>'+(p.pct!=null?p.pct+'%':'')+'</td><td>'+fmtDate(p.startDate)+'</td><td>'+(p.ceaseDate?fmtDate(p.ceaseDate):'—')+'</td><td>'+(p.current?(lang==='en'?'Current':'Actual'):(lang==='en'?'Former':'Anterior'))+'</td><td>'+esc(p.notes||'')+'</td><td style="white-space:nowrap">';
+      rows+='<tr'+(!p.current?' style="opacity:0.55"':'')+'><td>'+esc(resolveOwner(p)||'')+'</td><td>'+(p.pct!=null?p.pct+'%':'')+'</td><td>'+fmtDate(p.startDate)+'</td><td>'+(p.ceaseDate?fmtDate(p.ceaseDate):'—')+'</td><td>'+(p.current?(lang==='en'?'Current':'Actual'):(lang==='en'?'Former':'Anterior'))+'</td><td>'+esc(p.notes||'')+'</td><td style="white-space:nowrap">';
       if(isAdmin()){
         rows+='<button class="btn btn-outline btn-sm" onclick="openEditHistEntry('+q(cid)+',\'sh\','+q(p.entryId)+')" style="margin-right:4px">'+(lang==='en'?'Edit':'Editar')+'</button>';
         rows+='<button class="btn btn-danger btn-sm" onclick="delHistEntry('+q(cid)+',\'sh\','+q(p.entryId)+')">'+(lang==='en'?'Delete':'Eliminar')+'</button>';
