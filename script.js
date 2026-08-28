@@ -10,7 +10,7 @@ firebase.initializeApp(firebaseConfig);
 var _auth = firebase.auth();
 var _db = firebase.firestore();
 var _storage = firebase.storage();
-var _REF = _db.collection('famofi').doc('main');h
+var _REF = _db.collection('famofi').doc('main');
 var _ROLES_REF = _db.collection('famofi').doc('roles');
 
 
