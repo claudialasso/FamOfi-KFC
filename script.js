@@ -2618,7 +2618,7 @@ function openCompanyForm(id){
   h+='</select></div>';
   h+='<div class="form-group"><label class="lbl">'+t('yearFounded')+'</label><input id="f-year" class="inp" value="'+esc(c?(c.yearFounded||c.year||''):'')+'" placeholder="'+t('dateHelp')+'"><span style="font-size:11px;color:var(--text3)">'+t('dateHelp')+'</span></div>';
   h+='<div class="form-group"><label class="lbl">'+t('liquidationDate')+'</label><input id="f-liq-date" class="inp" value="'+esc(c?c.liquidationDate||'':'')+'" placeholder="'+t('dateHelp')+'"><span style="font-size:11px;color:var(--text3)">'+t('dateHelp')+'</span></div>';
-  h+='<div class="form-group"><label class="lbl">'+t('purpose')se:'')+'"><datalist id="pl"><option>Holding</option><option>Operating</option><option>IP / Royalties</option><option>Real Estate</option></datalist></div>';
+  h+='<div class="form-group"><label class="lbl">'+t('purpose')+'</label><input id="f-purpose" class="inp" list="pl" value="'+esc(c?c.purpose:'')+'"><datalist id="pl"><option>Holding</option><option>Operating</option><option>IP / Royalties</option><option>Real Estate</option></datalist></div>';
   h+='<div class="form-group"><label class="lbl">'+t('tags')+'</label><input id="f-tags" class="inp" value="'+esc(c?c.tags:'')+'"></div>';
   h+='<div class="form-group"><label class="lbl">'+t('fiscalId')+'</label><input id="f-fiscal" class="inp" value="'+esc(c?c.fiscalId:'')+'"></div>';
   h+='<div class="form-group"><label class="lbl">EIN</label><input id="f-ein" class="inp" value="'+esc(c?c.ein:'')+'"></div>';
