@@ -1,5 +1,5 @@
 var firebaseConfig = {
-  apiKey: "AIzaSyBJtmNQV6dUYQ7qBesXrl0zPrlHPh2zjngo",
+  apiKey: "AIzaSyBJtmNQV6dUYQ7qBesXrl0zPrlHP2zjngo",
   authDomain: "famofi-empresas.firebaseapp.com",
   projectId: "famofi-empresas",
   storageBucket: "famofi-empresas.firebasestorage.app",
