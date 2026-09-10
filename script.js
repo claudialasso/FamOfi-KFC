@@ -1,5 +1,5 @@
 var firebaseConfig = {
-  apiKey: "AIzaSyBJtmNQV6dUYQ7qBesXrl0zPrlHP2zjngo",
+  apiKey: "AIzaSyBJtmNQV6dUYQ7qBesXrl0zPrlHPh2zjngo",
   authDomain: "famofi-empresas.firebaseapp.com",
   projectId: "famofi-empresas",
   storageBucket: "famofi-empresas.firebasestorage.app",
@@ -21,7 +21,7 @@ var TT = {
     investments:'Investments', orgcharts:'Org Charts', network:'Network',
     addCompany:'+ Add Company', search:'Search...', allJurisdictions:'All Jurisdictions',
     allStatus:'All Status', name:'Legal Name', jurisdiction:'Jurisdiction',
-    purpose:'Company Purpose', yearFounded:'Year / Date Founded', fiscalId:'Company ID / Fiscal #',
+    purpose:'Company Purpose', yearFounded:'Year / Date Founded', liquidationDate:'Liquidation Date', fiscalId:'Company ID / Fiscal #',
     ein:'EIN', irs:'IRS Classification', director:'Director / Administrador',
     registeredAgent:'Registered Agent', address:'Address', status:'Status', tags:'Tags',
     active:'Active', liquidated:'Liquidated', liquidation:'In Liquidation',
@@ -59,8 +59,7 @@ var TT = {
     investments:'Inversiones', orgcharts:'Organigrama', network:'Red',
     addCompany:'+ Agregar Empresa', search:'Buscar...', allJurisdictions:'Todas las Jurisdicciones',
     allStatus:'Todos los Estados', name:'Razon Social', jurisdiction:'Jurisdiccion',
-    purpose:'Proposito de la Empresa', yearFounded:'Ano / Fecha', fiscalId:'ID Fiscal',
-    ein:'EIN', irs:'Clasificacion IRS', director:'Director',
+    purpose:'Proposito de la Empresa', ypurpose:'Proposito de la Empresa', yearFounded:'Ano / Fecha', liquidationDate:'Fecha de Liquidacion', fiscalId:sificacion IRS', director:'Director',
     registeredAgent:'Agente Registrado', address:'Direccion', status:'Estado', tags:'Etiquetas',
     active:'Activa', liquidated:'Liquidada', liquidation:'En Liquidacion',
     bankName:'Banco', accountNo:'# Cuenta', routing:'Routing / ABA', swift:'SWIFT',
@@ -2616,8 +2615,9 @@ function openCompanyForm(id){
   h+='<div class="form-group"><label class="lbl">Type of Company</label><select id="f-company-type" class="inp"><option value="">— Select type —</option>';
   CO_TYPES.forEach(function(tp){h+='<option value="'+esc(tp)+'"'+((c&&c.companyType===tp)?' selected':'')+'>'+esc(tp)+'</option>';});
   h+='</select></div>';
-  h+='<div class="form-group"><label class="lbl">'+t('yearFounded')+'</label><input id="f-year" class="inp" value="'+esc(c?(c.yearFounded||c.year||''):'')+'" placeholder="'+t('dateHelp')+'"><span style="font-size:11px;color:var(--text3)">'+t('dateHelp')+'</span></div>';
-  h+='<div class="form-group"><label class="lbl">'+t('purpose')+'</label><input id="f-purpose" class="inp" list="pl" value="'+esc(c?c.purpose:'')+'"><datalist id="pl"><option>Holding</option><option>Operating</option><option>IP / Royalties</option><option>Real Estate</option></datalist></div>';
+  h+='<div class="form-group"><label class="lbl">'+t('yearFounded')+'</label><h+='<div class="form-group"><label class="lbl">'+t('yearFounded')+'</label><input id="f-year" class="inp" value="'+esc(c?(c.yearFounded||c.year||''):'')+'" placeholder="'+t('dateHelp')+'"><span style="font-size:11px;color:var(--text3)">'+t('dateHelp')+'</span></div>';
+  h+='<div class="form-group"><label class="lbl">'+t('liquidationDate')+'</label><input id="f-liq-date" class="inp" value="'+esc(c?c.liquidationDate||'':'')+'" placeholder="'+t('dateHelp')+'"><span style="font-size:11px;color:var(--text3)">'+t('dateHelp')+'</span></div>';
+  h+='<div class="form-group"><label class="lbl">'+t('purpose')se:'')+'"><datalist id="pl"><option>Holding</option><option>Operating</option><option>IP / Royalties</option><option>Real Estate</option></datalist></div>';
   h+='<div class="form-group"><label class="lbl">'+t('tags')+'</label><input id="f-tags" class="inp" value="'+esc(c?c.tags:'')+'"></div>';
   h+='<div class="form-group"><label class="lbl">'+t('fiscalId')+'</label><input id="f-fiscal" class="inp" value="'+esc(c?c.fiscalId:'')+'"></div>';
   h+='<div class="form-group"><label class="lbl">EIN</label><input id="f-ein" class="inp" value="'+esc(c?c.ein:'')+'"></div>';
@@ -2705,7 +2705,8 @@ function saveCompany(id){
     purpose:gv('f-purpose'),tags:gv('f-tags'),fiscalId:gv('f-fiscal'),ein:gv('f-ein'),irs:gv('f-irs'),
     director:gv('f-director'),agent:gv('f-agent'),address:gv('f-address'),notes:gv('f-notes'),
     shareholders:window._fSH,banking:banking,custom:custom,documents:documents};
-  if(id){var i=data.companies.findIndex(function(c){return c.id===id;});if(i>-1)data.companies[i]=obj;}
+  if(id){var i=data.companies.findIndex(funcyearFounded:gv('f-year'),liquidationDate:gv('f-liq-date'),
+    purpose:ta.companies[i]=obj;}
   else data.companies.push(obj);
   save(); closeModal(); render();
 }
