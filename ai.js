@@ -314,41 +314,65 @@
   };
 
   function extractBankRef(q) {
-    var lq = q.toLowerCase();
-    // check aliases
-    var keys = Object.keys(BANK_ALIASES).sort(function (a, b) { return b.length - a.length; });
-    for (var i = 0; i < keys.length; i++) {
-      if (lq.indexOf(keys[i]) !== -1) return BANK_ALIASES[keys[i]];
-    }
-    // check actual bank names in data
+    var lq = q.toLowerCase().trim();
+    // check actual bank names in data FIRST (most accurate)
     var banks = Q.bankList();
     for (var j = 0; j < banks.length; j++) {
-      if (lq.indexOf(banks[j].toLowerCase()) !== -1) return banks[j];
+      if (lq.indexOf(banks[j].toLowerCase().trim()) !== -1) return banks[j];
+    }
+    // check aliases and try to map to an actual data bank name
+    var keys = Object.keys(BANK_ALIASES).sort(function (a, b) { return b.length - a.length; });
+    for (var i = 0; i < keys.length; i++) {
+      if (lq.indexOf(keys[i]) !== -1) {
+        var canonical = BANK_ALIASES[keys[i]].toLowerCase();
+        // try to find a matching bank name already in the data
+        for (var k = 0; k < banks.length; k++) {
+          var bk = banks[k].toLowerCase().trim();
+          if (bk.indexOf(canonical) !== -1 || canonical.indexOf(bk) !== -1) return banks[k];
+        }
+        return BANK_ALIASES[keys[i]]; // fallback to alias value
+      }
     }
     return null;
   }
 
   function extractJurisdiction(q) {
     var lq = q.toLowerCase();
-    var keys = Object.keys(JUR_ALIASES).sort(function (a, b) { return b.length - a.length; });
-    for (var i = 0; i < keys.length; i++) {
-      if (lq.indexOf(keys[i]) !== -1) return JUR_ALIASES[keys[i]];
-    }
-    // try actual jurisdictions in data
+    // check actual jurisdictions from data FIRST
     var jurs = Q.jurisdictionList();
     for (var j = 0; j < jurs.length; j++) {
-      if (lq.indexOf(jurs[j].toLowerCase()) !== -1) return jurs[j];
+      if (jurs[j] && lq.indexOf(jurs[j].toLowerCase()) !== -1) return jurs[j];
+    }
+    // then check aliases - but map to the actual data jurisdiction if possible
+    var keys = Object.keys(JUR_ALIASES).sort(function (a, b) { return b.length - a.length; });
+    for (var i = 0; i < keys.length; i++) {
+      if (lq.indexOf(keys[i]) !== -1) {
+        var target = JUR_ALIASES[keys[i]].toLowerCase();
+        for (var k = 0; k < jurs.length; k++) {
+          if (jurs[k] && jurs[k].toLowerCase().indexOf(target) !== -1) return jurs[k];
+        }
+        return JUR_ALIASES[keys[i]];
+      }
     }
     return null;
   }
 
   function extractStatus(q) {
     var lq = q.toLowerCase();
-    if (/\bactive\b/.test(lq)) return 'Active';
-    if (/\binactive\b/.test(lq)) return 'Inactive';
-    if (/\bdissolved\b/.test(lq)) return 'Dissolved';
-    if (/\bpending\b/.test(lq)) return 'Pending';
-    if (/\bdormant\b/.test(lq)) return 'Dormant';
+    // check actual status values from data first (case-insensitive)
+    var statuses = [];
+    Q.all().forEach(function(c){ if (c.status && statuses.indexOf(c.status) === -1) statuses.push(c.status); });
+    for (var i = 0; i < statuses.length; i++) {
+      if (lq.indexOf(statuses[i].toLowerCase()) !== -1) return statuses[i];
+    }
+    // fallback aliases
+    if (/\bactive\b/.test(lq)) return 'active';
+    if (/\binactive\b/.test(lq)) return 'inactive';
+    if (/\bdissolved\b/.test(lq)) return 'dissolved';
+    if (/\bliquidat/.test(lq)) return 'liquidated';
+    if (/\bliquidaci/.test(lq)) return 'liquidation';
+    if (/\bpending\b/.test(lq)) return 'pending';
+    if (/\bdormant\b/.test(lq)) return 'dormant';
     return null;
   }
 
@@ -561,8 +585,14 @@
   }
 
   function statusBadge(s) {
-    var cls = s === 'Active' ? 'ai-badge-active' : s === 'Inactive' ? 'ai-badge-inactive' : 'ai-badge-info';
-    return '<span class="ai-badge ' + cls + '">' + esc(s) + '</span>';
+    if (!s) return '\u2014';
+    var l = s.toLowerCase();
+    var cls = l === 'active' ? 'ai-badge-active'
+            : (l === 'liquidated' || l === 'liquidation' || l === 'inactive' || l === 'dissolved') ? 'ai-badge-inactive'
+            : 'ai-badge-info';
+    // capitalize first letter for display
+    var display = s.charAt(0).toUpperCase() + s.slice(1);
+    return '<span class="ai-badge ' + cls + '">' + esc(display) + '</span>';
   }
 
   function companyTable(companies, columns) {
@@ -673,7 +703,7 @@
       case 'count_companies':
         if (intent.status) {
           companies = Q.byStatus(intent.status);
-          return '<strong>' + companies.length + '</strong> ' + intent.status.toLowerCase() + ' entity/entities in the registry.';
+          return '<strong>' + companies.length + '</strong> ' + intent.status.charAt(0).toUpperCase() + intent.status.slice(1) + ' entity/entities in the registry.';
         }
         return 'There are <strong>' + Q.all().length + '</strong> total entities in the FamOfi Registry.';
 
@@ -752,7 +782,8 @@
 
       case 'by_status':
         companies = Q.byStatus(intent.status);
-        html = '<strong>' + companies.length + '</strong> ' + esc(intent.status.toLowerCase()) + ' entity/entities:<br><br>';
+        var bsDisp = intent.status.charAt(0).toUpperCase() + intent.status.slice(1);
+        html = '<strong>' + companies.length + '</strong> ' + esc(bsDisp) + ' entity/entities:<br><br>';
         html += companyTable(companies, ['name', 'jurisdiction', 'type']);
         if (companies.length) html += '<div class="ai-action-row">' + applyFilterBtn('status', intent.status) + '</div>';
         return html;
