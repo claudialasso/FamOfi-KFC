@@ -618,6 +618,18 @@
       return { type: 'list_all' };
     }
 
+    /* ── Compound multi-condition query (checked FIRST before any single-condition blocks) ── */
+    var _statusC = extractStatus(q);
+    var _jurC = extractJurisdiction(q);
+    var _bankC = extractBankRef(q);
+    var _typeC = extractEntityType(q);
+    var _conds = {};
+    if (_statusC) _conds.status = _statusC;
+    if (_jurC) _conds.jurisdiction = _jurC;
+    if (_bankC) _conds.bank = _bankC;
+    if (_typeC) _conds.type = _typeC;
+    if (Object.keys(_conds).length >= 2) return { type: 'compound_query', conditions: _conds };
+
     /* ── Count companies ── */
     if (/\bhow many (companies|entities|llcs?|corps?|trusts?|total)\b/.test(lq) && !/bank|invest|shareholder/.test(lq) ||
         /\bcuántas?\s+(empresas?|entidades?|compañías?)\b/.test(lq)) {
@@ -782,25 +794,6 @@
     /* ── With/without banking (late fallback) ── */
     if (/with (a |an )?(bank|account|banking)\b/.test(lq)) return { type: 'with_banking' };
     if (/without (a |an )?(bank|account|banking)\b/.test(lq)) return { type: 'no_banking' };
-
-    /* ── Compound multi-condition query ── */
-    var conds = {};
-    var statusC = extractStatus(q);
-    var jurC = extractJurisdiction(q);
-    var bankC = extractBankRef(q);
-    var typeC = extractEntityType(q);
-    if (statusC) conds.status = statusC;
-    if (jurC) conds.jurisdiction = jurC;
-    if (bankC) conds.bank = bankC;
-    if (typeC) conds.type = typeC;
-    var numConds = Object.keys(conds).length;
-    if (numConds >= 2) return { type: 'compound_query', conditions: conds };
-    if (numConds === 1) {
-      if (statusC) return { type: 'by_status', status: statusC };
-      if (jurC) return { type: 'by_jurisdiction', jurisdiction: jurC };
-      if (bankC) return { type: 'by_bank', bank: bankC };
-      if (typeC) return { type: 'by_type', type: typeC };
-    }
 
     /* ── Smart full-text search fallback ── */
     return { type: 'smart_search', query: q };
