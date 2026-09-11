@@ -120,6 +120,37 @@
       return this.all().filter(function (c) { return c.id === id; })[0] || null;
     },
 
+    byType: function (type) {
+      if (!type) return [];
+      var lt = type.toLowerCase();
+      return this.all().filter(function (c) {
+        return ((c.type || c.purpose || '')).toLowerCase().indexOf(lt) !== -1;
+      });
+    },
+
+    byDirector: function (name) {
+      if (!name) return [];
+      var ln = name.toLowerCase();
+      return this.all().filter(function (c) {
+        return (c.director || '').toLowerCase().indexOf(ln) !== -1;
+      });
+    },
+
+    byYear: function (year) {
+      var y = String(year);
+      return this.all().filter(function (c) {
+        return String(c.yearFounded || '') === y;
+      });
+    },
+
+    byTag: function (tag) {
+      if (!tag) return [];
+      var lt = tag.toLowerCase();
+      return this.all().filter(function (c) {
+        return c.tags && c.tags.some(function (t) { return t.toLowerCase().indexOf(lt) !== -1; });
+      });
+    },
+
     withBanking: function () {
       return this.all().filter(function (c) { return c.banking && c.banking.length > 0; });
     },
@@ -133,7 +164,6 @@
     },
 
     withInvestments: function () {
-      var self = this;
       var invIds = this._companiesWithInv();
       return this.all().filter(function (c) { return invIds[c.id]; });
     },
@@ -209,9 +239,18 @@
         c.banking.forEach(function (b) {
           var bn = b.bank || 'Unknown';
           if (!map[bn]) map[bn] = [];
-          // avoid duplicates
           if (map[bn].indexOf(c) === -1) map[bn].push(c);
         });
+      });
+      return map;
+    },
+
+    groupByType: function () {
+      var map = {};
+      this.all().forEach(function (c) {
+        var t = c.type || c.purpose || 'Unknown';
+        if (!map[t]) map[t] = [];
+        map[t].push(c);
       });
       return map;
     },
@@ -230,6 +269,23 @@
     jurisdictionList: function () {
       var seen = {};
       this.all().forEach(function (c) { if (c.jurisdiction) seen[c.jurisdiction] = true; });
+      return Object.keys(seen).sort();
+    },
+
+    typeList: function () {
+      var seen = {};
+      this.all().forEach(function (c) {
+        var t = c.type || c.purpose;
+        if (t) seen[t] = true;
+      });
+      return Object.keys(seen).sort();
+    },
+
+    directorList: function () {
+      var seen = {};
+      this.all().forEach(function (c) {
+        if (c.director) seen[c.director] = true;
+      });
       return Object.keys(seen).sort();
     },
 
@@ -253,7 +309,6 @@
       var company = this.byId(companyId);
       if (!company) return [];
       var results = [];
-      // subsidiaries
       var self = this;
       this.all().forEach(function (c) {
         if (c.id === companyId) return;
@@ -261,7 +316,6 @@
           results.push({ company: c, relation: 'Subsidiary' });
         }
       });
-      // parents (companies that own shares in this one)
       if (company.shareholders) {
         company.shareholders.forEach(function (sh) {
           var parent = self.byId(sh.id || sh.person);
@@ -269,6 +323,74 @@
         });
       }
       return results;
+    },
+
+    /* ── Full-text search across all entity fields ── */
+    search: function (q) {
+      if (!q || q.length < 2) return [];
+      var words = q.toLowerCase().split(/\s+/).filter(function (w) { return w.length >= 2; });
+      if (!words.length) return [];
+      return this.all().filter(function (c) {
+        var text = [
+          c.name, c.jurisdiction, c.status, c.type, c.purpose, c.director,
+          c.registeredAgent, c.address, c.notes, c.fiscalId, c.ein, c.irs
+        ].join(' ').toLowerCase();
+        if (c.banking) c.banking.forEach(function (b) { text += ' ' + (b.bank || '') + ' ' + (b.type || ''); });
+        if (c.tags) text += ' ' + c.tags.join(' ');
+        if (c.shareholders) {
+          c.shareholders.forEach(function (sh) {
+            var name = typeof window.resolveOwner === 'function' ? window.resolveOwner(sh) : (sh.person || sh.id || '');
+            text += ' ' + name;
+          });
+        }
+        return words.every(function (w) { return text.indexOf(w) !== -1; });
+      });
+    },
+
+    /* ── Compound multi-condition filter ── */
+    applyConditions: function (conds) {
+      return this.all().filter(function (c) {
+        if (conds.status) {
+          if ((c.status || '').toLowerCase() !== conds.status.toLowerCase()) return false;
+        }
+        if (conds.jurisdiction) {
+          if ((c.jurisdiction || '').toLowerCase().indexOf(conds.jurisdiction.toLowerCase()) === -1) return false;
+        }
+        if (conds.bank) {
+          var lb = conds.bank.toLowerCase();
+          if (!c.banking || !c.banking.some(function (b) { return (b.bank || '').toLowerCase().indexOf(lb) !== -1; })) return false;
+        }
+        if (conds.type) {
+          var lt = conds.type.toLowerCase();
+          if (((c.type || c.purpose || '')).toLowerCase().indexOf(lt) === -1) return false;
+        }
+        if (conds.director) {
+          if ((c.director || '').toLowerCase().indexOf(conds.director.toLowerCase()) === -1) return false;
+        }
+        if (conds.noBank) {
+          if (c.banking && c.banking.length > 0) return false;
+        }
+        return true;
+      });
+    },
+
+    /* ── Registry-wide statistics ── */
+    stats: function () {
+      var all = this.all();
+      var statusMap = this.groupByStatus();
+      var jurMap = this.groupByJurisdiction();
+      var bankMap = this.groupByBank();
+      return {
+        total: all.length,
+        withBanking: this.withBanking().length,
+        withoutBanking: this.withoutBanking().length,
+        withInvestments: this.withInvestments().length,
+        statusBreakdown: statusMap,
+        topJurisdiction: Object.keys(jurMap).sort(function(a,b){ return jurMap[b].length - jurMap[a].length; })[0],
+        topBank: Object.keys(bankMap).sort(function(a,b){ return bankMap[b].length - bankMap[a].length; })[0],
+        investmentCount: this.investments().length,
+        totalInvValue: this.totalInvestmentValue()
+      };
     }
   };
 
@@ -277,7 +399,7 @@
   ───────────────────────────────────────────── */
   var BANK_ALIASES = {
     'jpmorgan': 'JPMorgan', 'jp morgan': 'JPMorgan', 'jpm': 'JPMorgan', 'chase': 'JPMorgan Chase',
-    'bofa': 'Bank of America', 'bofA': 'Bank of America', 'bank of america': 'Bank of America', 'bac': 'Bank of America',
+    'bofa': 'Bank of America', 'bank of america': 'Bank of America', 'bac': 'Bank of America',
     'wells': 'Wells Fargo', 'wells fargo': 'Wells Fargo',
     'citi': 'Citibank', 'citibank': 'Citibank', 'citigroup': 'Citibank',
     'schwab': 'Charles Schwab', 'charles schwab': 'Charles Schwab',
@@ -291,8 +413,12 @@
     'bmo': 'BMO',
     'pnc': 'PNC',
     'us bank': 'US Bank', 'usbank': 'US Bank',
-    'first republic': 'First Republic',
-    'silicon valley bank': 'Silicon Valley Bank', 'svb': 'SVB',
+    'city national': 'City National Bank', 'cnb': 'City National Bank',
+    'santander': 'Santander',
+    'bankinter': 'Bankinter',
+    'banco general': 'Banco General de Panama',
+    'cibc': 'Canadian Imperial Bank of Commerce', 'canadian imperial': 'Canadian Imperial Bank of Commerce',
+    'bbp': 'BBP Bank',
   };
 
   var JUR_ALIASES = {
@@ -303,7 +429,7 @@
     'wyoming': 'Wyoming', 'wy': 'Wyoming',
     'california': 'California', 'ca': 'California',
     'texas': 'Texas', 'tx': 'Texas',
-    'cayman': 'Cayman Islands', 'cayman islands': 'Cayman Islands',
+    'cayman': 'Cayman Islands', 'cayman islands': 'Cayman Islands', 'caiman': 'Caiman',
     'bvi': 'British Virgin Islands', 'british virgin islands': 'British Virgin Islands',
     'puerto rico': 'Puerto Rico', 'pr': 'Puerto Rico',
     'panama': 'Panama',
@@ -311,6 +437,12 @@
     'ireland': 'Ireland',
     'ontario': 'Ontario',
     'british columbia': 'British Columbia', 'bc': 'British Columbia',
+    'españa': 'España', 'spain': 'España', 'espana': 'España',
+    'singapore': 'Singapore',
+    'bahamas': 'Bahamas',
+    'ecuador': 'Ecuador',
+    'uruguay': 'Uruguay',
+    'usa': 'USA', 'united states': 'USA', 'us': 'USA',
   };
 
   function extractBankRef(q) {
@@ -325,12 +457,11 @@
     for (var i = 0; i < keys.length; i++) {
       if (lq.indexOf(keys[i]) !== -1) {
         var canonical = BANK_ALIASES[keys[i]].toLowerCase();
-        // try to find a matching bank name already in the data
         for (var k = 0; k < banks.length; k++) {
           var bk = banks[k].toLowerCase().trim();
           if (bk.indexOf(canonical) !== -1 || canonical.indexOf(bk) !== -1) return banks[k];
         }
-        return BANK_ALIASES[keys[i]]; // fallback to alias value
+        return BANK_ALIASES[keys[i]];
       }
     }
     return null;
@@ -343,7 +474,7 @@
     for (var j = 0; j < jurs.length; j++) {
       if (jurs[j] && lq.indexOf(jurs[j].toLowerCase()) !== -1) return jurs[j];
     }
-    // then check aliases - but map to the actual data jurisdiction if possible
+    // then check aliases
     var keys = Object.keys(JUR_ALIASES).sort(function (a, b) { return b.length - a.length; });
     for (var i = 0; i < keys.length; i++) {
       if (lq.indexOf(keys[i]) !== -1) {
@@ -366,14 +497,38 @@
       if (lq.indexOf(statuses[i].toLowerCase()) !== -1) return statuses[i];
     }
     // fallback aliases
-    if (/\bactive\b/.test(lq)) return 'active';
-    if (/\binactive\b/.test(lq)) return 'inactive';
+    if (/\bactive\b|\bactiv[ao]\b/.test(lq)) return 'active';
+    if (/\binactive\b|\binactiv[ao]\b/.test(lq)) return 'inactive';
     if (/\bdissolved\b/.test(lq)) return 'dissolved';
     if (/\bliquidat/.test(lq)) return 'liquidated';
     if (/\bliquidaci/.test(lq)) return 'liquidation';
-    if (/\bpending\b/.test(lq)) return 'pending';
+    if (/\bpending\b|\bpendiente\b/.test(lq)) return 'pending';
     if (/\bdormant\b/.test(lq)) return 'dormant';
     return null;
+  }
+
+  function extractEntityType(q) {
+    var lq = q.toLowerCase();
+    // check actual types from data first
+    var types = Q.typeList();
+    for (var i = 0; i < types.length; i++) {
+      if (types[i] && types[i].length > 2 && lq.indexOf(types[i].toLowerCase()) !== -1) return types[i];
+    }
+    // common type keywords
+    if (/\bllc\b/.test(lq)) return 'LLC';
+    if (/\bcorp(?:oration)?\b/.test(lq)) return 'corporation';
+    if (/\btrust\b|\bfideicomiso\b/.test(lq)) return 'trust';
+    if (/\bfoundation\b|\bfundación\b/.test(lq)) return 'foundation';
+    if (/\bholding\b/.test(lq)) return 'holding';
+    if (/\bltd\b|\blimited\b/.test(lq)) return 'Ltd';
+    if (/\bpartnership\b/.test(lq)) return 'partnership';
+    if (/\bfund\b/.test(lq)) return 'fund';
+    return null;
+  }
+
+  function extractYear(q) {
+    var m = q.match(/\b(19|20)\d{2}\b/);
+    return m ? m[0] : null;
   }
 
   function extractEntityName(q) {
@@ -386,7 +541,7 @@
       if (name.length > 2 && lq.indexOf(name) !== -1) return sorted[i];
     }
     // try after keywords
-    var afterKw = q.match(/(?:about|of|for|regarding|summarize|summary of|investments? in|shareholders? of|banking for|accounts? for|directors? of)\s+(.+)/i);
+    var afterKw = q.match(/(?:about|of|for|regarding|summarize|summary of|investments? in|shareholders? of|banking for|accounts? for|directors? of|status of|tell me about|info(?:rmation)? (?:on|about)|sobre|acerca de|de la empresa|de la entidad)\s+(.+)/i);
     if (afterKw) {
       var candidate = afterKw[1].replace(/[?.!].*$/, '').trim().toLowerCase();
       for (var j = 0; j < sorted.length; j++) {
@@ -399,7 +554,8 @@
 
   function extractShareholderName(q) {
     var m = q.match(/shareholders?\s+(?:of|in|for)\s+(.+)/i) ||
-              q.match(/(?:who owns?|ownership of)\s+(.+)/i);
+              q.match(/(?:who owns?|ownership of)\s+(.+)/i) ||
+              q.match(/accionistas?\s+de\s+(.+)/i);
     if (m) return m[1].replace(/[?.!].*$/, '').trim();
     return null;
   }
@@ -413,6 +569,26 @@
     return null;
   }
 
+  /* Detect which specific field the user is asking about for a given entity */
+  function extractFieldRequest(q) {
+    var lq = q.toLowerCase();
+    if (/\b(jurisdiction|país|country|domicilio|incorporated in|registered in|where is)\b/.test(lq)) return 'jurisdiction';
+    if (/\b(director|ceo|president|directora?)\b/.test(lq) && !/\blist\b|\ball\b|\bshow\b/.test(lq)) return 'director';
+    if (/\b(registered agent|agente registrado|agente)\b/.test(lq)) return 'registeredAgent';
+    if (/\b(address|dirección|ubicación|location)\b/.test(lq)) return 'address';
+    if (/\b(status|estado|situación)\b/.test(lq) && !/ (all|list|show|which)\b/.test(lq)) return 'status';
+    if (/\b(year founded|year incorporated|founded|incorporated|formed|cuando|cuándo|año de|año de constitución)\b/.test(lq)) return 'yearFounded';
+    if (/\b(fiscal id|ein|tax id|rut|nit|id fiscal|número fiscal)\b/.test(lq)) return 'fiscalId';
+    if (/\b(tags?|etiquetas?|labels?|categories?)\b/.test(lq)) return 'tags';
+    if (/\b(type|tipo|purpose|propósito)\b/.test(lq) && !/ (all|list|show|which)\b/.test(lq)) return 'type';
+    if (/\b(notes?|notas?|comments?|observations?)\b/.test(lq)) return 'notes';
+    if (/\b(currency|currencies|moneda)\b/.test(lq)) return 'currency';
+    if (/\b(bank|account|banking|cuenta|banco)\b/.test(lq)) return 'banking';
+    if (/\b(shareholders?|accionistas?|socios?|owners?)\b/.test(lq)) return 'shareholders';
+    if (/\b(investments?|inversiones?|portfolio|cartera)\b/.test(lq)) return 'investments';
+    return null;
+  }
+
   /* ─────────────────────────────────────────────
      4.  INTENT PARSER
   ───────────────────────────────────────────── */
@@ -420,82 +596,130 @@
     var q = question.trim();
     var lq = q.toLowerCase();
 
-    // greetings
-    if (/^(hi|hello|hey|good\s*(morning|afternoon|evening)|howdy)\b/.test(lq)) {
+    /* ── Greetings (EN + ES) ── */
+    if (/^(hi|hello|hey|good\s*(morning|afternoon|evening)|howdy)\b/.test(lq) ||
+        /^(hola|buenos\s*(días|tardes|noches)|buen\s*día)\b/.test(lq)) {
       return { type: 'greeting' };
     }
 
-    // help
-    if (/\b(help|what can you|what do you|capabilities|how do (i|you)|guide)\b/.test(lq)) {
+    /* ── Help ── */
+    if (/\b(help|what can you|what do you|capabilities|how do (i|you)|guide)\b/.test(lq) ||
+        /\b(ayuda|qué puedes|cómo funciona|qué sabes|para qué sirve)\b/.test(lq)) {
       return { type: 'help' };
     }
 
-    // total / count companies
-    if (/\bhow many (companies|entities|llcs?|corps?|trusts?|total)\b/.test(lq) && !/bank|invest|shareholder/.test(lq)) {
+    /* ── Registry overview / stats ── */
+    if (/\b(overview|resumen general|dashboard|summary of the registry|estadísticas?|statistics|general stats)\b/.test(lq)) {
+      return { type: 'registry_overview' };
+    }
+
+    /* ── List ALL entities ── */
+    if (/\b(list all|show all|all entities|all companies|todas las empresas|todas las entidades|show me everything|listado completo)\b/.test(lq)) {
+      return { type: 'list_all' };
+    }
+
+    /* ── Count companies ── */
+    if (/\bhow many (companies|entities|llcs?|corps?|trusts?|total)\b/.test(lq) && !/bank|invest|shareholder/.test(lq) ||
+        /\bcuántas?\s+(empresas?|entidades?|compañías?)\b/.test(lq)) {
       var status = extractStatus(q);
       return { type: 'count_companies', status: status };
     }
 
-    // total / count investments
-    if (/\bhow many investments?\b/.test(lq) || /\btotal (number of )?investments?\b/.test(lq)) {
+    /* ── Count investments ── */
+    if (/\bhow many investments?\b/.test(lq) || /\btotal (number of )?investments?\b/.test(lq) ||
+        /\bcuántas?\s+inversiones?\b/.test(lq)) {
       return { type: 'count_investments' };
     }
 
-    // total investment value / AUM
-    if (/\b(total|sum|aum|assets? under management|portfolio value|market value|total value)\b/.test(lq) && /\binvest/.test(lq)) {
+    /* ── Total investment value / AUM ── */
+    if (/\b(total|sum|aum|assets? under management|portfolio value|market value|total value|valor total|valor de la cartera)\b/.test(lq) && /\binvest/.test(lq)) {
       return { type: 'total_inv_value' };
     }
 
-    // by bank
-    if (/\b(bank|account|banking|deposit)\b/.test(lq) && !/no (bank|account|banking)/.test(lq)) {
+    /* ── By specific bank (with bank keyword) ── */
+    if (/\b(bank|account|banking|deposit|cuenta|banco|cuentas?)\b/.test(lq) && !/no (bank|account|banking)/.test(lq) && !/sin (banco|cuenta)/.test(lq)) {
       var bank = extractBankRef(q);
       if (bank) return { type: 'by_bank', bank: bank };
-      // "which banks" or "list banks"
-      if (/\b(which|list|all|show me) (banks?|financial institutions?)\b/.test(lq)) {
+      if (/\b(which|list|all|show me) (banks?|financial institutions?)\b/.test(lq) ||
+          /\b(qué|cuáles?|lista de|listado de) bancos?\b/.test(lq)) {
         return { type: 'list_banks' };
       }
-      // "entities with multiple banks"
-      if (/multiple|more than one|several/.test(lq)) {
+      if (/multiple|more than one|several|más de un\b/.test(lq)) {
         return { type: 'multiple_banks' };
       }
-      // "entities with a bank account"
-      if (/\bwith (a |an )?(bank|account|banking)\b/.test(lq)) {
+      if (/breakdown|desglose/.test(lq)) {
+        return { type: 'breakdown_by_bank' };
+      }
+      if (/\bwith (a |an )?(bank|account|banking)\b/.test(lq) || /\bcon (banco|cuenta)\b/.test(lq)) {
         return { type: 'with_banking' };
       }
     }
 
-    // no bank account
+    /* ── No bank account ── */
     if (/\b(no|without|missing|lack) (bank|account|banking)\b/.test(lq) ||
-        /\b(not|don't) have (a )?(bank|account|banking)\b/.test(lq)) {
+        /\b(not|don't) have (a )?(bank|account|banking)\b/.test(lq) ||
+        /\bsin (banco|cuenta|cuentas?)\b/.test(lq)) {
       return { type: 'no_banking' };
     }
 
-    // breakdown by bank
-    if (/\bbreakdown\b/.test(lq) && /\bbank\b/.test(lq)) {
+    /* ── Breakdown by bank ── */
+    if (/\bbreakdown\b/.test(lq) && /\bbank\b/.test(lq) ||
+        /\bdesglose\b.+\bbanco\b/.test(lq) || /\bpor banco\b/.test(lq)) {
       return { type: 'breakdown_by_bank' };
     }
 
-    // by jurisdiction
-    if (/\b(jurisdiction|incorporated|registered|domicile|formed|state|country)\b/.test(lq)) {
+    /* ── Breakdown by status ── */
+    if ((/\bbreakdown\b/.test(lq) || /\bdesglose\b/.test(lq)) && /\bstatus\b|\bestado\b/.test(lq)) {
+      return { type: 'breakdown_by_status' };
+    }
+
+    /* ── By jurisdiction ── */
+    if (/\b(jurisdiction|incorporated|registered|domicile|formed|country|jurisdicción|incorporada?|constituida?|domicilio)\b/.test(lq)) {
       var jur = extractJurisdiction(q);
-      if (/\bbreakdown\b/.test(lq) || /\bgroup\b/.test(lq) || /\bby jurisdiction\b/.test(lq)) {
+      if (/\bbreakdown\b/.test(lq) || /\bgroup\b/.test(lq) || /\bby jurisdiction\b/.test(lq) ||
+          /\bpor jurisdicción\b/.test(lq) || /\bdesglose por país\b/.test(lq)) {
         return { type: 'breakdown_by_jurisdiction' };
       }
       if (jur) return { type: 'by_jurisdiction', jurisdiction: jur };
       return { type: 'breakdown_by_jurisdiction' };
     }
 
-    // by status
+    /* ── By entity type ── */
+    if (/\b(type|tipos?|what type|qué tipo)\b/.test(lq) && /\b(all|list|show|which|breakdown|group)\b/.test(lq)) {
+      var type = extractEntityType(q);
+      if (/\bbreakdown\b|\bdesglose\b|\bby type\b|\bpor tipo\b/.test(lq)) {
+        return { type: 'breakdown_by_type' };
+      }
+      if (type) return { type: 'by_type', type: type };
+      return { type: 'breakdown_by_type' };
+    }
+
+    /* ── By director ── */
+    if (/\b(directors?|directoras?)\b/.test(lq) && /\b(all|list|show|which|who|list all|todos|todas|lista de|todas las)\b/.test(lq)) {
+      return { type: 'list_directors' };
+    }
+    if (/\bwho is the director\b|\b(?:who|whom) directs?\b|\bel director de\b|\bla directora de\b/.test(lq)) {
+      var entityForDir = extractEntityName(q);
+      if (entityForDir) return { type: 'field_lookup', company: entityForDir, field: 'director' };
+    }
+
+    /* ── By status ── */
     var status = extractStatus(q);
-    if (status && /\b(status|show|find|list|which)\b/.test(lq)) {
+    if (status && /\b(status|show|find|list|which|estado|mostrar|listar|cuáles?)\b/.test(lq)) {
       return { type: 'by_status', status: status };
     }
-    if (status && !/invest|bank|shareholder/.test(lq)) {
+    if (status && !/invest|bank|shareholder|inversión|banco|accionista/.test(lq)) {
       return { type: 'by_status', status: status };
     }
 
-    // shareholders
-    if (/\bshareholders?\b/.test(lq)) {
+    /* ── Founded in a specific year ── */
+    var year = extractYear(q);
+    if (year && /\b(founded|incorporated|formed|created|established|constituida?|fundada?|año)\b/.test(lq)) {
+      return { type: 'by_year', year: year };
+    }
+
+    /* ── Shareholders ── */
+    if (/\bshareholders?\b|\baccionistas?\b|\bsocios?\b/.test(lq)) {
       var entityForSh = extractEntityName(q);
       if (entityForSh) return { type: 'shareholders_of', company: entityForSh };
       var shName = extractShareholderName(q);
@@ -503,56 +727,83 @@
       return { type: 'all_shareholders' };
     }
 
-    // investments for entity
-    if (/\binvestments?\b/.test(lq)) {
+    /* ── Investments for entity ── */
+    if (/\binvestments?\b|\binversiones?\b/.test(lq)) {
       var entityForInv = extractEntityName(q);
       if (entityForInv) return { type: 'entity_investments', company: entityForInv };
-      if (/\b(no|without|missing) invest/.test(lq)) return { type: 'without_investments' };
-      if (/\bwith invest/.test(lq) || /\bhave invest/.test(lq)) return { type: 'with_investments' };
+      if (/\b(no|without|missing) invest/.test(lq) || /\bsin inversiones?\b/.test(lq)) return { type: 'without_investments' };
+      if (/\bwith invest/.test(lq) || /\bhave invest/.test(lq) || /\bcon inversiones?\b/.test(lq)) return { type: 'with_investments' };
       var invType = extractInvestmentType(q);
       if (invType) return { type: 'investments_by_type', invType: invType };
-      if (/largest|biggest|top|highest/.test(lq)) return { type: 'largest_investments' };
-      if (/by type/.test(lq) || /breakdown/.test(lq)) return { type: 'investments_by_type', invType: null };
+      if (/largest|biggest|top|highest|mayores|más grandes/.test(lq)) return { type: 'largest_investments' };
+      if (/by type|por tipo|breakdown|desglose/.test(lq)) return { type: 'investments_by_type', invType: null };
       return { type: 'list_investments' };
     }
 
-    // missing info
-    if (/\b(missing|incomplete|no info|without info|lack)\b/.test(lq)) {
+    /* ── Missing info ── */
+    if (/\b(missing|incomplete|no info|without info|lack|faltante|incompleta?)\b/.test(lq)) {
       return { type: 'missing_info' };
     }
 
-    // compare
-    if (/\bcompar(e|ing|ison)\b/.test(lq)) {
-      var companies = [];
+    /* ── Compare ── */
+    if (/\bcompar(e|ing|ison)?\b|\bcompar[ao]\b/.test(lq)) {
+      var cmpCompanies = [];
       Q.all().sort(function(a,b){return (b.name||'').length-(a.name||'').length;}).forEach(function(c){
         if ((q.toLowerCase()).indexOf((c.name||'').toLowerCase()) !== -1 && c.name.length > 2) {
-          if (companies.indexOf(c) === -1) companies.push(c);
+          if (cmpCompanies.indexOf(c) === -1) cmpCompanies.push(c);
         }
       });
-      return { type: 'compare', companies: companies };
+      return { type: 'compare', companies: cmpCompanies };
     }
 
-    // related / subsidiaries
-    if (/\b(related|subsidiaries|subsidiary|children|parent|affiliated)\b/.test(lq)) {
+    /* ── Related / subsidiaries ── */
+    if (/\b(related|subsidiaries|subsidiary|children|parent|affiliated|filial|subsidiaria|relacionadas?)\b/.test(lq)) {
       var entityForRel = extractEntityName(q);
       if (entityForRel) return { type: 'related', company: entityForRel };
     }
 
-    // entity summary / full info
-    if (/\b(summary|overview|info|details?|tell me about|describe|profile|full)\b/.test(lq)) {
+    /* ── Field-specific lookup + entity: "what is the director of X?" ── */
+    var fieldReq = extractFieldRequest(q);
+    var entityForField = extractEntityName(q);
+    if (fieldReq && entityForField) {
+      return { type: 'field_lookup', company: entityForField, field: fieldReq };
+    }
+
+    /* ── Entity summary / full info ── */
+    if (/\b(summary|overview|info|details?|tell me about|describe|profile|full|resumen|información|info de|datos de|qué sabes de)\b/.test(lq)) {
       var entityForSumm = extractEntityName(q);
       if (entityForSumm) return { type: 'entity_summary', company: entityForSumm };
     }
 
-    // direct entity name question (fallback)
+    /* ── Direct entity name question (fallback) ── */
     var directEntity = extractEntityName(q);
     if (directEntity) return { type: 'entity_summary', company: directEntity };
 
-    // with/without banking (late fallback)
+    /* ── With/without banking (late fallback) ── */
     if (/with (a |an )?(bank|account|banking)\b/.test(lq)) return { type: 'with_banking' };
     if (/without (a |an )?(bank|account|banking)\b/.test(lq)) return { type: 'no_banking' };
 
-    return { type: 'unknown', raw: q };
+    /* ── Compound multi-condition query ── */
+    var conds = {};
+    var statusC = extractStatus(q);
+    var jurC = extractJurisdiction(q);
+    var bankC = extractBankRef(q);
+    var typeC = extractEntityType(q);
+    if (statusC) conds.status = statusC;
+    if (jurC) conds.jurisdiction = jurC;
+    if (bankC) conds.bank = bankC;
+    if (typeC) conds.type = typeC;
+    var numConds = Object.keys(conds).length;
+    if (numConds >= 2) return { type: 'compound_query', conditions: conds };
+    if (numConds === 1) {
+      if (statusC) return { type: 'by_status', status: statusC };
+      if (jurC) return { type: 'by_jurisdiction', jurisdiction: jurC };
+      if (bankC) return { type: 'by_bank', bank: bankC };
+      if (typeC) return { type: 'by_type', type: typeC };
+    }
+
+    /* ── Smart full-text search fallback ── */
+    return { type: 'smart_search', query: q };
   }
 
   /* ─────────────────────────────────────────────
@@ -585,12 +836,11 @@
   }
 
   function statusBadge(s) {
-    if (!s) return '\u2014';
+    if (!s) return '—';
     var l = s.toLowerCase();
     var cls = l === 'active' ? 'ai-badge-active'
             : (l === 'liquidated' || l === 'liquidation' || l === 'inactive' || l === 'dissolved') ? 'ai-badge-inactive'
             : 'ai-badge-info';
-    // capitalize first letter for display
     var display = s.charAt(0).toUpperCase() + s.slice(1);
     return '<span class="ai-badge ' + cls + '">' + esc(display) + '</span>';
   }
@@ -605,6 +855,7 @@
       type: { label: 'Type', render: function (c) { return esc(c.type || c.purpose || '—'); } },
       banks: { label: 'Banks', render: function (c) { return c.banking && c.banking.length ? c.banking.map(function (b) { return esc(b.bank || '?'); }).join(', ') : '—'; } },
       director: { label: 'Director', render: function (c) { return esc(c.director || '—'); } },
+      year: { label: 'Founded', render: function (c) { return esc(c.yearFounded || '—'); } },
       shareholders: { label: 'Shareholders', render: function (c) {
         if (!c.shareholders || !c.shareholders.length) return '—';
         return c.shareholders.map(function (sh) {
@@ -677,16 +928,25 @@
     var companies, jur, status, banks;
 
     switch (intent.type) {
+
       case 'greeting':
-        return 'Hello! I\'m the FamOfi Registry Assistant. I can answer questions about entities, bank accounts, investments, shareholders, and more. What would you like to know?';
+        return 'Hello! I\'m the FamOfi Registry Assistant. Ask me anything about the entities, accounts, investments, shareholders, or overall structure. What would you like to know?';
 
       case 'help':
         return [
           '<strong>Here\'s what I can help you with:</strong><br><br>',
           '<strong>Entity queries</strong><br>',
-          '&bull; "Which entities have an account at JPMorgan?"<br>',
-          '&bull; "Show me all active companies in Delaware"<br>',
-          '&bull; "Which entities have no bank accounts?"<br><br>',
+          '&bull; "Which entities have an account at JP Morgan?"<br>',
+          '&bull; "Show me all active companies in Uruguay"<br>',
+          '&bull; "Active entities in BVI with a Santander account"<br>',
+          '&bull; "Which entities have no bank accounts?"<br>',
+          '&bull; "List all entities"<br><br>',
+          '<strong>Entity details</strong><br>',
+          '&bull; "Tell me about [Entity Name]"<br>',
+          '&bull; "What is the director of [Entity]?"<br>',
+          '&bull; "What jurisdiction is [Entity] in?"<br>',
+          '&bull; "What bank accounts does [Entity] have?"<br>',
+          '&bull; "When was [Entity] incorporated?"<br><br>',
           '<strong>Investments</strong><br>',
           '&bull; "How many investments do we have?"<br>',
           '&bull; "What is the total portfolio value?"<br>',
@@ -694,16 +954,44 @@
           '<strong>Shareholders</strong><br>',
           '&bull; "Who are the shareholders of [Entity]?"<br>',
           '&bull; "Which entities does [Person] own?"<br><br>',
-          '<strong>Analytics</strong><br>',
+          '<strong>Analytics &amp; breakdowns</strong><br>',
           '&bull; "Breakdown by jurisdiction"<br>',
+          '&bull; "Breakdown by status"<br>',
+          '&bull; "Which banks do we use?"<br>',
           '&bull; "Compare [Entity A] and [Entity B]"<br>',
-          '&bull; "Give me a full summary of [Entity]"',
+          '&bull; "Registry overview"<br><br>',
+          '<em>Tip: You can combine filters — "active entities in Panama with a Banco General account" — or ask in Spanish.</em>',
         ].join('');
+
+      case 'registry_overview':
+        var st = Q.stats();
+        var statusMap = Q.groupByStatus();
+        html = '<strong>FamOfi Registry — Overview</strong><br><br>';
+        html += '<div class="ai-stat-row">';
+        html += '<div class="ai-stat"><div class="ai-stat-value">' + st.total + '</div><div class="ai-stat-label">Total Entities</div></div>';
+        html += '<div class="ai-stat"><div class="ai-stat-value">' + st.withBanking + '</div><div class="ai-stat-label">With Banking</div></div>';
+        html += '<div class="ai-stat"><div class="ai-stat-value">' + st.withoutBanking + '</div><div class="ai-stat-label">No Bank Account</div></div>';
+        html += '<div class="ai-stat"><div class="ai-stat-value">' + st.investmentCount + '</div><div class="ai-stat-label">Investments</div></div>';
+        html += '<div class="ai-stat"><div class="ai-stat-value">' + fmtMoney(st.totalInvValue) + '</div><div class="ai-stat-label">Portfolio Value</div></div>';
+        html += '</div><br>';
+        html += '<strong>Status breakdown:</strong><br><div class="ai-stat-row">';
+        Object.keys(statusMap).sort().forEach(function (s) {
+          html += '<div class="ai-stat"><div class="ai-stat-value">' + statusMap[s].length + '</div><div class="ai-stat-label">' + statusBadge(s) + '</div></div>';
+        });
+        html += '</div>';
+        return html;
+
+      case 'list_all':
+        companies = Q.all().slice().sort(function(a,b){ return (a.name||'').localeCompare(b.name||''); });
+        html = 'All <strong>' + companies.length + '</strong> entities in the registry:<br><br>';
+        html += companyTable(companies, ['name', 'jurisdiction', 'status', 'type']);
+        return html;
 
       case 'count_companies':
         if (intent.status) {
           companies = Q.byStatus(intent.status);
-          return '<strong>' + companies.length + '</strong> ' + intent.status.charAt(0).toUpperCase() + intent.status.slice(1) + ' entity/entities in the registry.';
+          var dispStatus = intent.status.charAt(0).toUpperCase() + intent.status.slice(1);
+          return '<strong>' + companies.length + '</strong> ' + dispStatus + ' entity/entities in the registry.';
         }
         return 'There are <strong>' + Q.all().length + '</strong> total entities in the FamOfi Registry.';
 
@@ -765,7 +1053,7 @@
       case 'by_jurisdiction':
         companies = Q.byJurisdiction(intent.jurisdiction);
         html = '<strong>' + companies.length + '</strong> entity/entities in <strong>' + esc(intent.jurisdiction) + '</strong>:<br><br>';
-        html += companyTable(companies, ['name', 'status', 'type']);
+        html += companyTable(companies, ['name', 'status', 'type', 'banks']);
         if (companies.length) html += '<div class="ai-action-row">' + applyFilterBtn('jurisdiction', intent.jurisdiction) + '</div>';
         return html;
 
@@ -777,15 +1065,116 @@
           html += '<div class="ai-stat"><div class="ai-stat-value">' + byJur[j].length + '</div><div class="ai-stat-label">' + esc(j) + '</div></div>';
         });
         html += '</div>';
-        html += '<br>' + companyTable(Q.all().sort(function(a,b){return(a.jurisdiction||'').localeCompare(b.jurisdiction||'');}), ['name','jurisdiction','status']);
+        html += '<br>' + companyTable(Q.all().slice().sort(function(a,b){return(a.jurisdiction||'').localeCompare(b.jurisdiction||'');}), ['name','jurisdiction','status']);
         return html;
 
       case 'by_status':
         companies = Q.byStatus(intent.status);
         var bsDisp = intent.status.charAt(0).toUpperCase() + intent.status.slice(1);
         html = '<strong>' + companies.length + '</strong> ' + esc(bsDisp) + ' entity/entities:<br><br>';
-        html += companyTable(companies, ['name', 'jurisdiction', 'type']);
+        html += companyTable(companies, ['name', 'jurisdiction', 'type', 'banks']);
         if (companies.length) html += '<div class="ai-action-row">' + applyFilterBtn('status', intent.status) + '</div>';
+        return html;
+
+      case 'breakdown_by_status':
+        var byStatus = Q.groupByStatus();
+        var statusNames = Object.keys(byStatus).sort(function(a,b){ return byStatus[b].length - byStatus[a].length; });
+        html = '<strong>Entities by status:</strong><br><br><div class="ai-stat-row">';
+        statusNames.forEach(function(s) {
+          html += '<div class="ai-stat"><div class="ai-stat-value">' + byStatus[s].length + '</div><div class="ai-stat-label">' + statusBadge(s) + '</div></div>';
+        });
+        html += '</div>';
+        return html;
+
+      case 'by_type':
+        companies = Q.byType(intent.type);
+        html = '<strong>' + companies.length + '</strong> entity/entities of type <strong>' + esc(intent.type) + '</strong>:<br><br>';
+        html += companyTable(companies, ['name', 'jurisdiction', 'status']);
+        return html;
+
+      case 'breakdown_by_type':
+        var byType2 = Q.groupByType();
+        var typeNames2 = Object.keys(byType2).sort(function(a,b){ return byType2[b].length - byType2[a].length; });
+        html = '<strong>Entities by type:</strong><br><br><div class="ai-stat-row">';
+        typeNames2.forEach(function(t) {
+          html += '<div class="ai-stat"><div class="ai-stat-value">' + byType2[t].length + '</div><div class="ai-stat-label">' + esc(t) + '</div></div>';
+        });
+        html += '</div>';
+        return html;
+
+      case 'list_directors':
+        var dirMap = {};
+        Q.all().forEach(function(c) {
+          if (!c.director) return;
+          if (!dirMap[c.director]) dirMap[c.director] = [];
+          dirMap[c.director].push(c);
+        });
+        var dirNames = Object.keys(dirMap).sort();
+        html = '<strong>' + dirNames.length + '</strong> director(s) in the registry:<br><br>';
+        html += '<div class="ai-table-wrap"><table class="ai-table"><thead><tr><th>Director</th><th>Entities</th><th>Count</th></tr></thead><tbody>';
+        dirNames.forEach(function(d) {
+          html += '<tr><td>' + esc(d) + '</td><td>' + dirMap[d].map(function(c){ return entityLink(c); }).join(', ') + '</td><td>' + dirMap[d].length + '</td></tr>';
+        });
+        html += '</tbody></table></div>';
+        return html;
+
+      case 'by_year':
+        companies = Q.byYear(intent.year);
+        html = '<strong>' + companies.length + '</strong> entity/entities founded/incorporated in <strong>' + esc(intent.year) + '</strong>:<br><br>';
+        html += companyTable(companies, ['name', 'jurisdiction', 'status', 'type']);
+        return html;
+
+      case 'compound_query':
+        var condResults = Q.applyConditions(intent.conditions);
+        var condParts = [];
+        if (intent.conditions.status) condParts.push(intent.conditions.status.charAt(0).toUpperCase() + intent.conditions.status.slice(1));
+        if (intent.conditions.jurisdiction) condParts.push('in ' + intent.conditions.jurisdiction);
+        if (intent.conditions.bank) condParts.push('with ' + intent.conditions.bank);
+        if (intent.conditions.type) condParts.push(intent.conditions.type);
+        html = '<strong>' + condResults.length + '</strong> entity/entities — ' + esc(condParts.join(', ')) + ':<br><br>';
+        html += companyTable(condResults, ['name', 'jurisdiction', 'status', 'type', 'banks']);
+        return html;
+
+      case 'field_lookup':
+        var flCo = intent.company;
+        var fieldLabels = {
+          jurisdiction: 'Jurisdiction', director: 'Director', banking: 'Bank Accounts',
+          status: 'Status', yearFounded: 'Year Founded / Incorporated', address: 'Address',
+          shareholders: 'Shareholders', registeredAgent: 'Registered Agent',
+          fiscalId: 'Fiscal ID / EIN', tags: 'Tags', type: 'Type / Purpose',
+          notes: 'Notes', currency: 'Currency', investments: 'Investments'
+        };
+        html = '<strong>' + esc(flCo.name) + '</strong> — ' + esc(fieldLabels[intent.field] || intent.field) + ':<br><br>';
+        if (intent.field === 'banking') {
+          if (!flCo.banking || !flCo.banking.length) {
+            return '<strong>' + esc(flCo.name) + '</strong> has no bank accounts on file.';
+          }
+          html += '<ul style="margin:4px 0;padding-left:20px">';
+          flCo.banking.forEach(function(b) {
+            html += '<li><strong>' + esc(b.bank || '?') + '</strong>';
+            if (b.type) html += ' · ' + esc(b.type);
+            if (b.currency) html += ' · ' + esc(b.currency);
+            html += '</li>';
+          });
+          html += '</ul>';
+        } else if (intent.field === 'shareholders') {
+          return executeIntent({ type: 'shareholders_of', company: flCo });
+        } else if (intent.field === 'investments') {
+          return executeIntent({ type: 'entity_investments', company: flCo });
+        } else if (intent.field === 'status') {
+          html += flCo.status ? statusBadge(flCo.status) : '—';
+        } else if (intent.field === 'currency') {
+          var curs = [];
+          (flCo.banking || []).forEach(function(b) { if (b.currency && curs.indexOf(b.currency) === -1) curs.push(b.currency); });
+          html += curs.length ? esc(curs.join(', ')) : '—';
+        } else if (intent.field === 'tags') {
+          html += flCo.tags && flCo.tags.length ? flCo.tags.map(esc).join(', ') : '—';
+        } else {
+          var val = flCo[intent.field];
+          if (Array.isArray(val)) val = val.join(', ');
+          html += val ? esc(String(val)) : '—';
+        }
+        html += '<div class="ai-action-row"><button class="ai-apply-btn" onclick="window._aiOpenCompany(' + JSON.stringify(flCo.id) + ')">Open in Registry ↗</button></div>';
         return html;
 
       case 'shareholders_of':
@@ -869,7 +1258,10 @@
         var byType = Q.investmentsByType();
         if (intent.invType) {
           var lType = intent.invType.toLowerCase();
-          var matchType = Object.keys(byType).find(function (t) { return t.toLowerCase().indexOf(lType) !== -1; });
+          var matchType = Object.keys(byType).find ? Object.keys(byType).find(function (t) { return t.toLowerCase().indexOf(lType) !== -1; }) : null;
+          if (!matchType) {
+            Object.keys(byType).forEach(function(t){ if (t.toLowerCase().indexOf(lType) !== -1) matchType = t; });
+          }
           if (matchType) {
             html = '<strong>' + byType[matchType].length + '</strong> investments of type <strong>' + esc(matchType) + '</strong>:<br><br>';
             html += investmentTable(byType[matchType]);
@@ -892,7 +1284,7 @@
 
       case 'compare':
         if (!intent.companies || intent.companies.length < 2) {
-          return 'Please name two entities to compare. For example: "Compare Acme LLC and Beta Corp."';
+          return 'Please name two entities to compare. For example: <em>"Compare Acme LLC and Beta Corp."</em>';
         }
         var coA = intent.companies[0], coB = intent.companies[1];
         var invsA = Q.investmentsFor(coA.id), invsB = Q.investmentsFor(coB.id);
@@ -903,6 +1295,7 @@
           ['Jurisdiction', esc(coA.jurisdiction || '—'), esc(coB.jurisdiction || '—')],
           ['Type', esc(coA.purpose || coA.type || '—'), esc(coB.purpose || coB.type || '—')],
           ['Director', esc(coA.director || '—'), esc(coB.director || '—')],
+          ['Year Founded', esc(coA.yearFounded || '—'), esc(coB.yearFounded || '—')],
           ['Banks', coA.banking && coA.banking.length ? coA.banking.map(function(b){return esc(b.bank||'?');}).join(', ') : '—',
                     coB.banking && coB.banking.length ? coB.banking.map(function(b){return esc(b.bank||'?');}).join(', ') : '—'],
           ['Shareholders', String(coA.shareholders ? coA.shareholders.length : 0), String(coB.shareholders ? coB.shareholders.length : 0)],
@@ -931,7 +1324,6 @@
         var sumCo = intent.company;
         var sumInvs = Q.investmentsFor(sumCo.id);
         html = '<strong>' + esc(sumCo.name) + '</strong> — Full Summary<br><br>';
-        // basic info card
         html += '<div class="ai-table-wrap"><table class="ai-table"><tbody>';
         var fields = [
           ['Status', sumCo.status ? statusBadge(sumCo.status) : '—'],
@@ -945,11 +1337,12 @@
           ['Tags', sumCo.tags && sumCo.tags.length ? sumCo.tags.map(esc).join(', ') : '—'],
         ];
         fields.forEach(function (f) {
-          html += '<tr><td style="width:150px;font-weight:600;white-space:nowrap">' + f[0] + '</td><td>' + f[1] + '</td></tr>';
+          if (f[1] && f[1] !== '—') {
+            html += '<tr><td style="width:160px;font-weight:600;white-space:nowrap">' + f[0] + '</td><td>' + f[1] + '</td></tr>';
+          }
         });
         html += '</tbody></table></div><br>';
 
-        // banking
         if (sumCo.banking && sumCo.banking.length) {
           html += '<strong>Bank Accounts (' + sumCo.banking.length + '):</strong><br>';
           html += '<div class="ai-table-wrap"><table class="ai-table"><thead><tr><th>Bank</th><th>Type</th><th>Currency</th></tr></thead><tbody>';
@@ -961,7 +1354,6 @@
           html += '<strong>Bank Accounts:</strong> None on file<br><br>';
         }
 
-        // shareholders
         if (sumCo.shareholders && sumCo.shareholders.length) {
           html += '<strong>Shareholders (' + sumCo.shareholders.length + '):</strong><br>';
           html += '<div class="ai-table-wrap"><table class="ai-table"><thead><tr><th>Shareholder</th><th>%</th><th>Class</th></tr></thead><tbody>';
@@ -974,7 +1366,6 @@
           html += '</tbody></table></div><br>';
         }
 
-        // investments
         if (sumInvs.length) {
           html += '<strong>Investments (' + sumInvs.length + ' · ' + fmtMoney(Q.totalInvestmentValue(sumInvs)) + ' total MV):</strong><br>';
           html += investmentTable(sumInvs);
@@ -983,17 +1374,36 @@
           html += '<strong>Investments:</strong> None on file<br><br>';
         }
 
-        // notes
         if (sumCo.notes) {
-          html += '<strong>Notes:</strong><br><span style="font-size:.85rem;opacity:.8">' + esc(sumCo.notes) + '</span>';
+          html += '<strong>Notes:</strong><br><span style="font-size:.85rem;opacity:.8">' + esc(sumCo.notes) + '</span><br><br>';
         }
 
         html += '<div class="ai-action-row"><button class="ai-apply-btn" onclick="window._aiOpenCompany(' + JSON.stringify(sumCo.id) + ')">Open in Registry ↗</button></div>';
         return html;
 
-      case 'unknown':
+      case 'smart_search':
+        var searchResults = Q.search(intent.query);
+        if (searchResults.length === 1) {
+          // Single match — show full summary
+          return executeIntent({ type: 'entity_summary', company: searchResults[0] });
+        }
+        if (searchResults.length > 0) {
+          html = '<strong>' + searchResults.length + '</strong> entity/entities matching <em>"' + esc(intent.query) + '"</em>:<br><br>';
+          html += companyTable(searchResults, ['name', 'jurisdiction', 'status', 'type']);
+          return html;
+        }
+        // Nothing found — suggest
+        return 'I couldn\'t find anything matching <em>"' + esc(intent.query) + '"</em> in the registry.<br><br>' +
+               'Try asking differently, name an entity directly, or type <em>help</em> to see what I can do.<br>' +
+               'You can also ask: <em>"list all entities"</em> or <em>"registry overview"</em>.';
+
       default:
-        return 'I\'m not sure I understood that. Try asking something like:<br>&bull; "Which entities have a JPMorgan account?"<br>&bull; "Show me all entities in Delaware"<br>&bull; "Give me a summary of [Entity Name]"<br>&bull; "How many active companies do we have?"<br><br>Type <em>help</em> for a full list of capabilities.';
+        return 'I\'m not sure I understood that. Try asking something like:<br>' +
+               '&bull; "Which entities have a JP Morgan account?"<br>' +
+               '&bull; "Active companies in Panama"<br>' +
+               '&bull; "Tell me about [Entity Name]"<br>' +
+               '&bull; "Registry overview"<br><br>' +
+               'Type <em>help</em> for a full list of what I can do.';
     }
   }
 
@@ -1003,11 +1413,9 @@
   window._aiApplyFilter = function (payloadStr) {
     try {
       var payload = typeof payloadStr === 'string' ? JSON.parse(payloadStr) : payloadStr;
-      // navigate to companies page and apply filters
       if (typeof window.go === 'function') {
         window.go('companies');
       }
-      // apply filters after render
       setTimeout(function () {
         if (payload.type === 'jurisdiction' && payload.value) {
           if (typeof window.cJur !== 'undefined') window.cJur = payload.value;
@@ -1020,7 +1428,6 @@
           if (stSel) { stSel.value = payload.value; stSel.dispatchEvent(new Event('change')); }
         }
         if (payload.type === 'bank' && payload.value) {
-          // Search for the bank name in the search field
           var search = document.querySelector('#company-search, input[type="search"]');
           if (search) {
             search.value = payload.value;
@@ -1039,7 +1446,6 @@
     if (typeof window.openCompany === 'function') {
       window.openCompany(companyId);
     } else {
-      // navigate to companies page and try to open
       if (typeof window.go === 'function') window.go('companies');
       setTimeout(function () {
         if (typeof window.openCompany === 'function') window.openCompany(companyId);
@@ -1097,7 +1503,6 @@
       body.appendChild(div);
     });
 
-    // scroll to bottom
     body.scrollTop = body.scrollHeight;
   }
 
@@ -1130,14 +1535,16 @@
   function getSuggestedQuestions() {
     var all = Q.all();
     var banks = Q.bankList();
+    var jurs = Q.jurisdictionList();
     var suggestions = [
-      'How many entities are in the registry?',
+      'Registry overview',
       'Show me all active companies',
       'Which entities have no bank account?',
       'Breakdown by jurisdiction',
       'What is the total portfolio value?',
     ];
     if (banks.length > 0) suggestions.push('Which entities have a ' + banks[0] + ' account?');
+    if (jurs.length > 0) suggestions.push('Entities in ' + jurs[0]);
     if (all.length > 0) {
       var randomCo = all[Math.floor(Math.random() * Math.min(all.length, 20))];
       suggestions.push('Tell me about ' + randomCo.name);
@@ -1153,10 +1560,8 @@
 
   function resolveFollowUp(question) {
     var lq = question.toLowerCase();
-    // pronoun resolution
     if (lastEntityContext) {
-      if (/\b(it|this|that|its|their|the company|the entity|the llc|the corp)\b/.test(lq)) {
-        // prepend entity name to disambiguate
+      if (/\b(it|this|that|its|their|the company|the entity|the llc|the corp|esta|ese|esa|esta empresa)\b/.test(lq)) {
         question = question + ' ' + lastEntityContext.name;
       }
     }
@@ -1170,11 +1575,9 @@
     }
     if (!question || isProcessing) return;
 
-    // clear input
     var input = document.getElementById('ai-input');
     if (input) input.value = '';
 
-    // check data loaded
     if (!window.data || !window.data.companies) {
       addMessage('user', question, false);
       addMessage('assistant', '⚠️ Registry data is still loading. Please try again in a moment.', false);
@@ -1182,7 +1585,6 @@
       return;
     }
 
-    // resolve follow-up pronouns
     var resolved = resolveFollowUp(question);
 
     addMessage('user', question, false);
@@ -1191,14 +1593,12 @@
     isProcessing = true;
     setSendDisabled(true);
 
-    // simulate async processing (keeps UI responsive)
     setTimeout(function () {
       try {
         var intent = parseIntent(resolved);
         var response = executeIntent(intent);
-        // track last entity context
         if (intent.company) lastEntityContext = intent.company;
-        else if (intent.type === 'unknown') { /* keep last context */ }
+        else if (intent.type === 'unknown' || intent.type === 'smart_search') { /* keep last context */ }
         else lastEntityContext = null;
 
         hideTyping();
@@ -1234,7 +1634,7 @@
       '<div id="ai-root">',
       '  <div id="ai-header">',
       '    <h2>🤖 AI Assistant</h2>',
-      '    <p>Ask questions about entities, bank accounts, investments, shareholders, and more.</p>',
+      '    <p>Ask anything about entities, accounts, investments, shareholders, and more. Works in English and Spanish.</p>',
       '  </div>',
       '  <div id="ai-body"></div>',
       '  <div id="ai-footer">',
@@ -1262,38 +1662,31 @@
           aiSend();
         }
       });
-      // auto-resize textarea
       inputEl.addEventListener('input', function () {
         this.style.height = 'auto';
         this.style.height = Math.min(this.scrollHeight, 120) + 'px';
       });
-      // focus
       setTimeout(function () { inputEl.focus(); }, 50);
     }
   };
 
   /* ─────────────────────────────────────────────
      11.  ROUTING INTEGRATION
-     Monkey-patch render() and extend pages[]
   ───────────────────────────────────────────── */
   function patchRouting() {
-    // Add translations
     if (window.TT) {
       if (window.TT.en) window.TT.en.ai = 'AI Assistant';
       if (window.TT.es) window.TT.es.ai = 'Asistente IA';
     }
 
-    // Add 'ai' to pages array if not already there
     if (window.pages && window.pages.indexOf('ai') === -1) {
       window.pages.push('ai');
     }
 
-    // Patch the render function
     if (typeof window.render === 'function' && !window._aiRenderPatched) {
       var _origRender = window.render;
       window.render = function () {
         if (typeof window.page !== 'undefined' && window.page === 'ai') {
-          // rebuild nav ourselves (same logic as render())
           var nav = document.getElementById('nav');
           if (nav) {
             nav.innerHTML = '';
@@ -1306,7 +1699,6 @@
               nav.appendChild(b);
             });
           }
-          // destroy any existing charts
           if (typeof window.destroyCharts === 'function') window.destroyCharts();
           window.renderAI();
           return;
@@ -1319,7 +1711,6 @@
 
   /* ─────────────────────────────────────────────
      12.  BOOTSTRAP
-     Wait for script.js to finish initialising
   ───────────────────────────────────────────── */
   function boot() {
     var ready = typeof window.go === 'function' &&
