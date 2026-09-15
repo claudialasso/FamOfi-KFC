@@ -730,7 +730,7 @@ var _doughnutLabelPlugin = {
       }
       var tB=FS/2+SIDE_PAD, bB=cH-FS/2-SIDE_PAD;
       if(items[0].labelY < tB) { var su=tB-items[0].labelY; items.forEach(function(it){it.labelY+=su;}); }
-      if(items[items.length-1].labelY > bB) { var sd=items[items.length-1].labelY-bB; items.forEach(function(it){it.lab        if(!moved) break;
+      if(items[items.length-1].labelY > bB) { var sd=items[items.length-1].labelY-bB; items.forEach(function(it){it.labelY-=sd;}); }
       }
 
     spaceItems(leftItems);
