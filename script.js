@@ -728,10 +728,10 @@ var _doughnutLabelPlugin = {
         }
         if(!moved) break;
       }
-      items.forEach(function(it) {
-        it.labelY = Math.max(FS/2 + SIDE_PAD, Math.min(cH - FS/2 - SIDE_PAD, it.labelY));
-      });
-    }
+      var tB=FS/2+SIDE_PAD, bB=cH-FS/2-SIDE_PAD;
+      if(items[0].labelY < tB) { var su=tB-items[0].labelY; items.forEach(function(it){it.labelY+=su;}); }
+      if(items[items.length-1].labelY > bB) { var sd=items[items.length-1].labelY-bB; items.forEach(function(it){it.lab        if(!moved) break;
+      }
 
     spaceItems(leftItems);
     spaceItems(rightItems);
