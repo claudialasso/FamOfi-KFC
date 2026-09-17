@@ -778,22 +778,56 @@ var _doughnutLabelPlugin = {
     ctx.restore();
   }
 };
+var _doughnutCenterPlugin = {
+  id: 'famDoughnutCenter',
+  afterDraw: function(chart) {
+    var ct = chart.config.options && chart.config.options._centerText;
+    if (!ct) return;
+    var meta = chart.getDatasetMeta(0);
+    if (!meta || !meta.data || !meta.data.length) return;
+    var arc = meta.data[0];
+    var cx = arc.x, cy = arc.y;
+    var innerR = arc.innerRadius || 60;
+    var ctx = chart.ctx;
+    var root = document.documentElement;
+    var textColor = (getComputedStyle(root).getPropertyValue('--text')||'').trim()||'#1a1a2e';
+    var subColor  = (getComputedStyle(root).getPropertyValue('--text2')||'').trim()||'#6b7280';
+    var fSz = Math.max(14, Math.min(28, Math.round(innerR * 0.38)));
+    ctx.save();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = 'bold '+fSz+'px system-ui,-apple-system,sans-serif';
+    ctx.fillStyle = textColor;
+    ctx.fillText(String(ct.value), cx, cy - fSz * 0.45);
+    ctx.font = Math.round(fSz * 0.52)+'px system-ui,-apple-system,sans-serif';
+    ctx.fillStyle = subColor;
+    ctx.fillText(ct.label, cx, cy + fSz * 0.65);
+    ctx.restore();
+  }
+};
 function mkChart(id,type,labels,values,opts){
   opts=opts||{};
   var ctx=document.getElementById(id); if(!ctx) return;
   if(charts[id]) charts[id].destroy();
   var lFsz=opts.legendSize||10;
   var lPad=opts.legendPad||8;
+  var pluginList=[];
+  if(type==='doughnut' && !opts.noLabels) pluginList.push(_doughnutLabelPlugin);
+  if(opts.centerText) pluginList.push(_doughnutCenterPlugin);
+  var tooltipPlugin = opts.customTooltip ? {callbacks:{label:function(ctx2){var val=ctx2.dataset.data[ctx2.dataIndex];var tot=ctx2.dataset.data.reduce(function(a,b){return a+b;},0);var pct=tot>0?Math.round(val/tot*100):0;return ' '+val+' ('+pct+'%)';}}} : {};
   charts[id]=new Chart(ctx,{type:type,
     data:{labels:labels,datasets:[{data:values,backgroundColor:chartColors(labels.length),borderWidth:0,borderRadius:type==='bar'?5:0}]},
     options:{responsive:true,maintainAspectRatio:false,
       _noOutsideLabels: !!opts.noOutsideLabels,
+      _centerText: opts.centerText||null,
       cutout: opts.cutout || undefined,
-      layout: type==='doughnut' ? {padding: opts.noOutsideLabels ? {top:18,right:18,bottom:18,left:18} : (opts.hideLegend ? {top:28,right:36,bottom:28,left:36} : {top:28,right:28,bottom:28,left:8})} : undefined,
-      plugins:{legend:{display:opts.hideLegend?false:(type!=='bar'),position:type==='doughnut'?'left':'bottom',maxWidth:140,labels:{boxWidth:11,font:{size:lFsz},padding:lPad}}},
+      layout: type==='doughnut' ? {padding: opts.noOutsideLabels ? {top:14,right:14,bottom:14,left:14} : (opts.hideLegend ? {top:28,right:36,bottom:28,left:36} : {top:28,right:28,bottom:28,left:8})} : undefined,
+      plugins:{
+        legend:{display:opts.hideLegend?false:(type!=='bar'),position:type==='doughnut'?'left':'bottom',maxWidth:140,labels:{boxWidth:11,font:{size:lFsz},padding:lPad}},
+        tooltip: tooltipPlugin
+      },
       scales:type==='bar'?{x:{grid:{display:false},ticks:{font:{size:10}}},y:{grid:{color:'#eef0f8'},ticks:{font:{size:10},stepSize:1}}}:undefined
     },
-    plugins: type==='doughnut' && !opts.noLabels ? [_doughnutLabelPlugin] : []
+    plugins: pluginList
   });
 }
 // ── Render ────────────────────────────────────────────────────────────────────
@@ -852,8 +886,8 @@ var ovSort='asc'; function toggleOvSort(){ ovSort=ovSort==='asc'?'desc':'asc'; r
   h+='<div class="kpi"><div class="kpi-label">'+t('totalShareholders')+'</div><div class="kpi-val">'+shSet.size+'</div></div>';
   h+='<div class="kpi"><div class="kpi-label">'+t('totalInvestments')+'</div><div class="kpi-val">'+inv.length+'</div><div class="kpi-sub">'+fmtD(totalMV)+' MV</div></div></div>';
   h+='<div class="charts-row">';
-  h+='<div class="chart-card"><div class="chart-title">'+t('byJurisdiction')+'</div><div class="chart-body"><div class="ov-legend ov-legend-wide" id="leg-jur"><div class="ov-legend-row"></div></div><div class="ov-chart-wrap"><canvas id="ch-jur"></canvas></div></div></div>';
-  h+='<div class="chart-card"><div class="chart-title">'+t('byStatus')+'</div><div class="chart-body"><div class="ov-legend" id="leg-status"><div class="ov-legend-row"></div></div><div class="ov-chart-wrap"><canvas id="ch-status"></canvas></div></div></div>';
+  h+='<div class="chart-card"><div class="chart-title">'+t('byJurisdiction')+'</div><div class="ov-chart-wrap ov-chart-full"><canvas id="ch-jur"></canvas></div></div>';
+  h+='<div class="chart-card"><div class="chart-title">'+t('byStatus')+'</div><div class="ov-chart-wrap ov-chart-full"><canvas id="ch-status"></canvas></div></div>';
   h+='</div>';
   var csSorted=cs.slice().sort(function(a,b){var an=(a.name||'').toLowerCase(),bn=(b.name||'').toLowerCase();var cmp=an<bn?-1:an>bn?1:0;return ovSort==='desc'?-cmp:cmp;}); var sortIcon=ovSort==='asc'?'▲':'▼'; h+='<div class="card" style="padding:0;width:100%"><table><thead><tr><th style="cursor:pointer;user-select:none" onclick="toggleOvSort()">'+t('name')+' <span style="font-size:9px;color:var(--accent)">'+sortIcon+'</span></th><th>'+t('jurisdiction')+'</th><th>'+t('status')+'</th><th>'+t('shareholders2')+'</th><th>'+t('subsidiaries')+'</th><th>'+t('investments')+'</th></tr></thead><tbody>';
   if(!csSorted.length){ h+='<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text3)">'+t('noCompanies')+'</td></tr>'; }
@@ -881,23 +915,12 @@ function buildOvCharts(){
   var activeCs=cs.filter(function(c){ return c.status==='active'; });
   var jm={}; activeCs.forEach(function(c){jm[c.jurisdiction]=(jm[c.jurisdiction]||0)+1;});
   var jd=sortedPairs(jm);
-  mkChart('ch-jur','doughnut',jd.labels,jd.values,{legendSize:12,legendPad:10,hideLegend:true,noOutsideLabels:true,cutout:'62%'});
+  var activeTotal=jd.values.reduce(function(a,b){return a+b;},0);
+  mkChart('ch-jur','doughnut',jd.labels,jd.values,{legendSize:12,legendPad:10,hideLegend:true,noOutsideLabels:true,cutout:'62%',centerText:{value:activeTotal,label:'Active'},customTooltip:true});
   // By Status: all companies, sorted largest first
   var sm={}; cs.forEach(function(c){var k=t(c.status);sm[k]=(sm[k]||0)+1;});
   var sd=sortedPairs(sm);
-  mkChart('ch-status','doughnut',sd.labels,sd.values,{legendSize:12,legendPad:10,hideLegend:true});
-  // Build custom HTML legends
-  function buildOvLegend(elId, labels, colors, values) {
-    var el=document.getElementById(elId); if(!el) return;
-    var row=el.querySelector('.ov-legend-row'); if(!row) return;
-    row.innerHTML=labels.map(function(lbl,i){
-      var display=lbl.length>14?lbl.slice(0,12)+'…':lbl;
-      var valHtml=values!=null?'<span class="ov-leg-val">'+values[i]+'</span>':'';
-      return '<span class="ov-leg-item"><span class="ov-leg-swatch" style="background:'+colors[i]+'"></span><span class="ov-leg-label" title="'+esc(lbl)+'">'+esc(display)+'</span>'+valHtml+'</span>';
-    }).join('');
-  }
-  buildOvLegend('leg-jur',jd.labels,chartColors(jd.labels.length),jd.values);
-  buildOvLegend('leg-status',sd.labels,chartColors(sd.labels.length));
+  mkChart('ch-status','doughnut',sd.labels,sd.values,{legendSize:12,legendPad:10,hideLegend:false,customTooltip:true});
 }
 // ── Companies ─────────────────────────────────────────────────────────────────
 var cSearch='',cJur='',cStatus='',cType='';
