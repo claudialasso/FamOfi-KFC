@@ -60,7 +60,7 @@
       c.portfolioLoans.forEach(function (loan) {
         var amt = loan.amount ? (loan.currency||'') + ' ' + Number(loan.amount).toLocaleString() : '-';
         h += '<tr style="border-bottom:1px solid #f0f0f0"><td style="padding:8px 6px">'+(loan.lender||'-')+'<\/td><td style="padding:8px 6px">'+(loan.type||'-')+'<\/td><td style="padding:8px 6px">'+amt+'<\/td><td style="padding:8px 6px">'+(loan.interestRate?loan.interestRate+'%':'-')+'<\/td><td style="padding:8px 6px">'+(loan.startDate||'-')+'<\/td><td style="padding:8px 6px">'+(loan.maturityDate||'-')+'<\/td><td style="padding:8px 6px"><span style="background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:10px;font-size:11px">'+(loan.status||'-')+'<\/span><\/td>';
-        if (admin) { h += '<td style="padding:8px 6px;white-space:nowrap"><button class="btn btn-sm" style="margin-right:4px" onclick="_editLoanModal(\''+id+'\',\''+loan.id+'\')">Edit<\/button><button class="btn btn-sm" style="background:#fee;color:#c33;border:1px solid #fcc" onclick="_delLoan(\''+id+'\',\''+loan.id+'\')">×<\/button><\/td>'; } else h += '<td><\/td>';
+        if (admin) { h += '<td style="padding:8px 6px;white-space:nowrap"><button class="btn btn-sm" style="margin-right:4px" onclick="_editLoanModal(\''+id+'\',\''+loan.id+'\')">Edit<\/button><button class="btn btn-sm" style="background:#fee;color:#c33;border:1px solid #fcc" onclick="_delLoan(\''+id+'\',\''+loan.id+'\')">\u00d7<\/button><\/td>'; } else h += '<td><\/td>';
         h += '<\/tr>';
       });
       h += '<\/tbody><\/table>';
@@ -117,16 +117,8 @@
       if(!newInv)return;
       var similar=(data.investments||[]).filter(function(i){return i.id!==newInv.id&&_simScore(i.name,newInv.name)>=0.7;});
       if(!similar.length)return;
-      var matchLines=similar.map(function(m){return '  • '+m.name+(m.fund?' ['+m.fund+']':'');}).join('
-');
-      var keep=confirm('⚠️ Possible duplicate investment
-
-The investment “'+newInv.name+'” looks very similar to:
-
-'+matchLines+'
-
-Do you want to keep it?
-OK = Keep it   |   Cancel = Remove it');
+      var matchLines=similar.map(function(m){return '  \u2022 '+m.name+(m.fund?' ['+m.fund+']':'');}).join('\n');
+      var keep=confirm('\u26a0\ufe0f Possible duplicate investment\n\nThe investment \u201c'+newInv.name+'\u201d looks very similar to:\n\n'+matchLines+'\n\nDo you want to keep it?\nOK = Keep it   |   Cancel = Remove it');
       if(!keep){
         data.investments=(data.investments||[]).filter(function(i){return i.id!==newInv.id;});
         save();
@@ -136,7 +128,7 @@ OK = Keep it   |   Cancel = Remove it');
     };
   }
 
-  function _normInv(str){return(str||'').toLowerCase().replace(/[^a-z0-9]/g,' ').replace(/s+/g,' ').trim();}
+  function _normInv(str){return(str||'').toLowerCase().replace(/[^a-z0-9]/g,' ').replace(/\s+/g,' ').trim();}
 
   function _simScore(a,b){
     var na=_normInv(a),nb=_normInv(b);
