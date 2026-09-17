@@ -1262,7 +1262,7 @@ function buildSHPie(id){
 function switchTab(btn,pid){
 var mb=btn.closest('.modal-body');
 mb.querySelectorAll('.tab').forEach(function(b){b.classList.remove('active');});
-mb.querySelectorAll('.tab-panel').forEach(function(p){p.classList.remove('active');});
+mb.querySelectorAll('.tab-panel').forEach(function(p){p.classList.remove('active');p.style.display='';});
 btn.classList.add('active');
 var panel=document.getElementById(pid);
 panel.classList.add('active');
