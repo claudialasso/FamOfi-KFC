@@ -820,7 +820,7 @@ function mkChart(id,type,labels,values,opts){
       _noOutsideLabels: !!opts.noOutsideLabels,
       _centerText: opts.centerText||null,
       cutout: opts.cutout || undefined,
-      layout: type==='doughnut' ? {padding: opts.noOutsideLabels ? {top:14,right:14,bottom:14,left:14} : (opts.hideLegend ? {top:28,right:36,bottom:28,left:36} : {top:28,right:28,bottom:28,left:8})} : undefined,
+      layout: type==='doughnut' ? {padding: opts.noOutsideLabels ? {top:18,right:18,bottom:18,left:18} : (opts.hideLegend ? {top:28,right:36,bottom:28,left:36} : {top:28,right:28,bottom:28,left:8})} : undefined,
       plugins:{
         legend:{display:opts.hideLegend?false:(type!=='bar'),position:type==='doughnut'?'left':'bottom',maxWidth:140,labels:{boxWidth:11,font:{size:lFsz},padding:lPad}},
         tooltip: tooltipPlugin
