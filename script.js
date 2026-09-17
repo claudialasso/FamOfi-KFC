@@ -886,8 +886,8 @@ var ovSort='asc'; function toggleOvSort(){ ovSort=ovSort==='asc'?'desc':'asc'; r
   h+='<div class="kpi"><div class="kpi-label">'+t('totalShareholders')+'</div><div class="kpi-val">'+shSet.size+'</div></div>';
   h+='<div class="kpi"><div class="kpi-label">'+t('totalInvestments')+'</div><div class="kpi-val">'+inv.length+'</div><div class="kpi-sub">'+fmtD(totalMV)+' MV</div></div></div>';
   h+='<div class="charts-row">';
-  h+='<div class="chart-card"><div class="chart-title">'+t('byJurisdiction')+'</div><div class="ov-chart-wrap ov-chart-full"><canvas id="ch-jur"></canvas></div></div>';
-  h+='<div class="chart-card"><div class="chart-title">'+t('byStatus')+'</div><div class="ov-chart-wrap ov-chart-full"><canvas id="ch-status"></canvas></div></div>';
+  h+='<div class="chart-card"><div class="chart-title">'+t('byJurisdiction')+'</div><div class="ov-chart-wrap ov-chart-full"><canvas id="ch-jur"></canvas></div><div class="ov-ckey" id="ckey-jur"></div></div>';
+  h+='<div class="chart-card"><div class="chart-title">'+t('byStatus')+'</div><div class="ov-chart-wrap ov-chart-full"><canvas id="ch-status"></canvas></div><div class="ov-ckey" id="ckey-status"></div></div>';
   h+='</div>';
   var csSorted=cs.slice().sort(function(a,b){var an=(a.name||'').toLowerCase(),bn=(b.name||'').toLowerCase();var cmp=an<bn?-1:an>bn?1:0;return ovSort==='desc'?-cmp:cmp;}); var sortIcon=ovSort==='asc'?'▲':'▼'; h+='<div class="card" style="padding:0;width:100%"><table><thead><tr><th style="cursor:pointer;user-select:none" onclick="toggleOvSort()">'+t('name')+' <span style="font-size:9px;color:var(--accent)">'+sortIcon+'</span></th><th>'+t('jurisdiction')+'</th><th>'+t('status')+'</th><th>'+t('shareholders2')+'</th><th>'+t('subsidiaries')+'</th><th>'+t('investments')+'</th></tr></thead><tbody>';
   if(!csSorted.length){ h+='<tr><td colspan="6" style="text-align:center;padding:28px;color:var(--text3)">'+t('noCompanies')+'</td></tr>'; }
@@ -904,6 +904,12 @@ var ovSort='asc'; function toggleOvSort(){ ovSort=ovSort==='asc'?'desc':'asc'; r
   h+='</tbody></table></div>';
   return h;
 }
+function buildCkey(elId,labels,colors){
+  var el=document.getElementById(elId); if(!el) return;
+  el.innerHTML=labels.map(function(lbl,i){
+    return '<span class="ov-ckey-item"><span class="ov-ckey-dot" style="background:'+colors[i]+'"></span><span class="ov-ckey-lbl">'+esc(lbl)+'</span></span>';
+  }).join('');
+}
 function buildOvCharts(){
   var cs=data.companies;
   function sortedPairs(map){
@@ -917,10 +923,12 @@ function buildOvCharts(){
   var jd=sortedPairs(jm);
   var activeTotal=jd.values.reduce(function(a,b){return a+b;},0);
   mkChart('ch-jur','doughnut',jd.labels,jd.values,{legendSize:12,legendPad:10,hideLegend:true,noOutsideLabels:true,cutout:'62%',centerText:{value:activeTotal,label:'Active'},customTooltip:true});
+  buildCkey('ckey-jur',jd.labels,chartColors(jd.labels.length));
   // By Status: all companies, sorted largest first
   var sm={}; cs.forEach(function(c){var k=t(c.status);sm[k]=(sm[k]||0)+1;});
   var sd=sortedPairs(sm);
-  mkChart('ch-status','doughnut',sd.labels,sd.values,{legendSize:12,legendPad:10,hideLegend:false,customTooltip:true});
+  mkChart('ch-status','doughnut',sd.labels,sd.values,{legendSize:12,legendPad:10,hideLegend:true,noOutsideLabels:true,cutout:'62%',customTooltip:true});
+  buildCkey('ckey-status',sd.labels,chartColors(sd.labels.length));
 }
 // ── Companies ─────────────────────────────────────────────────────────────────
 var cSearch='',cJur='',cStatus='',cType='';
