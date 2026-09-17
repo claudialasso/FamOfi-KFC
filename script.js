@@ -788,7 +788,7 @@ function mkChart(id,type,labels,values,opts){
       plugins:{legend:{display:opts.hideLegend?false:(type!=='bar'),position:type==='doughnut'?'left':'bottom',maxWidth:140,labels:{boxWidth:11,font:{size:lFsz},padding:lPad}}},
       scales:type==='bar'?{x:{grid:{display:false},ticks:{font:{size:10}}},y:{grid:{color:'#eef0f8'},ticks:{font:{size:10},stepSize:1}}}:undefined
     },
-    plugins: type==='doughnut' ? [_doughnutLabelPlugin] : []
+    plugins: type==='doughnut' && !opts.noLabels ? [_doughnutLabelPlugin] : []
   });
 }
 // ── Render ────────────────────────────────────────────────────────────────────
@@ -2789,9 +2789,9 @@ h+='</select></div>';
 function buildInvCharts(){
   var inv=data.investments;
   var fm={}; inv.forEach(function(i){var k=i.fund||'Other';fm[k]=(fm[k]||0)+(+i.marketValue||0);});
-  mkChart('inv-fund-chart','doughnut',Object.keys(fm),Object.values(fm));
+  mkChart('inv-fund-chart','doughnut',Object.keys(fm),Object.values(fm),{noLabels:true});
   var tm={}; inv.forEach(function(i){var k=i.type||'Other';tm[k]=(tm[k]||0)+(+i.marketValue||0);});
-  mkChart('inv-type-chart','doughnut',Object.keys(tm),Object.values(tm));
+  mkChart('inv-type-chart','doughnut',Object.keys(tm),Object.values(tm),{noLabels:true});
 }
 function openInvForm(id,defaultCo){
   var inv=id?data.investments.find(function(x){return x.id===id;}):null;
