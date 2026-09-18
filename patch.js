@@ -1,4 +1,4 @@
-// FamOfi Registry — Patch: Portfolio Loan tab + Duplicate Investment guard
+// FamOfi Registry â Patch: Portfolio Loan tab + Duplicate Investment guard
 // Add to your repo and include in index.html:  <script src="patch.js"></script>
 (function () {
   'use strict';
@@ -149,8 +149,261 @@
   }
 
   function init(){
-    if(typeof window.openCompany==='function'&&typeof window.saveInv==='function'){hookOpenCompany();hookSaveInv();}else{setTimeout(init,200);}
+    if(typeof window.openCompany==='function'&&typeof window.saveInv:[²vgVæ7Föâr¶öö´÷Vä6ö×ç¶ööµ6fTçb·ÖVÇ6W·6WEFÖV÷WBæBÃ#·Ð¢Ð ¢bFö7VÖVçBç&VG7FFSÓÓÒvÆöFærr¶Fö7VÖVçBæFDWfVçDÆ7FVæW"tDôÔ6öçFVçDÆöFVBrÆæB·ÖVÇ6W¶æB·Ð§Ò° ¢òò)H)HF63#¢&çBÖöFÂ6'B6WGFæw2²GæÖ266ÆR)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H ¢gVæ7Föâ°¢wW6R7G&7Bs° ¢òòVÇW#¢6fVÇ6ÆÂvÆö&ÂgVæ7Föç2FVfæVBâ67&Bæ§0¢gVæ7Föâ÷2²&WGW&â"r"²7G&ær2ç&WÆ6RõÅÂörÂuÅÅÅÂrç&WÆ6RòrörÂ%ÅÂr"²"r#²Ð ¢òò&VæFW"çfW7FÖVçBÆ7B6V6¶&÷W2v&VBFò÷&u&çEFövvÆTæöFRæ÷B÷&uFövvÆT6ö×çæöFR¢gVæ7Föâ÷&VæFW$çdÆ7Df÷%&çB7FfTBÂÆ7BÂçdG2°¢f"Òrs°¢Æ7Bæf÷$V6gVæ7FöâVçG'°¢bVçG'æçfW7FÖVçG2æÆVæwF&WGW&ã°¢bVçG'æFWFâ°¢³ÒsÆFb7GÆSÒ&Ö&vâÖÆVgC¢r²VçG'æFWF£B²w¶föçB×6¦S£ãW¶6öÆ÷#§f"Ò×FWC2¶Ö&vâ×F÷£G#âr¶W626æÖRVçG'æB²sÂöFcâs°¢Ð¢VçG'æçfW7FÖVçG2æf÷$V6gVæ7Föâçb°¢f"æ6ÂÒçdG2ÇÂçdG2æ2çbæB°¢³ÒsÆÆ&VÂ6Æ73Ò&÷&rÖfÇFW"Ö÷Föâ"7GÆSÒ'FFæs£''¶Ö&vâÖÆVgC¢r²VçG'æFWF£B³B²w#âp¢²sÆçWBGSÒ&6V6¶&÷"r²æ6Ãòv6V6¶VBs¢rr²röæ6ævSÒ orgPrintToggleNode('+_q(activeId)+',\'inv\','+_q(inv.id)+',this.checked)">'
+          + ' <span style="font-size:12px">'+esc(inv.name)+'</span></label>';
+      });
+    });
+    return h;
   }
 
-  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',init);}else{init();}
+  function _renderShTreeForPrint(activeId, tree, shIds, depth) {
+    var h = '';
+    tree.forEach(function (node) {
+      var incl = !shIds || shIds.has(node.id);
+      var label = node.type==='company' ? cname(node.person) : node.person;
+      h += '<label class="org-filter-option" style="padding:2px 2px;margin-left:'+(depth*14)+'px">'
+        + '<input type="checkbox" '+(incl?'checked':'')+' onchange="orgPrintToggleNode('+_q(activeId)+',\'sh\','+_q(node.id)+',this.checked)">'
+        + ' <span style="font-size:12px">'+esc(label)+'</span></label>';
+      if (node.children && node.children.length) h += _renderShTreeForPrint(activeId, node.children, shIds, depth+1);
+    });
+    return h;
+  }
+
+  function _renderSubTreeForPrint(activeId, tree, subIds, depth) {
+    var h = '';
+    tree.forEach(function (node) {
+      var incl = !subIds || subIds.has(node.id);
+      h += '<label class="org-filter-option" style="padding:2px 2px;margin-left:'+(depth*14)+'px">'
+        + '<input type="checkbox" '+(incl?'checked':'')+' onchange="orgPrintToggleNode('+_q(activeId)+',\'sub\','+_q(node.id)+',this.checked)">'
+        + ' <span style="font-size:12px">'+esc(node.name)+'</span></label>';
+      if (node.children && node.children.length) h += _renderSubTreeForPrint(activeId, node.children, subIds, depth+1);
+    });
+    return h;
+  }
+
+  // Build the full Chart Settings HTML block for the print modal
+  function _buildPrintChartSettings(id) {
+    var st = orgEnsureSettings(id);
+    var en = (typeof lang !== 'undefined' && lang === 'en');
+    var h = '<div class="print-cfg-section">';
+    h += '<div class="print-cfg-label">'+(en?'Chart Settings':'ConfiguraciÃ³n del GrÃ¡fico')+'</div>';
+
+    // â Shareholders â
+    h += '<label class="org-filter-option"><input type="checkbox" '+(st.shareholders?'checked':'')+' onchange="orgPrintSettingChanged('+_q(id)+',\'shareholders\',this.checked)"> <span>'+(en?'Show shareholders':'Mostrar accionistas')+'</span></label>';
+    if (st.shareholders) {
+      var shTree = orgBuildShTree(id);
+      if (shTree.length) {
+        h += '<div style="margin-left:18px;margin-top:2px">'+_renderShTreeForPrint(id, shTree, st.shIds, 0)+'</div>';
+      } else {
+        h += '<div style="margin-left:18px;color:var(--text3);font-size:11.5px">'+t('noData')+'</div>';
+      }
+    }
+
+    // â Subsidiaries â
+    h += '<label class="org-filter-option"><input type="checkbox" '+(st.subsidiaries?'checked':'')+' onchange="orgPrintSettingChanged('+_q(id)+',\'subsidiaries\',this.checked)"> <span>'+(en?'Show subsidiaries':'Mostrar subsidiarias')+'</span></label>';
+    if (st.subsidiaries) {
+      var subTree = orgBuildSubTree(id);
+      if (subTree.length) {
+        h += '<div style="margin-left:18px;margin-top:2px">'+_renderSubTreeForPrint(id, subTree, st.subIds, 0)+'</div>';
+      } else {
+        h += '<div style="margin-left:18px;color:var(--text3);font-size:11.5px">'+t('noData')+'</div>';
+      }
+    }
+
+    // â Investments â
+    h += '<label class="org-filter-option"><input type="checkbox" '+(st.investments?'checked':'')+' onchange="orgPrintSettingChanged('+_q(id)+',\'investments\',this.checked)"> <span>'+(en?'Show investments':'Mostrar inversiones')+'</span></label>';
+    if (st.investments) {
+      var invList = orgBuildInvCompanyList(id).filter(function(e){ return e.investments.length; });
+      if (invList.length) {
+        h += '<div id="print-inv-detail" style="margin-left:18px;margin-top:2px">';
+        // Select All / Unselect All buttons
+        h += '<div style="display:flex;gap:6px;margin-bottom:6px">'
+          + '<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 8px" onclick="orgPrintSelectAllInv('+_q(id)+',true)">'+(en?'Select All':'Seleccionar Todo')+'</button>'
+          + '<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 8px" onclick="orgPrintSelectAllInv('+_q(id)+',false)">'+(en?'Unselect All':'Deseleccionar Todo')+'</button>'
+          + '</div>';
+        h += _renderInvListForPrint(id, invList, st.invIds);
+        h += '</div>';
+      } else {
+        h += '<div style="margin-left:18px;color:var(--text3);font-size:11.5px">'+t('noData')+'</div>';
+      }
+    }
+
+    h += '</div>';
+    return h;
+  }
+
+  // Refresh just the settings panel inside the print modal (avoids full re-render)
+  function _refreshPrintSettingsPanel(id) {
+    var wrap = document.getElementById('print-chart-settings-wrap');
+    if (wrap) wrap.innerHTML = _buildPrintChartSettings(id);
+  }
+
+  // ââ Public handlers called from inline onchange/onclick in the print modal â
+
+  window.orgPrintSettingChanged = function (id, field, val) {
+    orgEnsureSettings(id)[field] = val;
+    _refreshPrintSettingsPanel(id);
+    orgPrintRefreshPreview();
+  };
+
+  window.orgPrintToggleNode = function (id, kind, nodeId, checked) {
+    var st = orgEnsureSettings(id);
+    var field, allItems;
+    if (kind==='sh')       { field='shIds';  allItems=orgFlattenShIds(id);  }
+    else if (kind==='sub') { field='subIds'; allItems=orgFlattenSubIds(id); }
+    else                   { field='invIds'; allItems=orgFlattenInvIds(id); }
+    if (!st[field]) st[field] = new Set(allItems);
+    if (checked) st[field].add(nodeId); else st[field].delete(nodeId);
+    if (allItems.length && st[field].size === allItems.length) st[field] = null;
+    // Only re-render the investment detail (cheaper, preserves scroll)
+    if (kind === 'inv') {
+      var invWrap = document.getElementById('print-inv-detail');
+      if (invWrap) {
+        var invList = orgBuildInvCompanyList(id).filter(function(e){ return e.investments.length; });
+        var en = (typeof lang !== 'undefined' && lang === 'en');
+        var h = '<div style="display:flex;gap:6px;margin-bottom:6px">'
+          + '<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 8px" onclick="orgPrintSelectAllInv('+_q(id)+',true)">'+(en?'Select All':'Seleccionar Todo')+'</button>'
+          + '<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 8px" onclick="orgPrintSelectAllInv('+_q(id)+',false)">'+(en?'Unselect All':'Deseleccionar Todo')+'</button>'
+          + '</div>';
+        h += _renderInvListForPrint(id, invList, st.invIds);
+        invWrap.innerHTML = h;
+      }
+    }
+    orgPrintRefreshPreview();
+  };
+
+  window.orgPrintSelectAllInv = function (id, checked) {
+    var st = orgEnsureSettings(id);
+    st.invIds = checked ? null : new Set();
+    var invWrap = document.getElementById('print-inv-detail');
+    if (invWrap) {
+      var invList = orgBuildInvCompanyList(id).filter(function(e){ return e.investments.length; });
+      var en = (typeof lang !== 'undefined' && lang === 'en');
+      var h = '<div style="display:flex;gap:6px;margin-bottom:6px">'
+        + '<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 8px" onclick="orgPrintSelectAllInv('+_q(id)+',true)">'+(en?'Select All':'Seleccionar Todo')+'</button>'
+        + '<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 8px" onclick="orgPrintSelectAllInv('+_q(id)+',false)">'+(en?'Unselect All':'Deseleccionar Todo')+'</button>'
+        + '</div>';
+      h += _renderInvListForPrint(id, invList, st.invIds);
+      invWrap.innerHTML = h;
+    }
+    orgPrintRefreshPreview();
+  };
+
+  // ââ Override openPrintConfig âââââââââââââââââââââââââââââââââââââââââââââ
+
+  window.openPrintConfig = function (companyId) {
+    var c = data.companies.find(function(x){ return x.id===companyId; });
+    if (!c) return;
+    orgEnsureSettings(companyId);
+    window._orgPrintCfg = { companyId: companyId };
+
+    var en = (typeof lang !== 'undefined' && lang === 'en');
+    var html = ''
+      + '<div class="modal-header">'
+      +   '<div><div class="modal-title">'+t('printConfigTitle')+'</div>'
+      +        '<div class="modal-subtitle">'+esc(c.name)+'</div></div>'
+      +   '<button class="close-btn" onclick="closeModal()">&times;</button>'
+      + '</div>'
+      + '<div class="modal-body">'
+      +   '<div class="print-cfg-grid">'
+      +     '<div style="overflow-y:auto;max-height:68vh">'
+      +       '<div id="print-chart-settings-wrap">'+_buildPrintChartSettings(companyId)+'</div>'
+      +       '<div class="print-cfg-section"><div class="print-cfg-label">'+t('printInclude')+'</div>'
+      +         '<label class="print-cfg-option"><input type="checkbox" id="print-opt-colors" checked onchange="orgPrintRefreshPreview()"> '+t('printOptColors')+'</label>'
+      +         '<label class="print-cfg-option"><input type="checkbox" id="print-opt-labels" checked onchange="orgPrintRefreshPreview()"> '+t('printOptLabels')+'</label>'
+      +         '<label class="print-cfg-option"><input type="checkbox" id="print-opt-sub"    checked onchange="orgPrintRefreshPreview()"> '+t('printOptSub')+'</label>'
+      +         '<label class="print-cfg-option"><input type="checkbox" id="print-opt-legend" checked onchange="orgPrintRefreshPreview()"> '+t('printOptLegend')+'</label>'
+      +       '</div>'
+      +     '</div>'
+      +     '<div>'
+      +       '<div class="print-cfg-label">'+t('printPreview')+'</div>'
+      +       '<div class="print-preview-shell"><div id="print-preview-inner" class="print-preview-scale"></div></div>'
+      +       '<div class="print-preview-note">'+t('printPreviewNote')+'</div>'
+      +     '</div>'
+      +   '</div>'
+      + '</div>'
+      + '<div class="modal-header" style="border-top:1px solid var(--border);border-bottom:none;justify-content:flex-end;gap:8px">'
+      +   '<button class="btn btn-outline" onclick="closeModal()">'+t('cancel')+'</button>'
+      +   '<button class="btn btn-teal" onclick="runOrgChartPrint()">&#128424; '+t('printChart')+'</button>'
+      + '</div>';
+
+    showModal(html, true);
+    orgPrintRefreshPreview();
+  };
+
+  // ââ Override orgPrintFilteredHTML: use buildFilteredOrgChart + _orgSelSettings â
+
+  window.orgPrintFilteredHTML = function () {
+    if (!window._orgPrintCfg) return '';
+    var cid = window._orgPrintCfg.companyId;
+    var settings = (window._orgSelSettings && window._orgSelSettings[cid]) || {};
+
+    var root = document.createElement('div');
+    root.innerHTML = buildFilteredOrgChart(cid, settings);
+
+    var elColors = document.getElementById('print-opt-colors');
+    var elLabels = document.getElementById('print-opt-labels');
+    var elSub    = document.getElementById('print-opt-sub');
+    var elLegend = document.getElementById('print-opt-legend');
+
+    if (elLabels && !elLabels.checked) {
+      var els = root.querySelectorAll('.org-card-label');
+      for (var i=0;i<els.length;i++) els[i].style.display='none';
+    }
+    if (elSub && !elSub.checked) {
+      var els2 = root.querySelectorAll('.org-card-sub');
+      for (var i=0;i<els2.length;i++) els2[i].style.display='none';
+    }
+    var legendRow = root.querySelector('.org-legend');
+    if (legendRow && elLegend && !elLegend.checked) legendRow.style.display='none';
+    var scrollRoot = root.querySelector('.org-chart-scroll');
+    if (scrollRoot) scrollRoot.classList.toggle('print-mono', !!(elColors && !elColors.checked));
+
+    return root.innerHTML;
+  };
+
+  // ââ Override runOrgChartPrint: dynamic scale that fills the page âââââââââ
+
+  window.runOrgChartPrint = function () {
+    if (!window._orgPrintCfg) return;
+    var c = data.companies.find(function(x){ return x.id===window._orgPrintCfg.companyId; });
+    var filteredHTML = window.orgPrintFilteredHTML();
+    var root = document.getElementById('print-org-root');
+    if (!root) {
+      root = document.createElement('div');
+      root.id = 'print-org-root';
+      document.body.appendChild(root);
+    }
+    root.style.zoom = 1; // reset so measurement is accurate
+    var headerName = c ? esc(c.name) : '';
+    var headerJur  = c ? esc(c.jurisdiction||'') : '';
+    root.innerHTML =
+        '<div class="org-print-header">'
+      +   '<div class="t1">'+headerName+' â '+t('orgChart')+'</div>'
+      +   '<div class="t2">'+headerJur+' â FamOfi Registry â '+new Date().toLocaleDateString()+'</div>'
+      + '</div>'
+      + '<div id="print-org-canvas" class="org-print-canvas">'+filteredHTML+'</div>';
+
+    var canvas = document.getElementById('print-org-canvas');
+    if (window.drawOrgChartConnectors) window.drawOrgChartConnectors(canvas);
+
+    var scroll = canvas.querySelector('.org-chart-scroll');
+    if (scroll) {
+      // Measure actual rendered size, then scale to fill the printable area.
+      // pageWidthPx â A4 landscape printable width at 96 dpi; pageHeightPx leaves
+      // room for the header. Cap at 2.5 so text never becomes unreadably large.
+      var pageW = 1040, pageH = 740;
+      var w = Math.max(scroll.scrollWidth, scroll.offsetWidth, 1);
+      var h = Math.max(scroll.scrollHeight, scroll.offsetHeight, 1);
+      var scale = Math.min(pageW / w, pageH / h, 2.5);
+      root.style.zoom = scale;
+    } else {
+      root.style.zoom = 1;
+    }
+
+    closeModal();
+    document.body.classList.add('printing-org');
+    setTimeout(function(){ window.print(); }, 60);
+  };
+
 })();
