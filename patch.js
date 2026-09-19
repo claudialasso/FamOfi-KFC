@@ -1,4 +1,4 @@
-// FamOfi Registry â Patch: Portfolio Loan tab + Duplicate Investment guard
+// FamOfi Registry — Patch: Portfolio Loan tab + Duplicate Investment guard
 // Add to your repo and include in index.html:  <script src="patch.js"></script>
 (function () {
   'use strict';
@@ -60,7 +60,7 @@
       c.portfolioLoans.forEach(function (loan) {
         var amt = loan.amount ? (loan.currency||'') + ' ' + Number(loan.amount).toLocaleString() : '-';
         h += '<tr style="border-bottom:1px solid #f0f0f0"><td style="padding:8px 6px">'+(loan.lender||'-')+'<\/td><td style="padding:8px 6px">'+(loan.type||'-')+'<\/td><td style="padding:8px 6px">'+amt+'<\/td><td style="padding:8px 6px">'+(loan.interestRate?loan.interestRate+'%':'-')+'<\/td><td style="padding:8px 6px">'+(loan.startDate||'-')+'<\/td><td style="padding:8px 6px">'+(loan.maturityDate||'-')+'<\/td><td style="padding:8px 6px"><span style="background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:10px;font-size:11px">'+(loan.status||'-')+'<\/span><\/td>';
-        if (admin) { h += '<td style="padding:8px 6px;white-space:nowrap"><button class="btn btn-sm" style="margin-right:4px" onclick="_editLoanModal(\''+id+'\',\''+loan.id+'\')">Edit<\/button><button class="btn btn-sm" style="background:#fee;color:#c33;border:1px solid #fcc" onclick="_delLoan(\''+id+'\',\''+loan.id+'\')">\u00d7<\/button><\/td>'; } else h += '<td><\/td>';
+        if (admin) { h += '<td style="padding:8px 6px;white-space:nowrap"><button class="btn btn-sm" style="margin-right:4px" onclick="_editLoanModal(\''+id+'\',\''+loan.id+'\')">Edit<\�button><button class="btn btn-sm" style="background:#fee;color:#c33;border:1px solid #fcc" onclick="_delLoan(\''+id+'\',\''+loan.id+'\')">×<\/button><\/td>'; } else h += '<td><\/td>';
         h += '<\/tr>';
       });
       h += '<\/tbody><\/table>';
@@ -117,8 +117,8 @@
       if(!newInv)return;
       var similar=(data.investments||[]).filter(function(i){return i.id!==newInv.id&&_simScore(i.name,newInv.name)>=0.7;});
       if(!similar.length)return;
-      var matchLines=similar.map(function(m){return '  \u2022 '+m.name+(m.fund?' ['+m.fund+']':'');}).join('\n');
-      var keep=confirm('\u26a0\ufe0f Possible duplicate investment\n\nThe investment \u201c'+newInv.name+'\u201d looks very similar to:\n\n'+matchLines+'\n\nDo you want to keep it?\nOK = Keep it   |   Cancel = Remove it');
+      var matchLines=similar.map(function(m){return '  • '+m.name+(m.fund?' ['+m.fund+']':'');}).join('\n');
+      var keep=confirm('⚠️ Possible duplicate investment\n\nThe investment “'+newInv.name+'” looks very similar to:\n\n'+matchLines+'\n\nDo you want to keep it?\nOK = Keep it   |   Cancel = Remove it');
       if(!keep){
         data.investments=(data.investments||[]).filter(function(i){return i.id!==newInv.id;});
         save();
@@ -142,15 +142,33 @@
     return overlap/total;
   }
 
-  function hookOpenCompany(){
-    if(typeof window.openCompany!=='function')return;
-    _origOpenCompany=window.openCompany;
-    window.openCompany=function(id){_origOpenCompany(id);setTimeout(function(){_injectLoanTab(id);},80);};
+  function hookOpenCompany2(){
+    if(typeof window.openCompany==='function'&&typeof window.saveInv==='function'){hookOpenCompany();hookSaveInv();}else{setTimeout(hookOpenCompany2,200);}
   }
 
-  function init(){
-    if(typeof window.openCompany==='function'&&typeof window.saveInv:[²vgVæ7Föâr¶öö´÷Vä6ö×ç¶ööµ6fTçb·ÖVÇ6W·6WEFÖV÷WBæBÃ#·Ð¢Ð ¢bFö7VÖVçBç&VG7FFSÓÓÒvÆöFærr¶Fö7VÖVçBæFDWfVçDÆ7FVæW"tDôÔ6öçFVçDÆöFVBrÆæB·ÖVÇ6W¶æB·Ð§Ò° ¢òò)H)HF63#¢&çBÖöFÂ6'B6WGFæw2²GæÖ266ÆR)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H)H ¢gVæ7Föâ°¢wW6R7G&7Bs° ¢òòVÇW#¢6fVÇ6ÆÂvÆö&ÂgVæ7Föç2FVfæVBâ67&Bæ§0¢gVæ7Föâ÷2²&WGW&â"r"²7G&ær2ç&WÆ6RõÅÂörÂuÅÅÅÂrç&WÆ6RòrörÂ%ÅÂr"²"r#²Ð ¢òò&VæFW"çfW7FÖVçBÆ7B6V6¶&÷W2v&VBFò÷&u&çEFövvÆTæöFRæ÷B÷&uFövvÆT6ö×çæöFR¢gVæ7Föâ÷&VæFW$çdÆ7Df÷%&çB7FfTBÂÆ7BÂçdG2°¢f"Òrs°¢Æ7Bæf÷$V6gVæ7FöâVçG'°¢bVçG'æçfW7FÖVçG2æÆVæwF&WGW&ã°¢bVçG'æFWFâ°¢³ÒsÆFb7GÆSÒ&Ö&vâÖÆVgC¢r²VçG'æFWF£B²w¶föçB×6¦S£ãW¶6öÆ÷#§f"Ò×FWC2¶Ö&vâ×F÷£G#âr¶W626æÖRVçG'æB²sÂöFcâs°¢Ð¢VçG'æçfW7FÖVçG2æf÷$V6gVæ7Föâçb°¢f"æ6ÂÒçdG2ÇÂçdG2æ2çbæB°¢³ÒsÆÆ&VÂ6Æ73Ò&÷&rÖfÇFW"Ö÷Föâ"7GÆSÒ'FFæs£''¶Ö&vâÖÆVgC¢r²VçG'æFWF£B³B²w#âp¢²sÆçWBGSÒ&6V6¶&÷"r²æ6Ãòv6V6¶VBs¢rr²röæ6ævSÒ orgPrintToggleNode('+_q(activeId)+',\'inv\','+_q(inv.id)+',this.checked)">'
-          + ' <span style="font-size:12px">'+esc(inv.name)+'</span></label>';
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',hookOpenCompany2);}else{hookOpenCompany2();}
+})();
+
+// ── Patch #2: Print modal Chart Settings + Dynamic scale ──────────────────
+(function () {
+  'use strict';
+
+  // Helper: safely escape a string for insertion into HTML attribute single-quote context
+  function _q(s){ return "'" + String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'") + "'"; }
+
+  // Render investment list checkboxes wired to orgPrintToggleNode
+  function _renderInvListForPrint(activeId, list, invIds) {
+    var h = '';
+    list.forEach(function (entry) {
+      if (!entry.investments.length) return;
+      if (entry.depth > 0) {
+        h += '<div style="margin-left:'+(entry.depth*14)+'px;font-size:11.5px;color:var(--text3);margin-top:4px">'+esc(cname(entry.id))+'<\/div>';
+      }
+      entry.investments.forEach(function (inv) {
+        var incl = !invIds || invIds.has(inv.id);
+        h += '<label class="org-filter-option" style="padding:2px 2px;margin-left:'+((entry.depth*14)+14)+'px">'
+          + '<input type="checkbox" '+(incl?'checked':'')+' onchange="orgPrintToggleNode('+_q(activeId)+',\'inv\','+_q(inv.id)+',this.checked)">'
+          + ' <span style="font-size:12px">'+esc(inv.name)+'<\/span><\/label>';
       });
     });
     return h;
@@ -163,7 +181,7 @@
       var label = node.type==='company' ? cname(node.person) : node.person;
       h += '<label class="org-filter-option" style="padding:2px 2px;margin-left:'+(depth*14)+'px">'
         + '<input type="checkbox" '+(incl?'checked':'')+' onchange="orgPrintToggleNode('+_q(activeId)+',\'sh\','+_q(node.id)+',this.checked)">'
-        + ' <span style="font-size:12px">'+esc(label)+'</span></label>';
+        + ' <span style="font-size:12px">'+esc(label)+'<\/span><\/label>';
       if (node.children && node.children.length) h += _renderShTreeForPrint(activeId, node.children, shIds, depth+1);
     });
     return h;
@@ -175,7 +193,7 @@
       var incl = !subIds || subIds.has(node.id);
       h += '<label class="org-filter-option" style="padding:2px 2px;margin-left:'+(depth*14)+'px">'
         + '<input type="checkbox" '+(incl?'checked':'')+' onchange="orgPrintToggleNode('+_q(activeId)+',\'sub\','+_q(node.id)+',this.checked)">'
-        + ' <span style="font-size:12px">'+esc(node.name)+'</span></label>';
+        + ' <span style="font-size:12px">'+esc(node.name)+'<\/span><\/label>';
       if (node.children && node.children.length) h += _renderSubTreeForPrint(activeId, node.children, subIds, depth+1);
     });
     return h;
@@ -186,64 +204,63 @@
     var st = orgEnsureSettings(id);
     var en = (typeof lang !== 'undefined' && lang === 'en');
     var h = '<div class="print-cfg-section">';
-    h += '<div class="print-cfg-label">'+(en?'Chart Settings':'ConfiguraciÃ³n del GrÃ¡fico')+'</div>';
+    h += '<div class="print-cfg-label">'+(en?'Chart Settings':'Configuración del Gráfico')+'<\/div>';
 
-    // â Shareholders â
-    h += '<label class="org-filter-option"><input type="checkbox" '+(st.shareholders?'checked':'')+' onchange="orgPrintSettingChanged('+_q(id)+',\'shareholders\',this.checked)"> <span>'+(en?'Show shareholders':'Mostrar accionistas')+'</span></label>';
+    // — Shareholders —
+    h += '<label class="org-filter-option"><input type="checkbox" '+(st.shareholders?'checked':'')+' onchange="orgPrintSettingChanged('+_q(id)+',\'shareholders\',this.checked)"> <span>'+(en?'Show shareholders':'Mostrar accionistas')+'<\/span><\/label>';
     if (st.shareholders) {
       var shTree = orgBuildShTree(id);
       if (shTree.length) {
-        h += '<div style="margin-left:18px;margin-top:2px">'+_renderShTreeForPrint(id, shTree, st.shIds, 0)+'</div>';
+        h += '<div style="margin-left:18px;margin-top:2px">'+_renderShTreeForPrint(id, shTree, st.shIds, 0)+'<\/div>';
       } else {
-        h += '<div style="margin-left:18px;color:var(--text3);font-size:11.5px">'+t('noData')+'</div>';
+        h += '<div style="margin-left:18px;color:var(--text3);font-size:11.5px">'+t('noData')+'<\/div>';
       }
     }
 
-    // â Subsidiaries â
-    h += '<label class="org-filter-option"><input type="checkbox" '+(st.subsidiaries?'checked':'')+' onchange="orgPrintSettingChanged('+_q(id)+',\'subsidiaries\',this.checked)"> <span>'+(en?'Show subsidiaries':'Mostrar subsidiarias')+'</span></label>';
+    // — Subsidiaries —
+    h += '<label class="org-filter-option"><input type="checkbox" '+(st.subsidiaries?'checked':'')+' onchange="orgPrintSettingChanged('+_q(id)+',\'subsidiaries\',this.checked)"> <span>'+(en?'Show subsidiaries':'Mostrar subsidiarias')+'<\/span><\/label>';
     if (st.subsidiaries) {
       var subTree = orgBuildSubTree(id);
       if (subTree.length) {
-        h += '<div style="margin-left:18px;margin-top:2px">'+_renderSubTreeForPrint(id, subTree, st.subIds, 0)+'</div>';
+        h += '<div style="margin-left:18px;margin-top:2px">'+_renderSubTreeForPrint(id, subTree, st.subIds, 0)+'<\/div>';
       } else {
-        h += '<div style="margin-left:18px;color:var(--text3);font-size:11.5px">'+t('noData')+'</div>';
+        h += '<div style="margin-left:18px;color:var(--text3);font-size:11.5px">'+t('noData')+'<\/div>';
       }
     }
 
-    // â Investments â
-    h += '<label class="org-filter-option"><input type="checkbox" '+(st.investments?'checked':'')+' onchange="orgPrintSettingChanged('+_q(id)+',\'investments\',this.checked)"> <span>'+(en?'Show investments':'Mostrar inversiones')+'</span></label>';
+    // — Investments —
+    h += '<label class="org-filter-option"><input type="checkbox" '+(st.investments?'checked':'')+' onchange="orgPrintSettingChanged('+_q(id)+',\'investments\',this.checked)"> <span>'+(en?'Show investments':'Mostrar inversiones')+'<\/span><\/label>';
     if (st.investments) {
       var invList = orgBuildInvCompanyList(id).filter(function(e){ return e.investments.length; });
       if (invList.length) {
         h += '<div id="print-inv-detail" style="margin-left:18px;margin-top:2px">';
-        // Select All / Unselect All buttons
         h += '<div style="display:flex;gap:6px;margin-bottom:6px">'
-          + '<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 8px" onclick="orgPrintSelectAllInv('+_q(id)+',true)">'+(en?'Select All':'Seleccionar Todo')+'</button>'
-          + '<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 8px" onclick="orgPrintSelectAllInv('+_q(id)+',false)">'+(en?'Unselect All':'Deseleccionar Todo')+'</button>'
-          + '</div>';
+          + '<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 8px" onclick="orgPrintSelectAllInv('+_q(id)+',true)">'+(en?'Select All':'Seleccionar Todo')+'<\/button>'
+          + '<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 8px" onclick="orgPrintSelectAllInv('+_q(id)+',false)">'+(en?'Unselect All':'Deseleccionar Todo')+'<\/button>'
+          + '<\/div>';
         h += _renderInvListForPrint(id, invList, st.invIds);
-        h += '</div>';
+        h += '<\/div>';
       } else {
-        h += '<div style="margin-left:18px;color:var(--text3);font-size:11.5px">'+t('noData')+'</div>';
+        h += '<div style="margin-left:18px;color:var(--text3);font-size:11.5px">'+t('noData')+'<\/div>';
       }
     }
 
-    h += '</div>';
+    h += '<\/div>';
     return h;
   }
 
-  // Refresh just the settings panel inside the print modal (avoids full re-render)
+  // Refresh just the settings panel inside the print modal
   function _refreshPrintSettingsPanel(id) {
     var wrap = document.getElementById('print-chart-settings-wrap');
     if (wrap) wrap.innerHTML = _buildPrintChartSettings(id);
   }
 
-  // ââ Public handlers called from inline onchange/onclick in the print modal â
+  // ── Public handlers called from inline onchange/onclick in the print modal ─
 
   window.orgPrintSettingChanged = function (id, field, val) {
     orgEnsureSettings(id)[field] = val;
     _refreshPrintSettingsPanel(id);
-    orgPrintRefreshPreview();
+    if (typeof orgPrintRefreshPreview === 'function') orgPrintRefreshPreview();
   };
 
   window.orgPrintToggleNode = function (id, kind, nodeId, checked) {
@@ -255,21 +272,20 @@
     if (!st[field]) st[field] = new Set(allItems);
     if (checked) st[field].add(nodeId); else st[field].delete(nodeId);
     if (allItems.length && st[field].size === allItems.length) st[field] = null;
-    // Only re-render the investment detail (cheaper, preserves scroll)
     if (kind === 'inv') {
       var invWrap = document.getElementById('print-inv-detail');
       if (invWrap) {
         var invList = orgBuildInvCompanyList(id).filter(function(e){ return e.investments.length; });
         var en = (typeof lang !== 'undefined' && lang === 'en');
         var h = '<div style="display:flex;gap:6px;margin-bottom:6px">'
-          + '<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 8px" onclick="orgPrintSelectAllInv('+_q(id)+',true)">'+(en?'Select All':'Seleccionar Todo')+'</button>'
-          + '<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 8px" onclick="orgPrintSelectAllInv('+_q(id)+',false)">'+(en?'Unselect All':'Deseleccionar Todo')+'</button>'
-          + '</div>';
+          + '<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 8px" onclick="orgPrintSelectAllInv('+_q(id)+',true)">'+(en?'Select All':'Seleccionar Todo')+'<\/button>'
+          + '<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 8px" onclick="orgPrintSelectAllInv('+_q(id)+',false)">'+(en?'Unselect All':'Deseleccionar Todo')+'<\/button>'
+          + '<\/div>';
         h += _renderInvListForPrint(id, invList, st.invIds);
         invWrap.innerHTML = h;
       }
     }
-    orgPrintRefreshPreview();
+    if (typeof orgPrintRefreshPreview === 'function') orgPrintRefreshPreview();
   };
 
   window.orgPrintSelectAllInv = function (id, checked) {
@@ -280,16 +296,16 @@
       var invList = orgBuildInvCompanyList(id).filter(function(e){ return e.investments.length; });
       var en = (typeof lang !== 'undefined' && lang === 'en');
       var h = '<div style="display:flex;gap:6px;margin-bottom:6px">'
-        + '<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 8px" onclick="orgPrintSelectAllInv('+_q(id)+',true)">'+(en?'Select All':'Seleccionar Todo')+'</button>'
-        + '<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 8px" onclick="orgPrintSelectAllInv('+_q(id)+',false)">'+(en?'Unselect All':'Deseleccionar Todo')+'</button>'
-        + '</div>';
+        + '<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 8px" onclick="orgPrintSelectAllInv('+_q(id)+',true)">'+(en?'Select All':'Seleccionar Todo')+'<\/button>'
+        + '<button class="btn btn-outline btn-sm" style="font-size:11px;padding:2px 8px" onclick="orgPrintSelectAllInv('+_q(id)+',false)">'+(en?'Unselect All':'Deseleccionar Todo')+'<\/button>'
+        + '<\/div>';
       h += _renderInvListForPrint(id, invList, st.invIds);
       invWrap.innerHTML = h;
     }
-    orgPrintRefreshPreview();
+    if (typeof orgPrintRefreshPreview === 'function') orgPrintRefreshPreview();
   };
 
-  // ââ Override openPrintConfig âââââââââââââââââââââââââââââââââââââââââââââ
+  // ── Override openPrintConfig ───────────────────────────────────────────
 
   window.openPrintConfig = function (companyId) {
     var c = data.companies.find(function(x){ return x.id===companyId; });
@@ -297,41 +313,40 @@
     orgEnsureSettings(companyId);
     window._orgPrintCfg = { companyId: companyId };
 
-    var en = (typeof lang !== 'undefined' && lang === 'en');
     var html = ''
       + '<div class="modal-header">'
-      +   '<div><div class="modal-title">'+t('printConfigTitle')+'</div>'
-      +        '<div class="modal-subtitle">'+esc(c.name)+'</div></div>'
-      +   '<button class="close-btn" onclick="closeModal()">&times;</button>'
-      + '</div>'
+      +   '<div><div class="modal-title">'+t('printConfigTitle')+'<\/div>'
+      +        '<div class="modal-subtitle">'+esc(c.name)+'<\/div><\/div>'
+      +   '<button class="close-btn" onclick="closeModal()">&times;<\/button>'
+      + '<\/div>'
       + '<div class="modal-body">'
       +   '<div class="print-cfg-grid">'
       +     '<div style="overflow-y:auto;max-height:68vh">'
-      +       '<div id="print-chart-settings-wrap">'+_buildPrintChartSettings(companyId)+'</div>'
-      +       '<div class="print-cfg-section"><div class="print-cfg-label">'+t('printInclude')+'</div>'
-      +         '<label class="print-cfg-option"><input type="checkbox" id="print-opt-colors" checked onchange="orgPrintRefreshPreview()"> '+t('printOptColors')+'</label>'
-      +         '<label class="print-cfg-option"><input type="checkbox" id="print-opt-labels" checked onchange="orgPrintRefreshPreview()"> '+t('printOptLabels')+'</label>'
-      +         '<label class="print-cfg-option"><input type="checkbox" id="print-opt-sub"    checked onchange="orgPrintRefreshPreview()"> '+t('printOptSub')+'</label>'
-      +         '<label class="print-cfg-option"><input type="checkbox" id="print-opt-legend" checked onchange="orgPrintRefreshPreview()"> '+t('printOptLegend')+'</label>'
-      +       '</div>'
-      +     '</div>'
+      +       '<div id="print-chart-settings-wrap">'+_buildPrintChartSettings(companyId)+'<\/div>'
+      +       '<div class="print-cfg-section"><div class="print-cfg-label">'+t('printInclude')+'<\/div>'
+      +         '<label class="print-cfg-option"><input type="checkbox" id="print-opt-colors" checked onchange="orgPrintRefreshPreview()"> '+t('printOptColors')+'<\/label>'
+      +         '<label class="print-cfg-option"><input type="checkbox" id="print-opt-labels" checked onchange="orgPrintRefreshPreview()"> '+t('printOptLabels')+'<\/label>'
+      +         '<label class="print-cfg-option"><input type="checkbox" id="print-opt-sub"    checked onchange="orgPrintRefreshPreview()"> '+t('printOptSub')+'<\/label>'
+      +         '<label class="print-cfg-option"><input type="checkbox" id="print-opt-legend" checked onchange="orgPrintRefreshPreview()"> '+t('printOptLegend')+'<\/label>'
+      +       '<\/div>'
+      +     '<\/div>'
       +     '<div>'
-      +       '<div class="print-cfg-label">'+t('printPreview')+'</div>'
-      +       '<div class="print-preview-shell"><div id="print-preview-inner" class="print-preview-scale"></div></div>'
-      +       '<div class="print-preview-note">'+t('printPreviewNote')+'</div>'
-      +     '</div>'
-      +   '</div>'
-      + '</div>'
+      +       '<div class="print-cfg-label">'+t('printPreview')+'<\/div>'
+      +       '<div class="print-preview-shell'><div id="print-preview-inner" class="print-preview-scale"><\/div><\/div>'
+      +       '<div class="print-preview-note">'+t('printPreviewNote')+'<\/div>'
+      +     '<\/div>'
+      +   '<\/div>'
+      + '<\/div>'
       + '<div class="modal-header" style="border-top:1px solid var(--border);border-bottom:none;justify-content:flex-end;gap:8px">'
-      +   '<button class="btn btn-outline" onclick="closeModal()">'+t('cancel')+'</button>'
-      +   '<button class="btn btn-teal" onclick="runOrgChartPrint()">&#128424; '+t('printChart')+'</button>'
-      + '</div>';
+      +   '<button class="btn btn-outline" onclick="closeModal()">'+t('cancel')+'<\/button>'
+      +   '<button class="btn btn-teal" onclick="runOrgChartPrint()">&#128424; '+t('printChart')+'<\/button>'
+      + '<\/div>';
 
     showModal(html, true);
-    orgPrintRefreshPreview();
+    if (typeof orgPrintRefreshPreview === 'function') orgPrintRefreshPreview();
   };
 
-  // ââ Override orgPrintFilteredHTML: use buildFilteredOrgChart + _orgSelSettings â
+  // ── Override orgPrintFilteredHTML: use buildFilteredOrgChart + _orgSelSettings ─
 
   window.orgPrintFilteredHTML = function () {
     if (!window._orgPrintCfg) return '';
@@ -360,9 +375,14 @@
     if (scrollRoot) scrollRoot.classList.toggle('print-mono', !!(elColors && !elColors.checked));
 
     return root.innerHTML;
+  }; legendRow.style.display='none';
+    var scrollRoot = root.querySelector('.org-chart-scroll');
+    if (scrollRoot) scrollRoot.classList.toggle('print-mono', !!(elColors && !elColors.checked));
+
+    return root.innerHTML;
   };
 
-  // ââ Override runOrgChartPrint: dynamic scale that fills the page âââââââââ
+  // ── Override runOrgChartPrint: dynamic scale that fills the page ─────────
 
   window.runOrgChartPrint = function () {
     if (!window._orgPrintCfg) return;
@@ -379,19 +399,21 @@
     var headerJur  = c ? esc(c.jurisdiction||'') : '';
     root.innerHTML =
         '<div class="org-print-header">'
-      +   '<div class="t1">'+headerName+' â '+t('orgChart')+'</div>'
-      +   '<div class="t2">'+headerJur+' â FamOfi Registry â '+new Date().toLocaleDateString()+'</div>'
-      + '</div>'
-      + '<div id="print-org-canvas" class="org-print-canvas">'+filteredHTML+'</div>';
+      +   '<div class="t1">'+headerName+' — '+t('orgChart')+'<\/div>'
+      +   '<div class="t2">'+headerJur+' — FamOfi Registry — '+new Date().toLocaleDateString()+'<\/div>'
+      + '<\/div>'
+      + '<div id="print-org-canvas" class="org-print-canvas">'+filteredHTML+'<\/div>';
 
     var canvas = document.getElementById('print-org-canvas');
     if (window.drawOrgChartConnectors) window.drawOrgChartConnectors(canvas);
+    // Apply LLC line fan-out fix after all connectors are rendered
+    if (typeof window._fixEdgeFan === 'function') window._fixEdgeFan(canvas);
 
     var scroll = canvas.querySelector('.org-chart-scroll');
     if (scroll) {
       // Measure actual rendered size, then scale to fill the printable area.
-      // pageWidthPx â A4 landscape printable width at 96 dpi; pageHeightPx leaves
-      // room for the header. Cap at 2.5 so text never becomes unreadably large.
+      // pageW ≈ A4 landscape printable width at 96 dpi; pageH leaves room for the header.
+      // Cap at 2.5 so text never becomes unreadably large.
       var pageW = 1040, pageH = 740;
       var w = Math.max(scroll.scrollWidth, scroll.offsetWidth, 1);
       var h = Math.max(scroll.scrollHeight, scroll.offsetHeight, 1);
@@ -407,3 +429,119 @@
   };
 
 })();
+
+// ── Patch #3: LLC org chart line separation ───────────────────────────────
+// Fixes overlapping connector lines when multiple shareholders/owners share
+// the same x-column in the org chart (common with LLC structures).
+(function () {
+  'use strict';
+
+  /**
+   * Fan out SVG paths that converge at the same card entry/exit point.
+   *
+   * orgEdgePath draws L-shaped paths: M x1 y1 → L x1 midY → L x2 midY → L x2 y2
+   * When multiple paths share the same x2 (bottom endpoint), they overlap and
+   * look like a single line.  This post-processor offsets them left/right so
+   * each connection is visually distinct.
+   *
+   * @param {Element} container  — DOM element that contains the org chart
+   *                               (an .org-chart-scroll or its parent)
+   */
+  function fixEdgeFan(container) {
+    var svg = container.querySelector('svg');
+    if (!svg) return;
+    var pathEls = Array.prototype.slice.call(svg.querySelectorAll('path[d]'));
+    if (!pathEls.length) return;
+
+    // Parse the 4-point path: M x1 y1 L xm1 ym1 L xm2 ym2 L x2 y2
+    var parsed = [];
+    var re = /M\s*([\-\d.]+)\s+([\-\d.]+)\s+L\s*([\-\d.]+)\s+([\-\d.]+)\s+L\s*([\-\d.]+)\s+([\-\d.]+)\s+L\s*([\-\d.]+)\s+([\-\d.]+)/;
+    pathEls.forEach(function (el) {
+      var m = (el.getAttribute('d') || '').match(re);
+      if (!m) return;
+      parsed.push({
+        el:  el,
+        x1:  +m[1], y1:  +m[2],
+        xm1: +m[3], ym1: +m[4],
+        xm2: +m[5], ym2: +m[6],
+        x2:  +m[7], y2:  +m[8]
+      });
+    });
+    if (!parsed.length) return;
+
+    var STEP = 8; // pixels between adjacent fan lines
+
+    // ── Fan paths converging at the SAME BOTTOM POINT ────────────────────
+    // (multiple shareholders → one company)
+    var byBot = {};
+    parsed.forEach(function (p) {
+      var k = Math.round(p.x2) + ',' + Math.round(p.y2);
+      (byBot[k] = byBot[k] || []).push(p);
+    });
+    Object.keys(byBot).forEach(function (k) {
+      var g = byBot[k];
+      if (g.length < 2) return;
+      var half = (g.length - 1) * STEP / 2;
+      g.forEach(function (p, i) {
+        var ox = i * STEP - half;
+        // Shift the bottom vertical segment (xm2 → x2) by ox
+        p.el.setAttribute('d',
+          'M ' + p.x1  + ' ' + p.y1  +
+          ' L ' + p.xm1 + ' ' + p.ym1 +
+          ' L ' + (p.xm2 + ox) + ' ' + p.ym2 +
+          ' L ' + (p.x2  + ox) + ' ' + p.y2);
+      });
+    });
+
+    // ── Fan paths diverging from the SAME TOP POINT ───────────────────────
+    // (one company ₒ multiple subsidiaries/investments)
+    var byTop = {};
+    parsed.forEach(function (p) {
+      var k = Math.round(p.x1) + ',' + Math.round(p.y1);
+      (byTop[k] = byTop[k] || []).push(p);
+    });
+    Object.keys(byTop).forEach(function (k) {
+      var g = byTop[k];
+      if (g.length < 2) return;
+      var half = (g.length - 1) * STEP / 2;
+      g.forEach(function (p, i) {
+        var ox = i * STEP - half;
+        // Re-read 'd' — the byBot pass may have already modified it
+        var d = p.el.getAttribute('d') || '';
+        var m = d.match(re);
+        if (!m) return;
+        // Shift the top vertical segment (x1 → xm1) by ox
+        p.el.setAttribute('d',
+          'M ' + (+m[1] + ox) + ' ' + m[2] +
+          ' L ' + (+m[3] + ox) + ' ' + m[4] +
+          ' L ' + m[5] + ' ' + m[6] +
+          ' L ' + m[7] + ' ' + m[8]);
+      });
+    });
+  }
+
+  // Expose globally so runOrgChartPrint (Patch #2) can call it after
+  // drawOrgChartConnectors adds any extra paths.
+  window._fixEdgeFan = fixEdgeFan;
+
+  // Hook orgRenderGraphHTML so the fix applies automatically in the normal
+  // org chart view (and transitively in orgPrintFilteredHTML, which calls it).
+  function hookRenderGraph() {
+    if (typeof window.orgRenderGraphHTML !== 'function') {
+      setTimeout(hookRenderGraph, 100);
+      return;
+    }
+    var _orig = window.orgRenderGraphHTML;
+    window.orgRenderGraphHTML = function (nodes, edges, focalKey) {
+      var html = _orig.apply(this, arguments);
+      // Post-process in a detached element so we can manipulate SVG paths
+      // before the HTML is inserted into the live DOM.
+      var tmp = document.createElement('div');
+      tmp.innerHTML = html;
+      fixEdgeFan(tmp);
+      return tmp.innerHTML;
+    };
+  }
+
+  if (document.readyState === 'loading') {
+    d
