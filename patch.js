@@ -332,7 +332,7 @@
       +     '<\/div>'
       +     '<div>'
       +       '<div class="print-cfg-label">'+t('printPreview')+'<\/div>'
-      +       '<div class="print-preview-shell'><div id="print-preview-inner" class="print-preview-scale"><\/div><\/div>'
+      +       '<div class="print-preview-shell"><div id="print-preview-inner" class="print-preview-scale"><\/div><\/div>'
       +       '<div class="print-preview-note">'+t('printPreviewNote')+'<\/div>'
       +     '<\/div>'
       +   '<\/div>'
@@ -371,11 +371,6 @@
     }
     var legendRow = root.querySelector('.org-legend');
     if (legendRow && elLegend && !elLegend.checked) legendRow.style.display='none';
-    var scrollRoot = root.querySelector('.org-chart-scroll');
-    if (scrollRoot) scrollRoot.classList.toggle('print-mono', !!(elColors && !elColors.checked));
-
-    return root.innerHTML;
-  }; legendRow.style.display='none';
     var scrollRoot = root.querySelector('.org-chart-scroll');
     if (scrollRoot) scrollRoot.classList.toggle('print-mono', !!(elColors && !elColors.checked));
 
@@ -544,4 +539,9 @@
   }
 
   if (document.readyState === 'loading') {
-    d
+    document.addEventListener('DOMContentLoaded', hookRenderGraph);
+  } else {
+    hookRenderGraph();
+  }
+
+})()
