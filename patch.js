@@ -199,7 +199,7 @@
     var h = '';
     tree.forEach(function (node) {
       var incl = !subIds || subIds.has(node.id);
-      h += '<label class="org-filter-option" style="padding:2px 2px;margin-left:'+(depth*14)+'px">'
+      h += '<label class="org-filter-option" style="padding:2px 2pz;margin-left:'+(depth*14)+'px">'
         + '<input type="checkbox" '+(incl?'checked':'')+' onchange="orgPrintToggleNode('+_q(activeId)+',\'sub\','+_q(node.id)+',this.checked)">'
         + ' <span style="font-size:12px">'+esc(node.name)+'<\/span><\/label>';
       if (node.children && node.children.length) h += _renderSubTreeForPrint(activeId, node.children, subIds, depth+1);
@@ -590,166 +590,142 @@
 
     var re = /M\s*([\-\d.]+)\s+([\-\d.]+)\s+L\s*([\-\d.]+)\s+([\-\d.]+)\s+L\s*([\-\d.]+)\s+([\-\d.]+)\s+L\s*([\-\d.]+)\s+([\-\d.]+)/;
 
-    // ââ Collect node bounding boxes from .org-card-abs elements ââââââââââââââ
-    // Used to detect when a horizontal path segment passes through a node box.
+    // ââ Collect node bounding boxes from inline-styled .org-card-abs elements â
     var nodeBBoxes = [];
     var cards = container.querySelectorAll('.org-card-abs');
     Array.prototype.forEach.call(cards, function (card) {
       var cs = card.style;
-      var l = parseFloat(cs.left || 0), t = parseFloat(cs.top || 0);
-      var w = parseFloat(cs.width || 0), h = parseFloat(cs.height || 0);
+      var l = parseFloat(cs.left) || 0, t = parseFloat(cs.top) || 0;
+      var w = parseFloat(cs.width) || 0, h = parseFloat(cs.height) || 0;
       if (w > 0 && h > 0) nodeBBoxes.push({ l: l, t: t, r: l + w, b: t + h });
     });
 
     // Returns true if the horizontal segment at y=midY from xMin to xMax
-    // passes through any node box (with a small inset margin).
+    // passes through any node bounding box.
     function hitsNode(xMin, xMax, midY) {
       var PAD = 3;
       for (var i = 0; i < nodeBBoxes.length; i++) {
         var n = nodeBBoxes[i];
-        if (midY > n.t + PAD && midY < n.b - PAD && xMin < n.r - PAD && xMax > n.l + PAD) {
-          return true;
-        }
+        if (midY > n.t + PAD && midY < n.b - PAD &&
+            xMin < n.r - PAD && xMax > n.l + PAD) return true;
       }
       return false;
     }
 
-    // Find a midY near `desired` that doesn't pass through any node box.
-    // Tries alternating above/below in STEP_CLEAR increments.
-    function clearMidY(xMin, xMax, desired, y1, y2) {
+    // Find a midY near `desired` between lo and hi that avoids node boxes.
+    function clearMidY(xMin, xMax, desired, lo, hi) {
       if (!hitsNode(xMin, xMax, desired)) return desired;
-      var STEP_CLEAR = 12, MAX_TRY = 25;
+      var STEP = 12, MAX_TRY = 25;
       for (var k = 1; k <= MAX_TRY; k++) {
-        var up = desired - k * STEP_CLEAR;
-        if (up > y1 + 4 && !hitsNode(xMin, xMax, up)) return up;
-        var dn = desired + k * STEP_CLEAR;
-        if (dn < y2 - 4 && !hitsNode(xMin, xMax, dn)) return dn;
+        var up = desired - k * STEP;
+        if (up > lo + 4 && !hitsNode(xMin, xMax, up)) return up;
+        var dn = desired + k * STEP;
+        if (dn < hi - 4 && !hitsNode(xMin, xMax, dn)) return dn;
       }
-      return desired; // no clear lane found â leave as-is
+      return desired;
     }
 
-    var STEP = 8; // horizontal offset between fan lines at arrival point
-
-    // ââ Pass 1: Fan paths converging at the SAME BOTTOM POINT ââââââââââââââââ
-    // Multiple shareholders â one company: spread their arrival x slightly so
-    // each line visibly enters the card at a distinct position.
-    var byBot = {};
+    // Parse all paths â only the true start (x1,y1) and end (x2,y2) points matter.
+    var parsed = [];
     pathEls.forEach(function (el) {
       var m = (el.getAttribute('d') || '').match(re);
       if (!m) return;
-      var k = Math.round(+m[7]) + ',' + Math.round(+m[8]);
-      (byBot[k] = byBot[k] || []).push(el);
+      parsed.push({ el: el, x1: +m[1], y1: +m[2], x2: +m[7], y2: +m[8] });
     });
-    Object.keys(byBot).forEach(function (k) {
-      var g = byBot[k];
+    if (!parsed.length) return;
+
+    function rnd(v) { return Math.round(v); }
+
+    // ââ Group paths by their departure point and arrival point ââââââââââââââââ
+    var bySrc = {}, byDest = {};
+    parsed.forEach(function (p) {
+      var sk = rnd(p.x1) + ',' + rnd(p.y1);
+      var dk = rnd(p.x2) + ',' + rnd(p.y2);
+      p._sk = sk; p._dk = dk;
+      (bySrc[sk]  = bySrc[sk]  || []).push(p);
+      (byDest[dk] = byDest[dk] || []).push(p);
+    });
+
+    // Spacing between staggered horizontal branches when multiple sources
+    // converge on the same destination (px).
+    var BRANCH_STEP = 18;
+
+    // ââ Same-source groups: one shared midY â clean single trunk departure ââââ
+    // When the same parent has multiple children, all paths from that parent
+    // use IDENTICAL midY so the downward segment from parent looks like one trunk,
+    // with horizontal branches fanning out at the midY level.
+    Object.keys(bySrc).forEach(function (sk) {
+      var g = bySrc[sk];
       if (g.length < 2) return;
-      var half = (g.length - 1) * STEP / 2;
-      g.forEach(function (el, i) {
-        var m = (el.getAttribute('d') || '').match(re);
-        if (!m) return;
-        var ox = i * STEP - half;
-        el.setAttribute('d',
-          'M ' + m[1] + ' ' + m[2] +
-          ' L ' + m[3] + ' ' + m[4] +
-          ' L ' + (+m[5] + ox) + ' ' + m[6] +
-          ' L ' + (+m[7] + ox) + ' ' + m[8]);
-      });
+      var x1 = g[0].x1, y1 = g[0].y1;
+      // Anchor the shared midY between y1 and the median child y2.
+      var y2vals = g.map(function (p) { return p.y2; }).sort(function (a, b) { return a - b; });
+      var medY2  = y2vals[Math.floor(y2vals.length / 2)];
+      var lo = Math.min(y1, medY2) + 4, hi = Math.max(y1, medY2) - 4;
+      if (lo >= hi) { g._sharedMidY = (y1 + medY2) / 2; return; }
+      // Check clearance over the full x-span that encompasses all children.
+      var xMin = x1, xMax = x1;
+      g.forEach(function (p) { xMin = Math.min(xMin, p.x2); xMax = Math.max(xMax, p.x2); });
+      g._sharedMidY = clearMidY(xMin, xMax, (y1 + medY2) / 2, lo, hi);
     });
 
-    // NOTE: Pass 2 (fanning departure x from the same parent) is intentionally
-    // omitted. It caused multiple connections to appear to originate from
-    // different parts of the same parent card, making the ownership structure
-    // look incorrect. A single exit point per parent is visually clearer.
-
-    // ââ Pass 2 (new): Node-collision avoidance ââââââââââââââââââââââââââââââââ
-    // The horizontal segment of each L-shaped path (from x1 to x2 at y=midY)
-    // can accidentally pass through an unrelated node box, creating a false
-    // visual junction. Find a clear midY for any path that has this problem.
-    if (nodeBBoxes.length > 0) {
-      pathEls.forEach(function (el) {
-        var m = (el.getAttribute('d') || '').match(re);
-        if (!m) return;
-        var x1 = +m[1], y1 = +m[2], xm1 = +m[3], mid = +m[4];
-        var xm2 = +m[5], x2 = +m[7], y2 = +m[8];
-        var xMin = Math.min(xm1, xm2), xMax = Math.max(xm1, xm2);
-        var newMid = clearMidY(xMin, xMax, mid, y1, y2);
-        if (newMid !== mid) {
-          el.setAttribute('d',
-            'M ' + x1  + ' ' + y1 +
-            ' L ' + xm1 + ' ' + newMid +
-            ' L ' + xm2 + ' ' + newMid +
-            ' L ' + x2  + ' ' + y2);
-        }
-      });
-    }
-
-    // ââ Pass 3: Stagger midY for paths sharing the same rank-transition band
-    //    but heading to DIFFERENT destination columns.
-    //
-    //    When paths from (y1 â y2) go to multiple x-destinations and their
-    //    x-spans overlap, their horizontal segments can coincide, creating
-    //    T-junctions that imply false connections.  Assign each destination
-    //    cluster a distinct midY lane (chosen to also avoid node boxes).
-    var STEP_Y = 20;
-    var byRange = {};
-    pathEls.forEach(function (el) {
-      var m = (el.getAttribute('d') || '').match(re);
-      if (!m) return;
-      var x2c = Math.round(+m[7] / 100) * 100; // cluster by dest x Â±100 px
-      var rk  = Math.round(+m[2]) + ',' + Math.round(+m[8]);
-      if (!byRange[rk]) byRange[rk] = {};
-      if (!byRange[rk][x2c]) byRange[rk][x2c] = [];
-      byRange[rk][x2c].push(el);
+    // ââ Same-destination groups: staggered midY â branches merge into one trunk
+    // When multiple shareholders own the same company their horizontal segments
+    // arrive at the destination column at slightly different heights.  Because
+    // every path ends at the same (x2, y2), the overlapping final vertical
+    // segment at x2 appears as a single shared trunk leading into the company.
+    Object.keys(byDest).forEach(function (dk) {
+      var g = byDest[dk];
+      if (g.length < 2) return;
+      // Sort by source x then y for a stable, non-crossing branch order.
+      g.sort(function (a, b) { return a.x1 !== b.x1 ? a.x1 - b.x1 : a.y1 - b.y1; });
+      // Compute a single group-wide center so all branches are spaced consistently.
+      var sumY1 = 0;
+      g.forEach(function (p) { sumY1 += p.y1; });
+      g._center = (sumY1 / g.length + g[0].y2) / 2;
+      g._n = g.length;
+      g.forEach(function (p, i) { p._destIdx = i; });
     });
 
-    Object.keys(byRange).forEach(function (rk) {
-      var clusters = byRange[rk];
-      var ckNums   = Object.keys(clusters).map(Number).sort(function (a, b) { return a - b; });
-      if (ckNums.length < 2) return;
+    // ââ Route and rewrite every path ââââââââââââââââââââââââââââââââââââââââââ
+    parsed.forEach(function (p) {
+      var x1 = p.x1, y1 = p.y1, x2 = p.x2, y2 = p.y2;
+      var xMin = Math.min(x1, x2), xMax = Math.max(x1, x2);
+      var lo = Math.min(y1, y2) + 4, hi = Math.max(y1, y2) - 4;
 
-      var clusterInfo = ckNums.map(function (ck) {
-        var xMin = Infinity, xMax = -Infinity;
-        clusters[ck].forEach(function (el) {
-          var m = (el.getAttribute('d') || '').match(re);
-          if (!m) return;
-          var xa = +m[1], xb = +m[7];
-          if (xa < xMin) xMin = xa; if (xa > xMax) xMax = xa;
-          if (xb < xMin) xMin = xb; if (xb > xMax) xMax = xb;
-        });
-        return { ck: ck, xMin: xMin, xMax: xMax };
-      });
+      var midY;
+      var srcGroup  = bySrc[p._sk];
+      var destGroup = byDest[p._dk];
 
-      // Only stagger when clusters actually overlap in x (otherwise they can't merge)
-      var needsSep = false;
-      for (var ci = 0; ci < clusterInfo.length && !needsSep; ci++) {
-        for (var cj = ci + 1; cj < clusterInfo.length && !needsSep; cj++) {
-          if (clusterInfo[ci].xMin <= clusterInfo[cj].xMax &&
-              clusterInfo[cj].xMin <= clusterInfo[ci].xMax) needsSep = true;
-        }
+      if (lo >= hi) {
+        // Degenerate (very short) path â keep the centre point as-is.
+        midY = (y1 + y2) / 2;
+
+      } else if (srcGroup.length > 1 && srcGroup._sharedMidY != null) {
+        // One-parent-many-children: shared midY creates a visible departure trunk.
+        midY = Math.min(hi, Math.max(lo, srcGroup._sharedMidY));
+        if (nodeBBoxes.length > 0) midY = clearMidY(xMin, xMax, midY, lo, hi);
+
+      } else if (destGroup.length > 1) {
+        // Many-shareholders-one-company: stagger branches so they arrive at
+        // different heights at x2, making the shared trunk clearly visible.
+        var n   = destGroup._n;
+        var idx = p._destIdx;
+        var ctr = destGroup._center;
+        var off = (idx - (n - 1) / 2) * BRANCH_STEP;
+        midY = Math.min(hi, Math.max(lo, ctr + off));
+        if (nodeBBoxes.length > 0) midY = clearMidY(xMin, xMax, midY, lo, hi);
+
+      } else {
+        // Single relationship â find a clear midY near the midpoint.
+        midY = clearMidY(xMin, xMax, (y1 + y2) / 2, lo, hi);
       }
-      if (!needsSep) return;
 
-      var nC = ckNums.length;
-      ckNums.forEach(function (ck, gi) {
-        var yOff = (gi - (nC - 1) / 2) * STEP_Y;
-        clusters[ck].forEach(function (el) {
-          var m = (el.getAttribute('d') || '').match(re);
-          if (!m) return;
-          var x1 = +m[1], y1 = +m[2], xm1 = +m[3], xm2 = +m[5], x2 = +m[7], y2 = +m[8];
-          var baseMid  = +m[4];
-          var wantedMid = baseMid + yOff;
-          // Also ensure this new midY doesn't hit a node box
-          var xMin = Math.min(xm1, xm2), xMax = Math.max(xm1, xm2);
-          var newMid = (nodeBBoxes.length > 0)
-            ? clearMidY(xMin, xMax, wantedMid, y1, y2)
-            : wantedMid;
-          el.setAttribute('d',
-            'M ' + x1  + ' ' + y1 +
-            ' L ' + xm1 + ' ' + newMid +
-            ' L ' + xm2 + ' ' + newMid +
-            ' L ' + x2  + ' ' + y2);
-        });
-      });
+      p.el.setAttribute('d',
+        'M ' + x1  + ' ' + y1   +
+        ' L ' + x1  + ' ' + midY +
+        ' L ' + x2  + ' ' + midY +
+        ' L ' + x2  + ' ' + y2);
     });
   }
 
