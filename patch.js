@@ -60,7 +60,7 @@
       c.portfolioLoans.forEach(function (loan) {
         var amt = loan.amount ? (loan.currency||'') + ' ' + Number(loan.amount).toLocaleString() : '-';
         h += '<tr style="border-bottom:1px solid #f0f0f0"><td style="padding:8px 6px">'+(loan.lender||'-')+'<\/td><td style="padding:8px 6px">'+(loan.type||'-')+'<\/td><td style="padding:8px 6px">'+amt+'<\/td><td style="padding:8px 6px">'+(loan.interestRate?loan.interestRate+'%':'-')+'<\/td><td style="padding:8px 6px">'+(loan.startDate||'-')+'<\/td><td style="padding:8px 6px">'+(loan.maturityDate||'-')+'<\/td><td style="padding:8px 6px"><span style="background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:10px;font-size:11px">'+(loan.status||'-')+'<\/span><\/td>';
-        if (admin) { h += '<td style="padding:8px 6px;white-space:nowrap"><button class="btn btn-sm" style="margin-right:4px" onclick="_editLoanModal(\''+id+'\',\''+loan.id+'\')">Edit<\�button><button class="btn btn-sm" style="background:#fee;color:#c33;border:1px solid #fcc" onclick="_delLoan(\''+id+'\',\''+loan.id+'\')">×<\/button><\/td>'; } else h += '<td><\/td>';
+        if (admin) { h += '<td style="padding:8px 6px;white-space:nowrap"><button class="btn btn-sm" style="margin-right:4px" onclick="_editLoanModal(\''+id+'\',\''+loan.id+'\')">Edit<\/button><button class="btn btn-sm" style="background:#fee;color:#c33;border:1px solid #fcc" onclick="_delLoan(\''+id+'\',\''+loan.id+'\')">×<\/button><\/td>'; } else h += '<td><\/td>';
         h += '<\/tr>';
       });
       h += '<\/tbody><\/table>';
@@ -118,7 +118,7 @@
       var similar=(data.investments||[]).filter(function(i){return i.id!==newInv.id&&_simScore(i.name,newInv.name)>=0.7;});
       if(!similar.length)return;
       var matchLines=similar.map(function(m){return '  • '+m.name+(m.fund?' ['+m.fund+']':'');}).join('\n');
-      var keep=confirm('⚠️ Possible duplicate investment\n\nThe investment “'+newInv.name+'” looks very similar to:\n\n'+matchLines+'\n\nDo you want to keep it?\nOK = Keep it   |   Cancel = Remove it');
+      var keep=confirm('⚠️ Possible duplicate investment\n\nThe investment "'+newInv.name+'" looks very similar to:\n\n'+matchLines+'\n\nDo you want to keep it?\nOK = Keep it   |   Cancel = Remove it');
       if(!keep){
         data.investments=(data.investments||[]).filter(function(i){return i.id!==newInv.id;});
         save();
@@ -150,6 +150,14 @@
 })();
 
 // ── Patch #2: Print modal Chart Settings + Dynamic scale ──────────────────
+// NOTE: openPrintConfig / orgPrintFilteredHTML / runOrgChartPrint are all defined
+// inside a Firebase onAuthStateChanged callback in script.js, which fires AFTER
+// our IIFE.  Direct window.X = ... overrides are therefore wiped out.
+// Instead we:
+//   (a) Watch the DOM for .print-cfg-grid to appear (MutationObserver), which
+//       fires each time the print modal opens.
+//   (b) Each time it opens, inject our Chart Settings panel and re-hook
+//       runOrgChartPrint / orgPrintFilteredHTML for that session.
 (function () {
   'use strict';
 
@@ -220,7 +228,7 @@
     // — Subsidiaries —
     h += '<label class="org-filter-option"><input type="checkbox" '+(st.subsidiaries?'checked':'')+' onchange="orgPrintSettingChanged('+_q(id)+',\'subsidiaries\',this.checked)"> <span>'+(en?'Show subsidiaries':'Mostrar subsidiarias')+'<\/span><\/label>';
     if (st.subsidiaries) {
-      var subTree = orgBuildSubTree(id);
+      var subTree = (typeof orgBuildSubTree === 'function') ? orgBuildSubTree(id) : [];
       if (subTree.length) {
         h += '<div style="margin-left:18px;margin-top:2px">'+_renderSubTreeForPrint(id, subTree, st.subIds, 0)+'<\/div>';
       } else {
@@ -266,9 +274,9 @@
   window.orgPrintToggleNode = function (id, kind, nodeId, checked) {
     var st = orgEnsureSettings(id);
     var field, allItems;
-    if (kind==='sh')       { field='shIds';  allItems=orgFlattenShIds(id);  }
-    else if (kind==='sub') { field='subIds'; allItems=orgFlattenSubIds(id); }
-    else                   { field='invIds'; allItems=orgFlattenInvIds(id); }
+    if (kind==='sh')       { field='shIds';  allItems=(typeof orgFlattenShIds==='function')?orgFlattenShIds(id):[]; }
+    else if (kind==='sub') { field='subIds'; allItems=(typeof orgFlattenSubIds==='function')?orgFlattenSubIds(id):[]; }
+    else                   { field='invIds'; allItems=(typeof orgFlattenInvIds==='function')?orgFlattenInvIds(id):[]; }
     if (!st[field]) st[field] = new Set(allItems);
     if (checked) st[field].add(nodeId); else st[field].delete(nodeId);
     if (allItems.length && st[field].size === allItems.length) st[field] = null;
@@ -305,56 +313,21 @@
     if (typeof orgPrintRefreshPreview === 'function') orgPrintRefreshPreview();
   };
 
-  // ── Override openPrintConfig ───────────────────────────────────────────
-
-  window.openPrintConfig = function (companyId) {
-    var c = data.companies.find(function(x){ return x.id===companyId; });
-    if (!c) return;
-    orgEnsureSettings(companyId);
-    window._orgPrintCfg = { companyId: companyId };
-
-    var html = ''
-      + '<div class="modal-header">'
-      +   '<div><div class="modal-title">'+t('printConfigTitle')+'<\/div>'
-      +        '<div class="modal-subtitle">'+esc(c.name)+'<\/div><\/div>'
-      +   '<button class="close-btn" onclick="closeModal()">&times;<\/button>'
-      + '<\/div>'
-      + '<div class="modal-body">'
-      +   '<div class="print-cfg-grid">'
-      +     '<div style="overflow-y:auto;max-height:68vh">'
-      +       '<div id="print-chart-settings-wrap">'+_buildPrintChartSettings(companyId)+'<\/div>'
-      +       '<div class="print-cfg-section"><div class="print-cfg-label">'+t('printInclude')+'<\/div>'
-      +         '<label class="print-cfg-option"><input type="checkbox" id="print-opt-colors" checked onchange="orgPrintRefreshPreview()"> '+t('printOptColors')+'<\/label>'
-      +         '<label class="print-cfg-option"><input type="checkbox" id="print-opt-labels" checked onchange="orgPrintRefreshPreview()"> '+t('printOptLabels')+'<\/label>'
-      +         '<label class="print-cfg-option"><input type="checkbox" id="print-opt-sub"    checked onchange="orgPrintRefreshPreview()"> '+t('printOptSub')+'<\/label>'
-      +         '<label class="print-cfg-option"><input type="checkbox" id="print-opt-legend" checked onchange="orgPrintRefreshPreview()"> '+t('printOptLegend')+'<\/label>'
-      +       '<\/div>'
-      +     '<\/div>'
-      +     '<div>'
-      +       '<div class="print-cfg-label">'+t('printPreview')+'<\/div>'
-      +       '<div class="print-preview-shell"><div id="print-preview-inner" class="print-preview-scale"><\/div><\/div>'
-      +       '<div class="print-preview-note">'+t('printPreviewNote')+'<\/div>'
-      +     '<\/div>'
-      +   '<\/div>'
-      + '<\/div>'
-      + '<div class="modal-header" style="border-top:1px solid var(--border);border-bottom:none;justify-content:flex-end;gap:8px">'
-      +   '<button class="btn btn-outline" onclick="closeModal()">'+t('cancel')+'<\/button>'
-      +   '<button class="btn btn-teal" onclick="runOrgChartPrint()">&#128424; '+t('printChart')+'<\/button>'
-      + '<\/div>';
-
-    showModal(html, true);
-    if (typeof orgPrintRefreshPreview === 'function') orgPrintRefreshPreview();
-  };
-
-  // ── Override orgPrintFilteredHTML: use buildFilteredOrgChart + _orgSelSettings ─
-
-  window.orgPrintFilteredHTML = function () {
+  // ── Filtered HTML builder (uses _orgSelSettings populated by our UI) ───────
+  function _ourOrgPrintFilteredHTML() {
     if (!window._orgPrintCfg) return '';
     var cid = window._orgPrintCfg.companyId;
     var settings = (window._orgSelSettings && window._orgSelSettings[cid]) || {};
 
     var root = document.createElement('div');
-    root.innerHTML = buildFilteredOrgChart(cid, settings);
+    if (typeof buildFilteredOrgChart === 'function') {
+      root.innerHTML = buildFilteredOrgChart(cid, settings);
+    } else {
+      // Fallback: use original if available
+      if (typeof window._origOrgPrintFilteredHTML === 'function') {
+        root.innerHTML = window._origOrgPrintFilteredHTML();
+      }
+    }
 
     var elColors = document.getElementById('print-opt-colors');
     var elLabels = document.getElementById('print-opt-labels');
@@ -362,12 +335,10 @@
     var elLegend = document.getElementById('print-opt-legend');
 
     if (elLabels && !elLabels.checked) {
-      var els = root.querySelectorAll('.org-card-label');
-      for (var i=0;i<els.length;i++) els[i].style.display='none';
+      Array.prototype.forEach.call(root.querySelectorAll('.org-card-label'), function(el){ el.style.display='none'; });
     }
     if (elSub && !elSub.checked) {
-      var els2 = root.querySelectorAll('.org-card-sub');
-      for (var i=0;i<els2.length;i++) els2[i].style.display='none';
+      Array.prototype.forEach.call(root.querySelectorAll('.org-card-sub'), function(el){ el.style.display='none'; });
     }
     var legendRow = root.querySelector('.org-legend');
     if (legendRow && elLegend && !elLegend.checked) legendRow.style.display='none';
@@ -375,53 +346,91 @@
     if (scrollRoot) scrollRoot.classList.toggle('print-mono', !!(elColors && !elColors.checked));
 
     return root.innerHTML;
-  };
+  }
 
-  // ── Override runOrgChartPrint: dynamic scale that fills the page ─────────
-
-  window.runOrgChartPrint = function () {
+  // ── Dynamic-scale print runner ─────────────────────────────────────────────
+  function _ourRunOrgChartPrint() {
     if (!window._orgPrintCfg) return;
-    var c = data.companies.find(function(x){ return x.id===window._orgPrintCfg.companyId; });
-    var filteredHTML = window.orgPrintFilteredHTML();
+    var c = (window.data && data.companies || []).find(function(x){ return x.id===window._orgPrintCfg.companyId; });
+    var filteredHTML = _ourOrgPrintFilteredHTML();
     var root = document.getElementById('print-org-root');
-    if (!root) {
-      root = document.createElement('div');
-      root.id = 'print-org-root';
-      document.body.appendChild(root);
-    }
-    root.style.zoom = 1; // reset so measurement is accurate
+    if (!root) { root = document.createElement('div'); root.id = 'print-org-root'; document.body.appendChild(root); }
+    root.style.zoom = 1;
     var headerName = c ? esc(c.name) : '';
     var headerJur  = c ? esc(c.jurisdiction||'') : '';
     root.innerHTML =
         '<div class="org-print-header">'
-      +   '<div class="t1">'+headerName+' — '+t('orgChart')+'<\/div>'
+      +   '<div class="t1">'+headerName+' — '+(typeof t==='function'?t('orgChart'):'Org Chart')+'<\/div>'
       +   '<div class="t2">'+headerJur+' — FamOfi Registry — '+new Date().toLocaleDateString()+'<\/div>'
       + '<\/div>'
       + '<div id="print-org-canvas" class="org-print-canvas">'+filteredHTML+'<\/div>';
 
     var canvas = document.getElementById('print-org-canvas');
-    if (window.drawOrgChartConnectors) window.drawOrgChartConnectors(canvas);
-    // Apply LLC line fan-out fix after all connectors are rendered
+    if (typeof drawOrgChartConnectors === 'function') drawOrgChartConnectors(canvas);
     if (typeof window._fixEdgeFan === 'function') window._fixEdgeFan(canvas);
 
     var scroll = canvas.querySelector('.org-chart-scroll');
     if (scroll) {
-      // Measure actual rendered size, then scale to fill the printable area.
-      // pageW ≈ A4 landscape printable width at 96 dpi; pageH leaves room for the header.
-      // Cap at 2.5 so text never becomes unreadably large.
       var pageW = 1040, pageH = 740;
       var w = Math.max(scroll.scrollWidth, scroll.offsetWidth, 1);
       var h = Math.max(scroll.scrollHeight, scroll.offsetHeight, 1);
-      var scale = Math.min(pageW / w, pageH / h, 2.5);
-      root.style.zoom = scale;
-    } else {
-      root.style.zoom = 1;
+      root.style.zoom = Math.min(pageW / w, pageH / h, 2.5);
     }
 
-    closeModal();
+    if (typeof closeModal === 'function') closeModal();
     document.body.classList.add('printing-org');
     setTimeout(function(){ window.print(); }, 60);
-  };
+  }
+
+  // ── Inject Chart Settings into the print modal once it opens ─────────────
+  function _injectPrintChartSettings(cid) {
+    if (document.getElementById('print-chart-settings-wrap')) return; // already injected
+    var cfgGrid = document.querySelector('.print-cfg-grid');
+    if (!cfgGrid) return;
+    var leftCol = cfgGrid.firstElementChild;
+    if (!leftCol) return;
+
+    // Hide "WHAT TO PRINT" section (radio buttons) — our Chart Settings replace it
+    Array.prototype.forEach.call(leftCol.querySelectorAll('.print-cfg-section'), function(sec) {
+      if (sec.querySelector('input[type="radio"]')) sec.style.display = 'none';
+    });
+
+    // Inject our Chart Settings at the top of the left column
+    var wrap = document.createElement('div');
+    wrap.id = 'print-chart-settings-wrap';
+    leftCol.insertBefore(wrap, leftCol.firstChild);
+    wrap.innerHTML = _buildPrintChartSettings(cid);
+
+    // Re-hook the print-action functions (overwrite whatever Firebase set)
+    window.orgPrintFilteredHTML = _ourOrgPrintFilteredHTML;
+    window.runOrgChartPrint     = _ourRunOrgChartPrint;
+
+    // Refresh live preview if available
+    if (typeof orgPrintRefreshPreview === 'function') orgPrintRefreshPreview();
+  }
+
+  // ── Watch DOM for the print-cfg-grid to appear (works regardless of how
+  //    openPrintConfig / showModal are called internally) ────────────────────
+  function _startPrintModalWatcher() {
+    if (window._printModalWatcherActive) return;
+    window._printModalWatcherActive = true;
+    var observer = new MutationObserver(function() {
+      // Only act if the print modal is open and not yet patched
+      if (document.getElementById('print-chart-settings-wrap')) return;
+      var cfgGrid = document.querySelector('.print-cfg-grid');
+      if (!cfgGrid) return;
+      var cfg = window._orgPrintCfg;
+      if (!cfg || !cfg.companyId) return;
+      _injectPrintChartSettings(cfg.companyId);
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', _startPrintModalWatcher);
+  } else {
+    _startPrintModalWatcher();
+  }
 
 })();
 
@@ -489,7 +498,7 @@
     });
 
     // ── Fan paths diverging from the SAME TOP POINT ───────────────────────
-    // (one company ₒ multiple subsidiaries/investments)
+    // (one company → multiple subsidiaries/investments)
     var byTop = {};
     parsed.forEach(function (p) {
       var k = Math.round(p.x1) + ',' + Math.round(p.y1);
@@ -513,6 +522,7 @@
           ' L ' + m[7] + ' ' + m[8]);
       });
     });
+
     // ── Pass 3: Stagger midY for paths that share the same rank-transition
     //    band but target DIFFERENT destination columns.
     //
