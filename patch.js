@@ -1,4 +1,4 @@
-// FamOfi Registry — Patch: Portfolio Loan tab + Duplicate Investment guard
+// FamOfi Registry â Patch: Portfolio Loan tab + Duplicate Investment guard
 // Add to your repo and include in index.html:  <script src="patch.js"></script>
 (function () {
   'use strict';
@@ -60,7 +60,7 @@
       c.portfolioLoans.forEach(function (loan) {
         var amt = loan.amount ? (loan.currency||'') + ' ' + Number(loan.amount).toLocaleString() : '-';
         h += '<tr style="border-bottom:1px solid #f0f0f0"><td style="padding:8px 6px">'+(loan.lender||'-')+'<\/td><td style="padding:8px 6px">'+(loan.type||'-')+'<\/td><td style="padding:8px 6px">'+amt+'<\/td><td style="padding:8px 6px">'+(loan.interestRate?loan.interestRate+'%':'-')+'<\/td><td style="padding:8px 6px">'+(loan.startDate||'-')+'<\/td><td style="padding:8px 6px">'+(loan.maturityDate||'-')+'<\/td><td style="padding:8px 6px"><span style="background:#e8f5e9;color:#2e7d32;padding:2px 8px;border-radius:10px;font-size:11px">'+(loan.status||'-')+'<\/span><\/td>';
-        if (admin) { h += '<td style="padding:8px 6px;white-space:nowrap"><button class="btn btn-sm" style="margin-right:4px" onclick="_editLoanModal(\''+id+'\',\''+loan.id+'\')">Edit<\/button><button class="btn btn-sm" style="background:#fee;color:#c33;border:1px solid #fcc" onclick="_delLoan(\''+id+'\',\''+loan.id+'\')">×<\/button><\/td>'; } else h += '<td><\/td>';
+        if (admin) { h += '<td style="padding:8px 6px;white-space:nowrap"><button class="btn btn-sm" style="margin-right:4px" onclick="_editLoanModal(\''+id+'\',\''+loan.id+'\')">Edit<\ï¿½button><button class="btn btn-sm" style="background:#fee;color:#c33;border:1px solid #fcc" onclick="_delLoan(\''+id+'\',\''+loan.id+'\')">Ã<\/button><\/td>'; } else h += '<td><\/td>';
         h += '<\/tr>';
       });
       h += '<\/tbody><\/table>';
@@ -117,8 +117,8 @@
       if(!newInv)return;
       var similar=(data.investments||[]).filter(function(i){return i.id!==newInv.id&&_simScore(i.name,newInv.name)>=0.7;});
       if(!similar.length)return;
-      var matchLines=similar.map(function(m){return '  • '+m.name+(m.fund?' ['+m.fund+']':'');}).join('\n');
-      var keep=confirm('⚠️ Possible duplicate investment\n\nThe investment "'+newInv.name+'" looks very similar to:\n\n'+matchLines+'\n\nDo you want to keep it?\nOK = Keep it   |   Cancel = Remove it');
+      var matchLines=similar.map(function(m){return '  â¢ '+m.name+(m.fund?' ['+m.fund+']':'');}).join('\n');
+      var keep=confirm('â ï¸ Possible duplicate investment\n\nThe investment â'+newInv.name+'â looks very similar to:\n\n'+matchLines+'\n\nDo you want to keep it?\nOK = Keep it   |   Cancel = Remove it');
       if(!keep){
         data.investments=(data.investments||[]).filter(function(i){return i.id!==newInv.id;});
         save();
@@ -149,13 +149,13 @@
   if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',hookOpenCompany2);}else{hookOpenCompany2();}
 })();
 
-// ── Patch #2: Print modal Chart Settings + Dynamic scale ──────────────────
+// ââ Patch #2: Print modal Chart Settings + Dynamic scale ââââââââââââââââââ
 // NOTE: openPrintConfig / orgPrintFilteredHTML / runOrgChartPrint are all defined
 // inside a Firebase onAuthStateChanged callback in script.js, which fires AFTER
 // our IIFE.  Direct window.X = ... overrides are therefore wiped out.
 // Instead we:
-//   (a) Watch the DOM for .print-cfg-grid to appear (MutationObserver), which
-//       fires each time the print modal opens.
+//   (a) Wrap window.showModal immediately (showModal is defined at parse-time and
+//       stays stable), detecting when the print-config modal opens.
 //   (b) Each time it opens, inject our Chart Settings panel and re-hook
 //       runOrgChartPrint / orgPrintFilteredHTML for that session.
 (function () {
@@ -212,9 +212,9 @@
     var st = orgEnsureSettings(id);
     var en = (typeof lang !== 'undefined' && lang === 'en');
     var h = '<div class="print-cfg-section">';
-    h += '<div class="print-cfg-label">'+(en?'Chart Settings':'Configuración del Gráfico')+'<\/div>';
+    h += '<div class="print-cfg-label">'+(en?'Chart Settings':'ConfiguraciÃ³n del GrÃ¡fico')+'<\/div>';
 
-    // — Shareholders —
+    // â Shareholders â
     h += '<label class="org-filter-option"><input type="checkbox" '+(st.shareholders?'checked':'')+' onchange="orgPrintSettingChanged('+_q(id)+',\'shareholders\',this.checked)"> <span>'+(en?'Show shareholders':'Mostrar accionistas')+'<\/span><\/label>';
     if (st.shareholders) {
       var shTree = orgBuildShTree(id);
@@ -225,10 +225,10 @@
       }
     }
 
-    // — Subsidiaries —
+    // â Subsidiaries â
     h += '<label class="org-filter-option"><input type="checkbox" '+(st.subsidiaries?'checked':'')+' onchange="orgPrintSettingChanged('+_q(id)+',\'subsidiaries\',this.checked)"> <span>'+(en?'Show subsidiaries':'Mostrar subsidiarias')+'<\/span><\/label>';
     if (st.subsidiaries) {
-      var subTree = (typeof orgBuildSubTree === 'function') ? orgBuildSubTree(id) : [];
+      var subTree = orgBuildSubTree(id);
       if (subTree.length) {
         h += '<div style="margin-left:18px;margin-top:2px">'+_renderSubTreeForPrint(id, subTree, st.subIds, 0)+'<\/div>';
       } else {
@@ -236,7 +236,7 @@
       }
     }
 
-    // — Investments —
+    // â Investments â
     h += '<label class="org-filter-option"><input type="checkbox" '+(st.investments?'checked':'')+' onchange="orgPrintSettingChanged('+_q(id)+',\'investments\',this.checked)"> <span>'+(en?'Show investments':'Mostrar inversiones')+'<\/span><\/label>';
     if (st.investments) {
       var invList = orgBuildInvCompanyList(id).filter(function(e){ return e.investments.length; });
@@ -263,7 +263,140 @@
     if (wrap) wrap.innerHTML = _buildPrintChartSettings(id);
   }
 
-  // ── Public handlers called from inline onchange/onclick in the print modal ─
+  // ââ Interactive pan/zoom on the live print preview âââââââââââââââââââââââââ
+  function _setupPreviewPanZoom() {
+    // Clean up previous instance (modal re-opened)
+    if (window._pzCleanup) { window._pzCleanup(); window._pzCleanup = null; }
+
+    var cfgGrid = document.querySelector('.print-cfg-grid');
+    if (!cfgGrid) return;
+
+    // Make right column fluid so it doesn't force the modal to 5445 px
+    cfgGrid.style.gridTemplateColumns = '280px 1fr';
+
+    var shell = cfgGrid.querySelector('.print-preview-shell');
+    if (!shell) return;
+
+    // Constrain the shell so orgPrintRefreshPreview auto-calculates a fit scale
+    shell.style.overflow = 'hidden';
+    shell.style.cursor   = 'grab';
+    shell.style.position = 'relative';
+    shell.style.userSelect = 'none';
+    shell.style.height = (Math.max(400, window.innerHeight - 240)) + 'px';
+    shell.style.boxSizing = 'border-box';
+
+    var inner = document.getElementById('print-preview-inner');
+    if (!inner) return;
+
+    var pz = { tx: 0, ty: 0, userZoom: 1, baseScale: 1,
+               dragging: false, startX: 0, startY: 0, startTx: 0, startTy: 0 };
+
+    function applyTransform() {
+      var s = pz.baseScale * pz.userZoom;
+      inner.style.transform = 'translate(' + pz.tx + 'px,' + pz.ty + 'px) scale(' + s + ')';
+      inner.style.transformOrigin = '0 0';
+    }
+
+    function captureBaseScale() {
+      // orgPrintRefreshPreview sets "scale(N)" or "scale(N) ..." â read N
+      var m = (inner.style.transform || '').match(/scale\(([\d.eE+\-]+)\)/);
+      if (m) {
+        pz.baseScale = parseFloat(m[1]) || 1;
+        pz.tx = 0; pz.ty = 0; pz.userZoom = 1;
+      }
+      applyTransform();
+    }
+
+    // Wrap orgPrintRefreshPreview to capture the auto-scale it computes
+    var _origRefresh = window.orgPrintRefreshPreview;
+    window.orgPrintRefreshPreview = function () {
+      if (typeof _origRefresh === 'function') _origRefresh();
+      setTimeout(captureBaseScale, 40);
+    };
+
+    // Trigger initial scaled render
+    if (typeof _origRefresh === 'function') { _origRefresh(); setTimeout(captureBaseScale, 40); }
+
+    // ââ Pan via mouse drag ââââââââââââââââââââââââââââââââââââââââââââââââââââ
+    function onMouseDown(e) {
+      if (e.button !== 0) return;
+      // Don't start drag on the control buttons
+      if (e.target.closest && e.target.closest('#pz-controls')) return;
+      pz.dragging = true;
+      pz.startX = e.clientX; pz.startY = e.clientY;
+      pz.startTx = pz.tx;    pz.startTy = pz.ty;
+      shell.style.cursor = 'grabbing';
+      e.preventDefault();
+    }
+    function onMouseMove(e) {
+      if (!pz.dragging) return;
+      pz.tx = pz.startTx + (e.clientX - pz.startX);
+      pz.ty = pz.startTy + (e.clientY - pz.startY);
+      applyTransform();
+    }
+    function onMouseUp() {
+      if (pz.dragging) { pz.dragging = false; shell.style.cursor = 'grab'; }
+    }
+    shell.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+
+    // ââ Zoom via scroll wheel âââââââââââââââââââââââââââââââââââââââââââââââââ
+    function onWheel(e) {
+      e.preventDefault();
+      var factor = e.deltaY < 0 ? 1.12 : (1 / 1.12);
+      pz.userZoom = Math.max(0.15, Math.min(8, pz.userZoom * factor));
+      applyTransform();
+    }
+    shell.addEventListener('wheel', onWheel, { passive: false });
+
+    // ââ Control buttons âââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+    var oldCtrl = document.getElementById('pz-controls');
+    if (oldCtrl) oldCtrl.remove();
+
+    var ctrl = document.createElement('div');
+    ctrl.id = 'pz-controls';
+    ctrl.style.cssText = 'position:absolute;top:8px;right:8px;z-index:20;display:flex;gap:4px;align-items:center;';
+
+    function makeBtn(label, title, fn) {
+      var b = document.createElement('button');
+      b.textContent = label; b.title = title;
+      b.style.cssText = 'padding:4px 10px;font-size:13px;font-weight:600;background:#fff;border:1px solid #ccc;border-radius:5px;cursor:pointer;line-height:1.2;box-shadow:0 1px 3px rgba(0,0,0,.15);';
+      b.addEventListener('mousedown', function(e){ e.stopPropagation(); });
+      b.addEventListener('click', fn);
+      return b;
+    }
+    ctrl.appendChild(makeBtn('â Fit', 'Reset to fit', function(){
+      pz.tx=0; pz.ty=0; pz.userZoom=1; applyTransform();
+    }));
+    ctrl.appendChild(makeBtn('+', 'Zoom in', function(){
+      pz.userZoom = Math.min(8, pz.userZoom * 1.25); applyTransform();
+    }));
+    ctrl.appendChild(makeBtn('â', 'Zoom out', function(){
+      pz.userZoom = Math.max(0.15, pz.userZoom / 1.25); applyTransform();
+    }));
+    shell.appendChild(ctrl);
+
+    // ââ Hint text âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+    var hint = document.createElement('div');
+    hint.style.cssText = 'position:absolute;bottom:10px;left:50%;transform:translateX(-50%);'
+      + 'background:rgba(0,0,0,.55);color:#fff;font-size:11px;padding:3px 12px;'
+      + 'border-radius:10px;pointer-events:none;white-space:nowrap;transition:opacity 1.5s;';
+    hint.textContent = 'Drag to pan Â· Scroll to zoom';
+    shell.appendChild(hint);
+    setTimeout(function(){ hint.style.opacity = '0'; }, 3500);
+
+    // ââ Cleanup function (called on modal re-open) ââââââââââââââââââââââââââââ
+    window._pzCleanup = function () {
+      shell.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('mousemove', onMouseMove);
+      document.removeEventListener('mouseup', onMouseUp);
+      shell.removeEventListener('wheel', onWheel);
+      if (typeof _origRefresh === 'function') window.orgPrintRefreshPreview = _origRefresh;
+    };
+  }
+
+  // ââ Public handlers called from inline onchange/onclick in the print modal â
 
   window.orgPrintSettingChanged = function (id, field, val) {
     orgEnsureSettings(id)[field] = val;
@@ -274,9 +407,9 @@
   window.orgPrintToggleNode = function (id, kind, nodeId, checked) {
     var st = orgEnsureSettings(id);
     var field, allItems;
-    if (kind==='sh')       { field='shIds';  allItems=(typeof orgFlattenShIds==='function')?orgFlattenShIds(id):[]; }
-    else if (kind==='sub') { field='subIds'; allItems=(typeof orgFlattenSubIds==='function')?orgFlattenSubIds(id):[]; }
-    else                   { field='invIds'; allItems=(typeof orgFlattenInvIds==='function')?orgFlattenInvIds(id):[]; }
+    if (kind==='sh')       { field='shIds';  allItems=orgFlattenShIds(id);  }
+    else if (kind==='sub') { field='subIds'; allItems=orgFlattenSubIds(id); }
+    else                   { field='invIds'; allItems=orgFlattenInvIds(id); }
     if (!st[field]) st[field] = new Set(allItems);
     if (checked) st[field].add(nodeId); else st[field].delete(nodeId);
     if (allItems.length && st[field].size === allItems.length) st[field] = null;
@@ -313,7 +446,7 @@
     if (typeof orgPrintRefreshPreview === 'function') orgPrintRefreshPreview();
   };
 
-  // ── Filtered HTML builder (uses _orgSelSettings populated by our UI) ───────
+  // ââ Filtered HTML builder (uses _orgSelSettings populated by our UI) âââââââ
   function _ourOrgPrintFilteredHTML() {
     if (!window._orgPrintCfg) return '';
     var cid = window._orgPrintCfg.companyId;
@@ -323,10 +456,8 @@
     if (typeof buildFilteredOrgChart === 'function') {
       root.innerHTML = buildFilteredOrgChart(cid, settings);
     } else {
-      // Fallback: use original if available
-      if (typeof window._origOrgPrintFilteredHTML === 'function') {
-        root.innerHTML = window._origOrgPrintFilteredHTML();
-      }
+      // Fallback: render via original and filter post-hoc
+      if (typeof orgPrintFilteredHTML === 'function') root.innerHTML = window._origOrgPrintFilteredHTML ? window._origOrgPrintFilteredHTML() : '';
     }
 
     var elColors = document.getElementById('print-opt-colors');
@@ -348,7 +479,7 @@
     return root.innerHTML;
   }
 
-  // ── Dynamic-scale print runner ─────────────────────────────────────────────
+  // ââ Dynamic-scale print runner âââââââââââââââââââââââââââââââââââââââââââââ
   function _ourRunOrgChartPrint() {
     if (!window._orgPrintCfg) return;
     var c = (window.data && data.companies || []).find(function(x){ return x.id===window._orgPrintCfg.companyId; });
@@ -360,8 +491,8 @@
     var headerJur  = c ? esc(c.jurisdiction||'') : '';
     root.innerHTML =
         '<div class="org-print-header">'
-      +   '<div class="t1">'+headerName+' — '+(typeof t==='function'?t('orgChart'):'Org Chart')+'<\/div>'
-      +   '<div class="t2">'+headerJur+' — FamOfi Registry — '+new Date().toLocaleDateString()+'<\/div>'
+      +   '<div class="t1">'+headerName+' â '+(typeof t==='function'?t('orgChart'):'Org Chart')+'<\/div>'
+      +   '<div class="t2">'+headerJur+' â FamOfi Registry â '+new Date().toLocaleDateString()+'<\/div>'
       + '<\/div>'
       + '<div id="print-org-canvas" class="org-print-canvas">'+filteredHTML+'<\/div>';
 
@@ -382,7 +513,7 @@
     setTimeout(function(){ window.print(); }, 60);
   }
 
-  // ── Inject Chart Settings into the print modal once it opens ─────────────
+  // ââ Inject Chart Settings into the print modal once it opens âââââââââââââ
   function _injectPrintChartSettings(cid) {
     if (document.getElementById('print-chart-settings-wrap')) return; // already injected
     var cfgGrid = document.querySelector('.print-cfg-grid');
@@ -390,7 +521,7 @@
     var leftCol = cfgGrid.firstElementChild;
     if (!leftCol) return;
 
-    // Hide "WHAT TO PRINT" section (radio buttons) — our Chart Settings replace it
+    // Hide "WHAT TO PRINT" section (radio buttons) â our Chart Settings replace it
     Array.prototype.forEach.call(leftCol.querySelectorAll('.print-cfg-section'), function(sec) {
       if (sec.querySelector('input[type="radio"]')) sec.style.display = 'none';
     });
@@ -401,16 +532,16 @@
     leftCol.insertBefore(wrap, leftCol.firstChild);
     wrap.innerHTML = _buildPrintChartSettings(cid);
 
-    // Re-hook the print-action functions (overwrite whatever Firebase set)
+    // Re-hook the print-action functions (they may have been overwritten)
     window.orgPrintFilteredHTML = _ourOrgPrintFilteredHTML;
     window.runOrgChartPrint     = _ourRunOrgChartPrint;
 
-    // Refresh live preview if available
-    if (typeof orgPrintRefreshPreview === 'function') orgPrintRefreshPreview();
+    // Set up interactive pan/zoom (it also triggers the initial preview refresh)
+    setTimeout(_setupPreviewPanZoom, 50);
   }
 
-  // ── Watch DOM for the print-cfg-grid to appear (works regardless of how
-  //    openPrintConfig / showModal are called internally) ────────────────────
+  // ââ Watch DOM for the print-cfg-grid to appear (works regardless of how
+  //    openPrintConfig / showModal are called internally) ââââââââââââââââââââ
   function _startPrintModalWatcher() {
     if (window._printModalWatcherActive) return;
     window._printModalWatcherActive = true;
@@ -434,7 +565,7 @@
 
 })();
 
-// ── Patch #3: LLC org chart line separation ───────────────────────────────
+// ââ Patch #3: LLC org chart line separation âââââââââââââââââââââââââââââââ
 // Fixes overlapping connector lines when multiple shareholders/owners share
 // the same x-column in the org chart (common with LLC structures).
 (function () {
@@ -443,12 +574,12 @@
   /**
    * Fan out SVG paths that converge at the same card entry/exit point.
    *
-   * orgEdgePath draws L-shaped paths: M x1 y1 → L x1 midY → L x2 midY → L x2 y2
+   * orgEdgePath draws L-shaped paths: M x1 y1 â L x1 midY â L x2 midY â L x2 y2
    * When multiple paths share the same x2 (bottom endpoint), they overlap and
    * look like a single line.  This post-processor offsets them left/right so
    * each connection is visually distinct.
    *
-   * @param {Element} container  — DOM element that contains the org chart
+   * @param {Element} container  â DOM element that contains the org chart
    *                               (an .org-chart-scroll or its parent)
    */
   function fixEdgeFan(container) {
@@ -457,106 +588,125 @@
     var pathEls = Array.prototype.slice.call(svg.querySelectorAll('path[d]'));
     if (!pathEls.length) return;
 
-    // Parse the 4-point path: M x1 y1 L xm1 ym1 L xm2 ym2 L x2 y2
-    var parsed = [];
     var re = /M\s*([\-\d.]+)\s+([\-\d.]+)\s+L\s*([\-\d.]+)\s+([\-\d.]+)\s+L\s*([\-\d.]+)\s+([\-\d.]+)\s+L\s*([\-\d.]+)\s+([\-\d.]+)/;
+
+    // ââ Collect node bounding boxes from .org-card-abs elements ââââââââââââââ
+    // Used to detect when a horizontal path segment passes through a node box.
+    var nodeBBoxes = [];
+    var cards = container.querySelectorAll('.org-card-abs');
+    Array.prototype.forEach.call(cards, function (card) {
+      var cs = card.style;
+      var l = parseFloat(cs.left || 0), t = parseFloat(cs.top || 0);
+      var w = parseFloat(cs.width || 0), h = parseFloat(cs.height || 0);
+      if (w > 0 && h > 0) nodeBBoxes.push({ l: l, t: t, r: l + w, b: t + h });
+    });
+
+    // Returns true if the horizontal segment at y=midY from xMin to xMax
+    // passes through any node box (with a small inset margin).
+    function hitsNode(xMin, xMax, midY) {
+      var PAD = 3;
+      for (var i = 0; i < nodeBBoxes.length; i++) {
+        var n = nodeBBoxes[i];
+        if (midY > n.t + PAD && midY < n.b - PAD && xMin < n.r - PAD && xMax > n.l + PAD) {
+          return true;
+        }
+      }
+      return false;
+    }
+
+    // Find a midY near `desired` that doesn't pass through any node box.
+    // Tries alternating above/below in STEP_CLEAR increments.
+    function clearMidY(xMin, xMax, desired, y1, y2) {
+      if (!hitsNode(xMin, xMax, desired)) return desired;
+      var STEP_CLEAR = 12, MAX_TRY = 25;
+      for (var k = 1; k <= MAX_TRY; k++) {
+        var up = desired - k * STEP_CLEAR;
+        if (up > y1 + 4 && !hitsNode(xMin, xMax, up)) return up;
+        var dn = desired + k * STEP_CLEAR;
+        if (dn < y2 - 4 && !hitsNode(xMin, xMax, dn)) return dn;
+      }
+      return desired; // no clear lane found â leave as-is
+    }
+
+    var STEP = 8; // horizontal offset between fan lines at arrival point
+
+    // ââ Pass 1: Fan paths converging at the SAME BOTTOM POINT ââââââââââââââââ
+    // Multiple shareholders â one company: spread their arrival x slightly so
+    // each line visibly enters the card at a distinct position.
+    var byBot = {};
     pathEls.forEach(function (el) {
       var m = (el.getAttribute('d') || '').match(re);
       if (!m) return;
-      parsed.push({
-        el:  el,
-        x1:  +m[1], y1:  +m[2],
-        xm1: +m[3], ym1: +m[4],
-        xm2: +m[5], ym2: +m[6],
-        x2:  +m[7], y2:  +m[8]
-      });
-    });
-    if (!parsed.length) return;
-
-    var STEP = 8; // pixels between adjacent fan lines
-
-    // ── Fan paths converging at the SAME BOTTOM POINT ────────────────────
-    // (multiple shareholders → one company)
-    var byBot = {};
-    parsed.forEach(function (p) {
-      var k = Math.round(p.x2) + ',' + Math.round(p.y2);
-      (byBot[k] = byBot[k] || []).push(p);
+      var k = Math.round(+m[7]) + ',' + Math.round(+m[8]);
+      (byBot[k] = byBot[k] || []).push(el);
     });
     Object.keys(byBot).forEach(function (k) {
       var g = byBot[k];
       if (g.length < 2) return;
       var half = (g.length - 1) * STEP / 2;
-      g.forEach(function (p, i) {
-        var ox = i * STEP - half;
-        // Shift the bottom vertical segment (xm2 → x2) by ox
-        p.el.setAttribute('d',
-          'M ' + p.x1  + ' ' + p.y1  +
-          ' L ' + p.xm1 + ' ' + p.ym1 +
-          ' L ' + (p.xm2 + ox) + ' ' + p.ym2 +
-          ' L ' + (p.x2  + ox) + ' ' + p.y2);
-      });
-    });
-
-    // ── Fan paths diverging from the SAME TOP POINT ───────────────────────
-    // (one company → multiple subsidiaries/investments)
-    var byTop = {};
-    parsed.forEach(function (p) {
-      var k = Math.round(p.x1) + ',' + Math.round(p.y1);
-      (byTop[k] = byTop[k] || []).push(p);
-    });
-    Object.keys(byTop).forEach(function (k) {
-      var g = byTop[k];
-      if (g.length < 2) return;
-      var half = (g.length - 1) * STEP / 2;
-      g.forEach(function (p, i) {
-        var ox = i * STEP - half;
-        // Re-read 'd' — the byBot pass may have already modified it
-        var d = p.el.getAttribute('d') || '';
-        var m = d.match(re);
+      g.forEach(function (el, i) {
+        var m = (el.getAttribute('d') || '').match(re);
         if (!m) return;
-        // Shift the top vertical segment (x1 → xm1) by ox
-        p.el.setAttribute('d',
-          'M ' + (+m[1] + ox) + ' ' + m[2] +
-          ' L ' + (+m[3] + ox) + ' ' + m[4] +
-          ' L ' + m[5] + ' ' + m[6] +
-          ' L ' + m[7] + ' ' + m[8]);
+        var ox = i * STEP - half;
+        el.setAttribute('d',
+          'M ' + m[1] + ' ' + m[2] +
+          ' L ' + m[3] + ' ' + m[4] +
+          ' L ' + (+m[5] + ox) + ' ' + m[6] +
+          ' L ' + (+m[7] + ox) + ' ' + m[8]);
       });
     });
 
-    // ── Pass 3: Stagger midY for paths that share the same rank-transition
-    //    band but target DIFFERENT destination columns.
+    // NOTE: Pass 2 (fanning departure x from the same parent) is intentionally
+    // omitted. It caused multiple connections to appear to originate from
+    // different parts of the same parent card, making the ownership structure
+    // look incorrect. A single exit point per parent is visually clearer.
+
+    // ââ Pass 2 (new): Node-collision avoidance ââââââââââââââââââââââââââââââââ
+    // The horizontal segment of each L-shaped path (from x1 to x2 at y=midY)
+    // can accidentally pass through an unrelated node box, creating a false
+    // visual junction. Find a clear midY for any path that has this problem.
+    if (nodeBBoxes.length > 0) {
+      pathEls.forEach(function (el) {
+        var m = (el.getAttribute('d') || '').match(re);
+        if (!m) return;
+        var x1 = +m[1], y1 = +m[2], xm1 = +m[3], mid = +m[4];
+        var xm2 = +m[5], x2 = +m[7], y2 = +m[8];
+        var xMin = Math.min(xm1, xm2), xMax = Math.max(xm1, xm2);
+        var newMid = clearMidY(xMin, xMax, mid, y1, y2);
+        if (newMid !== mid) {
+          el.setAttribute('d',
+            'M ' + x1  + ' ' + y1 +
+            ' L ' + xm1 + ' ' + newMid +
+            ' L ' + xm2 + ' ' + newMid +
+            ' L ' + x2  + ' ' + y2);
+        }
+      });
+    }
+
+    // ââ Pass 3: Stagger midY for paths sharing the same rank-transition band
+    //    but heading to DIFFERENT destination columns.
     //
-    //    Problem: when Carlos Montufar (rank -2) → Amerouge (rank -1) and
-    //    five Trusts (rank -2) → HF Invest (rank -1) all use midY = 320,
-    //    their horizontal segments overlap.  Specifically, Mykonos Trust's
-    //    downward vertical at x=700 meets Carlos's rightward horizontal at
-    //    y=320 and x=700, creating a T-junction that makes it look like
-    //    Mykonos Trust is connected to Amerouge.
-    //
-    //    Fix: group paths by (y1, y2) rank-transition range and destination
-    //    column cluster (nearest 100 px).  When paths in different clusters
-    //    have overlapping x-spans (proof they can visually merge), assign
-    //    each cluster a slightly different midY so their horizontal segments
-    //    never coincide.
-    var STEP_Y = 14; // px between midY lanes
+    //    When paths from (y1 â y2) go to multiple x-destinations and their
+    //    x-spans overlap, their horizontal segments can coincide, creating
+    //    T-junctions that imply false connections.  Assign each destination
+    //    cluster a distinct midY lane (chosen to also avoid node boxes).
+    var STEP_Y = 20;
     var byRange = {};
     pathEls.forEach(function (el) {
       var m = (el.getAttribute('d') || '').match(re);
       if (!m) return;
-      // Cluster destination x to nearest 100 px (groups same-card arrivals
-      // even after the byBot fan shifted them by ±STEP pixels).
-      var x2c = Math.round(+m[7] / 100) * 100;
+      var x2c = Math.round(+m[7] / 100) * 100; // cluster by dest x Â±100 px
       var rk  = Math.round(+m[2]) + ',' + Math.round(+m[8]);
       if (!byRange[rk]) byRange[rk] = {};
       if (!byRange[rk][x2c]) byRange[rk][x2c] = [];
       byRange[rk][x2c].push(el);
     });
+
     Object.keys(byRange).forEach(function (rk) {
       var clusters = byRange[rk];
       var ckNums   = Object.keys(clusters).map(Number).sort(function (a, b) { return a - b; });
-      if (ckNums.length < 2) return; // only one destination column — nothing to separate
+      if (ckNums.length < 2) return;
 
-      // Compute the full x-span (min source x to max dest x) for each cluster.
       var clusterInfo = ckNums.map(function (ck) {
         var xMin = Infinity, xMax = -Infinity;
         clusters[ck].forEach(function (el) {
@@ -569,8 +719,7 @@
         return { ck: ck, xMin: xMin, xMax: xMax };
       });
 
-      // Only stagger when paths from different clusters actually overlap in x
-      // (if they don't overlap they can't look merged, so leave them alone).
+      // Only stagger when clusters actually overlap in x (otherwise they can't merge)
       var needsSep = false;
       for (var ci = 0; ci < clusterInfo.length && !needsSep; ci++) {
         for (var cj = ci + 1; cj < clusterInfo.length && !needsSep; cj++) {
@@ -586,12 +735,19 @@
         clusters[ck].forEach(function (el) {
           var m = (el.getAttribute('d') || '').match(re);
           if (!m) return;
-          var newMid = +m[4] + yOff;
+          var x1 = +m[1], y1 = +m[2], xm1 = +m[3], xm2 = +m[5], x2 = +m[7], y2 = +m[8];
+          var baseMid  = +m[4];
+          var wantedMid = baseMid + yOff;
+          // Also ensure this new midY doesn't hit a node box
+          var xMin = Math.min(xm1, xm2), xMax = Math.max(xm1, xm2);
+          var newMid = (nodeBBoxes.length > 0)
+            ? clearMidY(xMin, xMax, wantedMid, y1, y2)
+            : wantedMid;
           el.setAttribute('d',
-            'M ' + m[1] + ' ' + m[2] +
-            ' L ' + m[3] + ' ' + newMid +
-            ' L ' + m[5] + ' ' + newMid +
-            ' L ' + m[7] + ' ' + m[8]);
+            'M ' + x1  + ' ' + y1 +
+            ' L ' + xm1 + ' ' + newMid +
+            ' L ' + xm2 + ' ' + newMid +
+            ' L ' + x2  + ' ' + y2);
         });
       });
     });
