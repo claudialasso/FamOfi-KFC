@@ -513,6 +513,78 @@
           ' L ' + m[7] + ' ' + m[8]);
       });
     });
+    // ── Pass 3: Stagger midY for paths that share the same rank-transition
+    //    band but target DIFFERENT destination columns.
+    //
+    //    Problem: when Carlos Montufar (rank -2) → Amerouge (rank -1) and
+    //    five Trusts (rank -2) → HF Invest (rank -1) all use midY = 320,
+    //    their horizontal segments overlap.  Specifically, Mykonos Trust's
+    //    downward vertical at x=700 meets Carlos's rightward horizontal at
+    //    y=320 and x=700, creating a T-junction that makes it look like
+    //    Mykonos Trust is connected to Amerouge.
+    //
+    //    Fix: group paths by (y1, y2) rank-transition range and destination
+    //    column cluster (nearest 100 px).  When paths in different clusters
+    //    have overlapping x-spans (proof they can visually merge), assign
+    //    each cluster a slightly different midY so their horizontal segments
+    //    never coincide.
+    var STEP_Y = 14; // px between midY lanes
+    var byRange = {};
+    pathEls.forEach(function (el) {
+      var m = (el.getAttribute('d') || '').match(re);
+      if (!m) return;
+      // Cluster destination x to nearest 100 px (groups same-card arrivals
+      // even after the byBot fan shifted them by ±STEP pixels).
+      var x2c = Math.round(+m[7] / 100) * 100;
+      var rk  = Math.round(+m[2]) + ',' + Math.round(+m[8]);
+      if (!byRange[rk]) byRange[rk] = {};
+      if (!byRange[rk][x2c]) byRange[rk][x2c] = [];
+      byRange[rk][x2c].push(el);
+    });
+    Object.keys(byRange).forEach(function (rk) {
+      var clusters = byRange[rk];
+      var ckNums   = Object.keys(clusters).map(Number).sort(function (a, b) { return a - b; });
+      if (ckNums.length < 2) return; // only one destination column — nothing to separate
+
+      // Compute the full x-span (min source x to max dest x) for each cluster.
+      var clusterInfo = ckNums.map(function (ck) {
+        var xMin = Infinity, xMax = -Infinity;
+        clusters[ck].forEach(function (el) {
+          var m = (el.getAttribute('d') || '').match(re);
+          if (!m) return;
+          var xa = +m[1], xb = +m[7];
+          if (xa < xMin) xMin = xa; if (xa > xMax) xMax = xa;
+          if (xb < xMin) xMin = xb; if (xb > xMax) xMax = xb;
+        });
+        return { ck: ck, xMin: xMin, xMax: xMax };
+      });
+
+      // Only stagger when paths from different clusters actually overlap in x
+      // (if they don't overlap they can't look merged, so leave them alone).
+      var needsSep = false;
+      for (var ci = 0; ci < clusterInfo.length && !needsSep; ci++) {
+        for (var cj = ci + 1; cj < clusterInfo.length && !needsSep; cj++) {
+          if (clusterInfo[ci].xMin <= clusterInfo[cj].xMax &&
+              clusterInfo[cj].xMin <= clusterInfo[ci].xMax) needsSep = true;
+        }
+      }
+      if (!needsSep) return;
+
+      var nC = ckNums.length;
+      ckNums.forEach(function (ck, gi) {
+        var yOff = (gi - (nC - 1) / 2) * STEP_Y;
+        clusters[ck].forEach(function (el) {
+          var m = (el.getAttribute('d') || '').match(re);
+          if (!m) return;
+          var newMid = +m[4] + yOff;
+          el.setAttribute('d',
+            'M ' + m[1] + ' ' + m[2] +
+            ' L ' + m[3] + ' ' + newMid +
+            ' L ' + m[5] + ' ' + newMid +
+            ' L ' + m[7] + ' ' + m[8]);
+        });
+      });
+    });
   }
 
   // Expose globally so runOrgChartPrint (Patch #2) can call it after
