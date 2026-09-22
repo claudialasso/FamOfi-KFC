@@ -1576,18 +1576,10 @@ function orgFinalizePositions(nodes){
 function orgRenderGraphHTML(nodes, edges, focalKey){
   orgLayoutGraph(nodes, edges, focalKey);
   var dims = orgFinalizePositions(nodes);
-  var htmlCards=[], edgePaths=[], edgeLabels=[];
+  var htmlCards=[];
   Object.keys(nodes).forEach(function(k){
     var n=nodes[k];
     htmlCards.push(orgCardHTML(n, n._cx, n._cy, k===focalKey));
-  });
-  edges.forEach(function(e){
-    var a=nodes[e.from], b=nodes[e.to];
-    if(!a||!b) return;
-    var labelSide = (a.rank < 0) ? 'top' : 'bot';
-    var result=orgEdgePath(e.from, e.to, a._cx, a._cy, b._cx, b._cy, e.pct, labelSide);
-    edgePaths.push(result.path);
-    if(result.label) edgeLabels.push(result.label);
   });
   var legend='<div class="org-legend" style="display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-bottom:20px;font-size:12px;font-weight:600">'
     +'<span style="color:var(--amber)">Individual Shareholder</span>'
@@ -1596,8 +1588,8 @@ function orgRenderGraphHTML(nodes, edges, focalKey){
     +'<span style="color:var(--teal)">Subsidiary</span>'
     +'<span style="color:var(--coral)">Investment</span>'
     +'</div>';
-  // Render all path segments first, all labels last -- labels are always on top of every line
-  var svg='<svg class="org-static-edges" width="'+dims.width+'" height="'+dims.height+'" style="position:absolute;left:0;top:0;overflow:visible;pointer-events:none">'+edgePaths.join('')+edgeLabels.join('')+'</svg>';
+  // Use grouped bus-bar routing for clean, non-overlapping lines
+  var svg = orgGroupedEdgeSVG(nodes, edges, dims.width, dims.height);
   var tree='<div class="org-chart-tree" style="position:relative;width:'+dims.width+'px;height:'+dims.height+'px;margin:0 auto">'+svg+htmlCards.join('')+'</div>';
   var h='<div class="org-chart-scroll" data-static-edges="1">';
   h+='<div style="text-align:center;font-family:system-ui,sans-serif">';
@@ -1605,6 +1597,170 @@ function orgRenderGraphHTML(nodes, edges, focalKey){
   h+=tree;
   h+='</div></div>';
   return h;
+}
+
+// Grouped edge routing: bus-bar for fan-in, trunk for fan-out, L-path for singles.
+// Fan-in  (N shareholders → 1 company): one horizontal bus line + individual vertical stems
+//         from each shareholder, plus one trunk from the company up to the bus.
+// Fan-out (1 company → N children): one trunk from company down to bus + stems to each child.
+// Single  (1-to-1): simple L-shaped path.
+// Percentage labels sit on the stem just beyond the shareholder card edge (fan-in) or
+// midpoint of the stem above the child (fan-out), making ownership unambiguous.
+function orgGroupedEdgeSVG(nodes, edges, svgW, svgH) {
+  var HW = ORG_CARD_H / 2; // half card height
+  var LSTYLE = 'fill="none" stroke="var(--border2,#c7cbe0)" stroke-width="1.5"';
+
+  var segs = [], pills = [];
+  var handled = {};
+
+  function seg(x1, y1, x2, y2) {
+    return '<line x1="'+Math.round(x1)+'" y1="'+Math.round(y1)+
+           '" x2="'+Math.round(x2)+'" y2="'+Math.round(y2)+'" '+LSTYLE+'/>';
+  }
+
+  function pill(pct, x, y) {
+    if (pct == null) return '';
+    var txt = pct + '%';
+    var pw = Math.max(txt.length * 7 + 12, 30), ph = 16;
+    return '<rect x="'+(x-pw/2)+'" y="'+(y-ph/2)+'" width="'+pw+'" height="'+ph+
+           '" rx="8" fill="var(--surface,#fff)" stroke="var(--border2,#c5ccdf)" stroke-width="1.2"/>'+
+           '<text x="'+x+'" y="'+(y+5)+'" text-anchor="middle" font-size="10" font-weight="600"'+
+           ' font-family="system-ui,sans-serif" fill="var(--text2,#5a6080)">'+txt+'</text>';
+  }
+
+  // Group edges by destination and source
+  var byDest = {}, bySrc = {};
+  edges.forEach(function(e) {
+    if (!nodes[e.from] || !nodes[e.to]) return;
+    (byDest[e.to] = byDest[e.to] || []).push(e);
+    (bySrc[e.from] = bySrc[e.from] || []).push(e);
+  });
+
+  // PASS 1 — Fan-in: 2+ sources → 1 destination (bus-bar pattern)
+  // Draw: vertical stem per source → shared horizontal bus → single trunk to dest
+  Object.keys(byDest).forEach(function(toKey) {
+    var group = byDest[toKey];
+    if (group.length < 2) return;
+
+    var dest = nodes[toKey];
+    var dX = dest._cx;
+
+    // Determine if sources are above (typical: shareholders above focal)
+    var avgSrcY = 0;
+    group.forEach(function(e) { avgSrcY += nodes[e.from]._cy; });
+    avgSrcY /= group.length;
+    var above = avgSrcY < dest._cy;
+
+    var destEdgeY = above ? (dest._cy - HW) : (dest._cy + HW);
+
+    // Find the source card edge closest to dest to anchor busY in the gap
+    var srcEdgeYArr = group.map(function(e) {
+      var s = nodes[e.from];
+      return above ? (s._cy + HW) : (s._cy - HW);
+    });
+    var extremeSrcEdge = above
+      ? Math.max.apply(null, srcEdgeYArr)
+      : Math.min.apply(null, srcEdgeYArr);
+    // busY sits halfway in the gap between the nearest source edge and dest edge
+    var busY = (extremeSrcEdge + destEdgeY) / 2;
+
+    // Horizontal bus spans all source x-columns plus dest x-column
+    var allXs = group.map(function(e) { return nodes[e.from]._cx; });
+    allXs.push(dX);
+    var busMinX = Math.min.apply(null, allXs);
+    var busMaxX = Math.max.apply(null, allXs);
+
+    // Trunk: dest card edge → bus
+    segs.push(seg(dX, destEdgeY, dX, busY));
+    // Horizontal bus line
+    if (busMinX < busMaxX) segs.push(seg(busMinX, busY, busMaxX, busY));
+
+    group.forEach(function(e) {
+      var src = nodes[e.from];
+      var sX = src._cx;
+      var srcEdgeY = above ? (src._cy + HW) : (src._cy - HW);
+
+      // Vertical stem from source card edge to bus
+      segs.push(seg(sX, srcEdgeY, sX, busY));
+
+      // % label just beyond source card (inside the gap, near the card)
+      if (e.pct != null) {
+        var ly = above ? (srcEdgeY + 11) : (srcEdgeY - 11);
+        pills.push(pill(e.pct, sX, ly));
+      }
+
+      handled[e.from + '|' + e.to] = true;
+    });
+  });
+
+  // PASS 2 — Fan-out: 1 source → 2+ unhandled destinations (trunk pattern)
+  // Draw: single trunk from source → shared horizontal bus → vertical stem per dest
+  Object.keys(bySrc).forEach(function(fromKey) {
+    var remaining = (bySrc[fromKey] || []).filter(function(e) {
+      return !handled[e.from + '|' + e.to] && nodes[e.from] && nodes[e.to];
+    });
+    if (remaining.length < 2) return;
+
+    // Only use trunk pattern when all destinations share the same rank (same row)
+    var dstRank = nodes[remaining[0].to].rank;
+    if (!remaining.every(function(e) { return nodes[e.to].rank === dstRank; })) return;
+
+    var src = nodes[fromKey];
+    var sX = src._cx;
+    var firstDest = nodes[remaining[0].to];
+    var below = firstDest._cy > src._cy;
+
+    var srcEdgeY = below ? (src._cy + HW) : (src._cy - HW);
+    var dstEdgeRef = below ? (firstDest._cy - HW) : (firstDest._cy + HW);
+    var busY = (srcEdgeY + dstEdgeRef) / 2;
+
+    // Trunk from source to bus
+    segs.push(seg(sX, srcEdgeY, sX, busY));
+
+    // Horizontal bus spans source x and all dest x-columns
+    var allXs = remaining.map(function(e) { return nodes[e.to]._cx; });
+    allXs.push(sX);
+    var busMinX = Math.min.apply(null, allXs);
+    var busMaxX = Math.max.apply(null, allXs);
+    if (busMinX < busMaxX) segs.push(seg(busMinX, busY, busMaxX, busY));
+
+    remaining.forEach(function(e) {
+      var dst = nodes[e.to];
+      var dX = dst._cx;
+      var dEdgeY = below ? (dst._cy - HW) : (dst._cy + HW);
+
+      // Vertical stem from bus to dest card edge
+      segs.push(seg(dX, busY, dX, dEdgeY));
+
+      // % label at midpoint of stem above dest card
+      if (e.pct != null) pills.push(pill(e.pct, dX, (busY + dEdgeY) / 2));
+
+      handled[e.from + '|' + e.to] = true;
+    });
+  });
+
+  // PASS 3 — Single edges: simple L-shaped path (vertical → horizontal → vertical)
+  edges.forEach(function(e) {
+    if (handled[e.from + '|' + e.to] || !nodes[e.from] || !nodes[e.to]) return;
+    var a = nodes[e.from], b = nodes[e.to];
+    var topDown = a._cy <= b._cy;
+    var aEY = topDown ? (a._cy + HW) : (a._cy - HW);
+    var bEY = topDown ? (b._cy - HW) : (b._cy + HW);
+    var midY = (aEY + bEY) / 2;
+
+    segs.push(seg(a._cx, aEY, a._cx, midY));
+    if (Math.abs(a._cx - b._cx) > 1) segs.push(seg(a._cx, midY, b._cx, midY));
+    segs.push(seg(b._cx, midY, b._cx, bEY));
+
+    if (e.pct != null) {
+      var lx = Math.abs(a._cx - b._cx) > 1 ? (a._cx + b._cx) / 2 : a._cx + 24;
+      pills.push(pill(e.pct, lx, midY));
+    }
+  });
+
+  return '<svg class="org-static-edges" width="'+svgW+'" height="'+svgH+
+    '" style="position:absolute;left:0;top:0;overflow:visible;pointer-events:none">'+
+    segs.join('')+pills.join('')+'</svg>';
 }
 
 var ORG_CARD_W=160, ORG_CARD_H=96, ORG_GAP_X=40, ORG_GAP_Y=64;
