@@ -1488,6 +1488,43 @@ var subFilter = opts.subIds || null;
         addEdge(key,cKey,sh?sh.pct:null);
       });
     });
+    // Co-owner pass: for each subsidiary node, add any other company shareholders
+    // that aren't already in the graph, so parent-company charts show the full
+    // co-ownership picture of each subsidiary (e.g. Amerouge as part-owner of ENDU).
+    var _coRanks = {};
+    Object.keys(nodes).forEach(function(key){
+      var n = nodes[key];
+      if(n.rank <= 0) return;                    // only subsidiary nodes
+      var comp = byId[n.refId];
+      if(!comp) return;
+      (comp.shareholders||[]).forEach(function(s){
+        if(s.type !== 'company') return;
+        var pKey = 'co:' + s.person;
+        if(nodes[pKey]) return;                  // already in graph
+        if(!byId[s.person]) return;              // not an active/known company
+        var tr = n.rank - 1;                     // place one level above subsidiary
+        if(_coRanks[pKey] === undefined || tr < _coRanks[pKey]) _coRanks[pKey] = tr;
+      });
+    });
+    Object.keys(_coRanks).forEach(function(pKey){
+      var pid = pKey.slice(3);
+      var co = byId[pid];
+      nodes[pKey] = {key:pKey, kind:'company', refId:pid, coId:pid,
+                     name:co.name, jur:co.jurisdiction, sub:'', rank:_coRanks[pKey]};
+    });
+    // Wire edges from newly-added co-owners to their subsidiaries
+    Object.keys(nodes).forEach(function(key){
+      var n = nodes[key];
+      if(n.rank <= 0) return;
+      var comp = byId[n.refId];
+      if(!comp) return;
+      (comp.shareholders||[]).forEach(function(s){
+        if(s.type !== 'company') return;
+        var pKey = 'co:' + s.person;
+        if(!nodes[pKey] || nodes[pKey].rank >= n.rank) return;
+        addEdge(pKey, key, s.pct);
+      });
+    });
   }
   if(showInv){
     Object.keys(downInfo).forEach(function(rid){
