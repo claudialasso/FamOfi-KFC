@@ -1571,7 +1571,11 @@ function orgLayoutGraph(nodes, edges, focalKey){
   if(!nodes[focalKey]) return;
   nodes[focalKey].x = 0;
   var byRank = {};
+  // Pre-pass: assign x to any non-focal nodes at rank 0 (co-owners such as Amerouge)
+  // so they participate in barycenter calculations for subsidiaries below them.
   Object.keys(nodes).forEach(function(k){ var r=nodes[k].rank; (byRank[r]=byRank[r]||[]).push(k); });
+  (byRank[0] || []).filter(function(k){ return k !== focalKey; })
+    .forEach(function(k, i){ nodes[k].x = i + 1; });
   var outMap={}, inMap={};
   edges.forEach(function(e){ (outMap[e.from]=outMap[e.from]||[]).push(e.to); (inMap[e.to]=inMap[e.to]||[]).push(e.from); });
   var allRanks = Object.keys(byRank).map(Number);
