@@ -1612,6 +1612,8 @@ function orgGroupedEdgeSVG(nodes, edges, svgW, svgH) {
 
   var segs = [], pills = [];
   var handled = {};
+  // Track bus horizontal Y values so Pass 3 single edges can avoid them
+  var usedBusYs = [];
 
   function seg(x1, y1, x2, y2) {
     return '<line x1="'+Math.round(x1)+'" y1="'+Math.round(y1)+
@@ -1663,6 +1665,7 @@ function orgGroupedEdgeSVG(nodes, edges, svgW, svgH) {
       : Math.min.apply(null, srcEdgeYArr);
     // busY sits halfway in the gap between the nearest source edge and dest edge
     var busY = (extremeSrcEdge + destEdgeY) / 2;
+    usedBusYs.push(busY);
 
     // Horizontal bus spans all source x-columns plus dest x-column
     var allXs = group.map(function(e) { return nodes[e.from]._cx; });
@@ -1713,6 +1716,7 @@ function orgGroupedEdgeSVG(nodes, edges, svgW, svgH) {
     var srcEdgeY = below ? (src._cy + HW) : (src._cy - HW);
     var dstEdgeRef = below ? (firstDest._cy - HW) : (firstDest._cy + HW);
     var busY = (srcEdgeY + dstEdgeRef) / 2;
+    usedBusYs.push(busY);
 
     // Trunk from source to bus
     segs.push(seg(sX, srcEdgeY, sX, busY));
@@ -1747,6 +1751,13 @@ function orgGroupedEdgeSVG(nodes, edges, svgW, svgH) {
     var aEY = topDown ? (a._cy + HW) : (a._cy - HW);
     var bEY = topDown ? (b._cy - HW) : (b._cy + HW);
     var midY = (aEY + bEY) / 2;
+    // Avoid coinciding with any bus-bar horizontal — shift toward destination
+    for (var _bi = 0; _bi < usedBusYs.length; _bi++) {
+      if (Math.abs(midY - usedBusYs[_bi]) < 8) {
+        midY = usedBusYs[_bi] + (bEY > usedBusYs[_bi] ? 16 : -16);
+        break;
+      }
+    }
 
     segs.push(seg(a._cx, aEY, a._cx, midY));
     if (Math.abs(a._cx - b._cx) > 1) segs.push(seg(a._cx, midY, b._cx, midY));
