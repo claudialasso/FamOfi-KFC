@@ -29,7 +29,7 @@
   var L = {
     en: {
       title:'Bank Accounts', add:'+ Add Bank Account', exportCsv:'Export CSV',
-      total:'Total Accounts', open:'Open', opening:'Opening', closing:'Closing', closed:'Closed',
+      total:'Total Accounts', open:'Active', opening:'Opening', closing:'Closing', closed:'Closed',
       needs:'Needs Follow-up', overdueN:'overdue', inPipeline:'in opening process', allRecords:'all records',
       operating:'operating normally', closureStarted:'closure started', history:'kept for history', dueSoon7:'overdue or due ≤ 7 days',
       qOverdue:'Overdue', qSoon:'Due in 7 days', qDocs:'Waiting for documents', qBank:'Waiting on bank',
@@ -37,7 +37,7 @@
       search:'Search company, bank, account #, notes…', allStatus:'All statuses', allBanks:'All banks',
       allCompanies:'All companies', allCountries:'All countries', allCurrencies:'All currencies',
       allResp:'Anyone responsible', unassigned:'— Unassigned —', allLife:'Any stage',
-      lifeActive:'Open (active)', lifeOpening:'Being opened', lifeClosing:'Being closed', lifeClosed:'Closed / rejected', lifeHold:'On hold',
+      lifeActive:'Active', lifeOpening:'Being opened', lifeClosing:'Being closed', lifeClosed:'Closed / rejected', lifeHold:'On hold',
       anyNext:'Any next action', nextOverdue:'Overdue', nextSoon:'Due within 7 days', nextAttention:'Overdue + due soon',
       next30:'Due within 30 days', nextAny:'Has a next action', nextNone:'No next action',
       moreFilters:'More filters', reset:'Reset filters', table:'Table', byBank:'By bank',
@@ -76,7 +76,7 @@
     },
     es: {
       title:'Cuentas Bancarias', add:'+ Agregar Cuenta', exportCsv:'Exportar CSV',
-      total:'Total Cuentas', open:'Abiertas', opening:'En apertura', closing:'En cierre', closed:'Cerradas',
+      total:'Total Cuentas', open:'Activas', opening:'En apertura', closing:'En cierre', closed:'Cerradas',
       needs:'Requieren seguimiento', overdueN:'vencidas', inPipeline:'en proceso de apertura', allRecords:'todos los registros',
       operating:'operando normalmente', closureStarted:'cierre iniciado', history:'se conservan como historial', dueSoon7:'vencidas o vencen ≤ 7 días',
       qOverdue:'Vencidas', qSoon:'Vencen en 7 días', qDocs:'Esperando documentos', qBank:'Esperando al banco',
@@ -84,7 +84,7 @@
       search:'Buscar empresa, banco, # cuenta, notas…', allStatus:'Todos los estados', allBanks:'Todos los bancos',
       allCompanies:'Todas las empresas', allCountries:'Todos los países', allCurrencies:'Todas las monedas',
       allResp:'Cualquier responsable', unassigned:'— Sin asignar —', allLife:'Cualquier etapa',
-      lifeActive:'Abiertas (activas)', lifeOpening:'En apertura', lifeClosing:'En cierre', lifeClosed:'Cerradas / rechazadas', lifeHold:'En pausa',
+      lifeActive:'Activas', lifeOpening:'En apertura', lifeClosing:'En cierre', lifeClosed:'Cerradas / rechazadas', lifeHold:'En pausa',
       anyNext:'Cualquier próxima acción', nextOverdue:'Vencidas', nextSoon:'Vencen en 7 días', nextAttention:'Vencidas + próximas',
       next30:'Vencen en 30 días', nextAny:'Con próxima acción', nextNone:'Sin próxima acción',
       moreFilters:'Más filtros', reset:'Limpiar filtros', table:'Tabla', byBank:'Por banco',
@@ -126,7 +126,7 @@
 
   // ── Status system (single source of truth; colours = CSS vars in index.html) ─
   var BK_STATUSES = [
-    { k:'open',         en:'Open',                  es:'Abierta',                 grp:'active'  },
+    { k:'open',         en:'Active',                es:'Activa',                  grp:'active'  },
     { k:'opening',      en:'Opening in Progress',   es:'Apertura en curso',       grp:'opening' },
     { k:'pending_docs', en:'Pending Documents',     es:'Documentos pendientes',   grp:'opening' },
     { k:'pending_bank', en:'Pending Bank',          es:'Pendiente del banco',     grp:'opening' },
