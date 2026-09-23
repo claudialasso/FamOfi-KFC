@@ -939,7 +939,7 @@ function renderCompanies(){
     var q2=cSearch.toLowerCase();
     return(!q2||(c.name+c.director+c.jurisdiction).toLowerCase().includes(q2))
       &&(!cJur||c.jurisdiction===cJur)&&(!cStatus||c.status===cStatus)
-      &&(!cType||(c.companyType||'')===cType);
+      &&(!cType||(c.companyType||'')===cType)&&(!window.crmCoFilter||crmCoFilter(c));
   }).sort(function(a,b){var an=(a.name||'').toLowerCase(),bn=(b.name||'').toLowerCase();return an<bn?-1:an>bn?1:0;});
   var filteredIds=cs.map(function(c){return c.id;});
   var filtInvs=data.investments.filter(function(i){return invCoIds(i).some(function(id){return filteredIds.indexOf(id)!==-1;});});
@@ -958,7 +958,7 @@ h+='</select><select class="filter" id="co-status-filter" onchange="cStatus=this
   h+='<option value="active"'+(cStatus==='active'?' selected':'')+'>'+t('active')+'</option><option value="liquidated"'+(cStatus==='liquidated'?' selected':'')+'>'+t('liquidated')+'</option><option value="liquidation"'+(cStatus==='liquidation'?' selected':'')+'>'+t('liquidation')+'</option></select>';
   h+='<select class="filter" id="co-type-filter" onchange="cType=this.value;rerenderMain()"><option value=""'+(cType===''?' selected':'')+'>All Types</option>';
   CO_TYPES.forEach(function(tp){h+='<option value="'+esc(tp)+'"'+(cType===tp?' selected':'')+'>'+esc(tp)+'</option>';});
-  h+='</select></div>';
+  h+='</select>'+(window.crmCoFilterHTML?crmCoFilterHTML():'')+'</div>';
   h+='<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 14px;background:var(--accent-bg);border-radius:var(--radius-sm);margin-bottom:10px;font-size:12px;color:var(--text2)">';
   h+='<span><b style="color:var(--text)">Showing '+cs.length+'</b> of '+data.companies.length+' companies</span>';
   if(filtInvs.length){h+='<span style="display:flex;gap:16px"><span>Portfolio MV: <b style="color:var(--accent)">'+fmtD(totalMV)+'</b></span><span>Total Commitment: <b style="color:var(--text)">'+fmtD(totalCommit)+'</b></span></span>';}
@@ -972,7 +972,7 @@ h+='</select><select class="filter" id="co-status-filter" onchange="cStatus=this
         +' <span style="font-weight:700;color:var(--accent);font-size:13px">'+s.pct+'%</span>'
         +' <span style="font-size:11px">'+(s.type==='company'?'&#128290;':'&#128100;')+'</span></div>';
     }).join('');
-    h+='<tr><td style="width:36px;text-align:center;padding:4px 0" onclick="event.stopPropagation()"><input type="checkbox" class="co-checkbox" data-id="'+c.id+'" onchange="updateBulkDeleteCoBtn()"></td><td style="cursor:pointer;font-weight:700" onclick="openCompany('+q(c.id)+')">'+esc(c.name)+'</td>';
+    h+='<tr><td style="width:36px;text-align:center;padding:4px 0" onclick="event.stopPropagation()"><input type="checkbox" class="co-checkbox" data-id="'+c.id+'" onchange="updateBulkDeleteCoBtn()"></td><td style="cursor:pointer;font-weight:700" onclick="openCompany('+q(c.id)+')">'+esc(c.name)+(window.crmCoBadge?crmCoBadge(c):'')+'</td>';
     h+='<td><span class="badge badge-jur">'+esc(c.jurisdiction)+'</span></td>';
     h+='<td style="color:var(--text2)">'+esc(c.yearFounded||c.year||'—')+'</td>';
     h+='<td style="color:var(--text2)">'+esc(c.director||'—')+'</td>';
@@ -2812,7 +2812,7 @@ function renderDocuments(cid){
     docs.forEach(function(doc,di){
       h+='<div class="doc-row"><div class="doc-icon">&#128196;</div>';
       h+='<div><div class="doc-name">'+esc(doc.name)+'</div>';
-      h+='<div class="doc-meta">'+esc(doc.uploadedAt||'')+'</div></div>';
+      h+='<div class="doc-meta">'+esc(doc.uploadedAt||'')+(window.crmDocMeta?crmDocMeta(cid,di,doc):'')+'</div></div>';
       h+='<div style="display:flex;gap:6px;margin-left:auto">';
       h+='<a href="'+esc(doc.url)+'" target="_blank" class="btn btn-teal btn-sm">Download</a>';
       if(isAdmin()) h+='<button class="btn btn-danger btn-sm" onclick="deleteDocument('+q(cid)+','+di+')">x</button>';
@@ -2944,16 +2944,55 @@ function removeSHRow(i){ syncSHFromDOM(); window._fSH.splice(i,1); renderSHListF
 function addSHRowForm(tp){ syncSHFromDOM(); window._fSH.push({id:uid(),person:'',pct:0,class:'',type:tp}); renderSHListForm(); }
 function saveCompany(id){
   syncSHFromDOM(); // read all field values from DOM into _fSH before saving
-  var banking=id?(data.companies.find(function(c){return c.id===id;})||{banking:[]}).banking:[];
-  var custom=id?(data.companies.find(function(c){return c.id===id;})||{custom:[]}).custom:[];
-  var documents=id?(data.companies.find(function(c){return c.id===id;})||{documents:[]}).documents:[];
-  var obj={id:id||uid(),name:gv('f-name'),jurisdiction:gv('f-jur'),status:gv('f-status'),companyType:gv('f-company-type'),yearFounded:gv('f-year'),liquidationDate:gv('f-liq-date'),
+  var existing=id?data.companies.find(function(c){return c.id===id;}):null;
+  var fields={name:gv('f-name'),jurisdiction:gv('f-jur'),status:gv('f-status'),companyType:gv('f-company-type'),yearFounded:gv('f-year'),liquidationDate:gv('f-liq-date'),
     purpose:gv('f-purpose'),tags:gv('f-tags'),fiscalId:gv('f-fiscal'),ein:gv('f-ein'),irs:gv('f-irs'),
-    director:gv('f-director'),agent:gv('f-agent'),address:gv('f-address'),notes:gv('f-notes'),
-    shareholders:window._fSH,banking:banking,custom:custom,documents:documents};
-  if(id){var i=data.companies.findIndex(function(c){return c.id===id;});if(i>-1)data.companies[i]=obj;}
-  else data.companies.push(obj);
+    director:gv('f-director'),agent:gv('f-agent'),address:gv('f-address'),notes:gv('f-notes')};
+  if(existing){
+    // FIX: update in place so nothing else on the company is lost (shareholder/director
+    // history, portfolio loans, bank accounts, documents, custom fields, CRM data...).
+    _reconcileFormHistory(existing, window._fSH||[], fields.director);
+    delete fields.director; // derived from directorHistory by recomputeCurrent
+    Object.assign(existing, fields);
+    recomputeCurrent(existing);
+  } else {
+    var obj=Object.assign({id:uid()},fields,{shareholders:window._fSH||[],banking:[],custom:[],documents:[]});
+    data.companies.push(obj);
+    recomputeCurrent(obj);
+  }
   save(); closeModal(); render();
+}
+// Turns edits made in the company form (shareholder rows / director names) into dated
+// history entries instead of discarding the history. Unchanged rows are left untouched.
+function _reconcileFormHistory(c, formSH, directorText){
+  ensureHistory(c);
+  var d=new Date(), today=d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
+  function put(hist, cur, entry){
+    if(cur && cur.effectiveDate>=today){ Object.assign(cur, entry, {effectiveDate:cur.effectiveDate}); }
+    else hist.push(Object.assign({id:uid(),effectiveDate:today}, entry));
+  }
+  var latest=_histLatestPerSlot(c.shareholderHistory), seen={};
+  formSH.forEach(function(s){
+    if(!s.person) return;
+    var sid=s.id||uid(); seen[sid]=true;
+    var cur=latest[sid], tp=s.type||'individual';
+    if(cur && !cur.removed && cur.person===s.person && (+cur.pct)===(+s.pct) && (cur.class||'')===(s.class||'') && (cur.type||'individual')===tp) return;
+    put(c.shareholderHistory, cur, {slotId:sid,person:s.person,pct:+s.pct||0,class:s.class||'',type:tp,shares:cur?(cur.shares||''):'',notes:cur?(cur.notes||''):'',removed:false});
+  });
+  Object.keys(latest).forEach(function(sid){
+    var cur=latest[sid]; if(seen[sid]||cur.removed) return;
+    put(c.shareholderHistory, cur, {slotId:sid,person:cur.person,pct:cur.pct,class:cur.class||'',type:cur.type||'individual',shares:cur.shares||'',notes:cur.notes||'',removed:true});
+  });
+  if(directorText!=null && String(directorText).trim()!==String(c.director||'').trim()){
+    var want=String(directorText).split(',').map(function(x){return x.trim();}).filter(Boolean);
+    var dl=_histLatestPerSlot(c.directorHistory), have={};
+    Object.keys(dl).forEach(function(sid){
+      var e=dl[sid]; if(e.removed) return;
+      if(want.indexOf(e.name)===-1) put(c.directorHistory, e, {slotId:sid,name:e.name,position:e.position||'Director',notes:e.notes||'',removed:true});
+      else have[e.name]=true;
+    });
+    want.forEach(function(n){ if(!have[n]) c.directorHistory.push({id:uid(),slotId:uid(),effectiveDate:today,name:n,position:'Director',notes:'',removed:false}); });
+  }
 }
 function delCompany(id){
   if(!isAdmin()) return;
@@ -2974,7 +3013,7 @@ function renderInvestments(){
   var inv=data.investments.filter(function(i){
     var q2=invSearch.toLowerCase();
     return(!q2||(i.name+(i.fund||'')+i.type+cnamesList(invCoIds(i)).join(' ')).toLowerCase().includes(q2))
-      &&(!invFundF||i.fund===invFundF)&&(!invTypeF||i.type===invTypeF)&&(!invCoF||invCoIds(i).indexOf(invCoF)!==-1);
+      &&(!invFundF||i.fund===invFundF)&&(!invTypeF||i.type===invTypeF)&&(!invCoF||invCoIds(i).indexOf(invCoF)!==-1)&&(!window.crmInvFilter||crmInvFilter(i));
   });
   if(invSort==='asc') inv=inv.slice().sort(function(a,b){return a.name.toLowerCase()<b.name.toLowerCase()?-1:a.name.toLowerCase()>b.name.toLowerCase()?1:0;});
   else if(invSort==='desc') inv=inv.slice().sort(function(a,b){return a.name.toLowerCase()>b.name.toLowerCase()?-1:a.name.toLowerCase()<b.name.toLowerCase()?1:0;});
@@ -3009,15 +3048,15 @@ function renderInvestments(){
 types.forEach(function(t2){h+='<option value="'+esc(t2)+'"'+(invTypeF===t2?' selected':'')+'>'+esc(t2)+'</option>';});
 h+='</select><select class="filter" id="inv-co-filter" onchange="invCoF=this.value;rerenderMain()"><option value="">'+(lang==='en'?'All Companies':'Todas las Empresas')+'</option>';
 data.companies.slice().sort(function(a,b){return a.name.toLowerCase()<b.name.toLowerCase()?-1:1;}).forEach(function(co){h+='<option value="'+co.id+'"'+(invCoF===co.id?' selected':'')+'>'+esc(co.name)+'</option>';});
-h+='</select></div>';
+h+='</select>'+(window.crmInvFilterHTML?crmInvFilterHTML():'')+'</div>';
   h+='<div class="card" style="padding:0"><div class="inv-table-wrap"><table class=\'inv-table\'><thead><tr><th style=\'width:36px\'><input type=\'checkbox\' id=\'inv-select-all\' onclick=\'toggleAllInvSelect(this)\' style=\'cursor:pointer\'></th><th>'+t('invName')+'</th><th>'+t('invFund')+'</th><th>'+t('invCompany')+'</th><th>'+t('invType')+'</th><th>'+t('invCommit')+'</th><th>'+t('invMV')+'</th><th>'+t('invCalls')+'</th><th>'+t('invDist')+'</th><th>'+t('invExpenses')+'</th><th>'+t('invStatus')+'</th><th></th></tr></thead><tbody>';
   if(!inv.length){ h+='<tr><td colspan="12" style="text-align:center;padding:32px;color:var(--text3)">'+t('noData')+'</td></tr>'; }
   else { inv.forEach(function(i){
-    h+='<tr><td style="text-align:center"><input type="checkbox" class="inv-checkbox" data-id="'+i.id+'" onchange="updateBulkDeleteBtn()"></td><td style="font-weight:600">'+esc(i.name)+'</td>';
+    h+='<tr><td style="text-align:center"><input type="checkbox" class="inv-checkbox" data-id="'+i.id+'" onchange="updateBulkDeleteBtn()"></td><td style="font-weight:600">'+(window.crmInvName?crmInvName(i):esc(i.name))+'</td>';
     h+='<td>'+(i.fund?'<span class="badge badge-fund">'+esc(i.fund)+'</span>':'—')+'</td>';
     h+='<td>'+invCoBadges(invCoIds(i))+'</td>';
     h+='<td><span class="badge badge-inv">'+esc(i.type||'—')+'</span></td>';
-    h+='<td style="font-weight:600">'+fmtD(i.commitment||0)+'</td><td>'+fmtD(i.marketValue)+'</td><td>'+fmtD(i.calls)+'</td>';
+    h+='<td style="font-weight:600">'+fmtD(i.commitment||0)+'</td><td>'+fmtD(i.marketValue)+(window.crmInvMV?crmInvMV(i):'')+'</td><td>'+fmtD(i.calls)+'</td>';
     h+='<td style="color:var(--teal)">'+fmtD(i.distributions)+'</td>';
     h+='<td style="color:var(--coral)">'+fmtD(i.expenses||0)+'</td>';
     h+='<td>'+(i.status?'<span class="badge badge-active">'+esc(i.status)+'</span>':'—')+'</td>';
@@ -3062,6 +3101,7 @@ h+='</datalist></div>';
   h+='<div class="form-group"><label class="lbl">'+t('invCalls')+' (USD)</label><input id="iv-calls" class="inp" type="number" value="'+((inv&&inv.calls)||'')+'"></div>';
   h+='<div class="form-group"><label class="lbl">'+t('invDist')+' (USD)</label><input id="iv-dist" class="inp" type="number" value="'+((inv&&inv.distributions)||'')+'"></div>';
   h+='<div class="form-group"><label class="lbl">'+t('invMV')+' (USD)</label><input id="iv-mv" class="inp" type="number" value="'+((inv&&inv.marketValue)||'')+'"></div>';
+  h+='<div class="form-group"><label class="lbl">'+(lang==='en'?'Market value as of':'Valor de mercado al')+'</label><input id="iv-valdate" class="inp" type="date" value="'+esc(inv&&inv.valuationDate||'')+'"></div>';
   h+='<div class="form-group full"><label class="lbl">'+t('invNotes')+'</label><textarea id="iv-notes" class="inp">'+esc(inv?inv.notes:'')+'</textarea></div>';
   h+='</div><div class="fsec" style="margin-top:14px"><div class="fsec-title">'+t('customFields')+'</div><div id="inv-fields-list"></div>';
   h+='<button class="btn btn-outline btn-sm" onclick="addInvField()">'+t('addField')+'</button></div>';
@@ -3115,7 +3155,10 @@ type:gv('iv-type'),status:gv('iv-status'),
 commitment:parseFloat(gv('iv-commit'))||0,calls:parseFloat(gv('iv-calls'))||0,
 distributions:parseFloat(gv('iv-dist'))||0,marketValue:parseFloat(gv('iv-mv'))||0,
 notes:gv('iv-notes'),fields:window._fInvFields};
-  if(id){var i=data.investments.findIndex(function(x){return x.id===id;});if(i>-1)data.investments[i]=obj;}
+  if(document.getElementById('iv-valdate')) obj.valuationDate=gv('iv-valdate');
+  // FIX: merge into the existing record so fields the form doesn't show (expenses, CRM data...) survive
+  var _ex=id?data.investments.find(function(x){return x.id===id;}):null;
+  if(_ex){ Object.assign(_ex,obj); }
   else data.investments.push(obj);
   save();closeModal();render();
 }

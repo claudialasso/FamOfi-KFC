@@ -72,7 +72,7 @@
       updatedFields:'Updated: ', nextSetLog:'Next action set: ', nextClearedLog:'Next action cleared',
       respLog:'Responsible: ', completedLog:'Completed: ', dueWord:'due',
       companiesN:'companies', accountsN:'accounts', viewOnly:'View-only access — you can view but not edit data.',
-      delAct:'Remove this log entry?'
+      delAct:'Remove this log entry?', followups:'Follow-ups', addFollow:'+ Add follow-up', firstFollow:'First follow-up', firstFollowDate:'Follow-up due', moreN:'more', followNote:'Follow-ups are tasks: they also appear in the Tasks tab and on the company.'
     },
     es: {
       title:'Cuentas Bancarias', add:'+ Agregar Cuenta', exportCsv:'Exportar CSV',
@@ -119,7 +119,7 @@
       updatedFields:'Actualizado: ', nextSetLog:'Próxima acción: ', nextClearedLog:'Próxima acción eliminada',
       respLog:'Responsable: ', completedLog:'Completado: ', dueWord:'vence',
       companiesN:'empresas', accountsN:'cuentas', viewOnly:'Solo lectura — puedes ver pero no editar.',
-      delAct:'¿Eliminar esta entrada del historial?'
+      delAct:'¿Eliminar esta entrada del historial?', followups:'Seguimientos', addFollow:'+ Agregar seguimiento', firstFollow:'Primer seguimiento', firstFollowDate:'Fecha del seguimiento', moreN:'más', followNote:'Los seguimientos son tareas: también aparecen en Tareas y en la empresa.'
     }
   };
   function bt(k) { return (L[lang] && L[lang][k]) || L.en[k] || k; }
@@ -180,23 +180,32 @@
   function findRow(bid) { var r = rows(); for (var i = 0; i < r.length; i++) if (r[i].b.id === bid) return r[i]; return null; }
   function coById(id) { return (data.companies || []).find(function (c) { return c.id === id; }); }
 
+  // "Next action" = the account's earliest open task in the shared task list (crm.js).
+  // Falls back to the legacy nextAction fields until they are migrated.
+  function openTasks(b) { return (window.crm && crm.isReady()) ? crm.tasksFor('bank', b.id, true) : []; }
+  function nx(b) {
+    var ts = openTasks(b);
+    if (ts.length) return { text:ts[0].title, date:ts[0].dueDate || '', resp:ts[0].responsible, n:ts.length, task:ts[0] };
+    return { text:b.nextAction || '', date:b.nextActionDate || '', n:(b.nextAction || b.nextActionDate) ? 1 : 0 };
+  }
   function dueState(b) {
-    if (!b.nextActionDate || isDone(b)) return '';
-    var d = daysUntil(b.nextActionDate);
+    var nd = nx(b).date;
+    if (!nd || isDone(b)) return '';
+    var d = daysUntil(nd);
     if (d === null) return '';
     return d < 0 ? 'overdue' : d <= 7 ? 'soon' : 'ok';
   }
   function dueText(b) {
-    var d = daysUntil(b.nextActionDate); if (d === null) return '';
+    var d = daysUntil(nx(b).date); if (d === null) return '';
     if (d === 0) return bt('today');
     if (d === 1) return bt('tomorrow');
     if (d === -1) return bt('oneOver');
     return d < 0 ? tpl(bt('daysOver'), { n:-d }) : tpl(bt('inDays'), { n:d });
   }
   function dueChip(b) {
-    if (!b.nextActionDate) return '';
+    var nd = nx(b).date; if (!nd) return '';
     var st = dueState(b) || 'ok';
-    return '<span class="bk-due bk-due-' + st + '" title="' + esc(dueText(b)) + '">' + (st === 'overdue' ? '⚠ ' : '') + esc(fmtDay(b.nextActionDate)) + '</span>';
+    return '<span class="bk-due bk-due-' + st + '" title="' + esc(dueText(b)) + '">' + (st === 'overdue' ? '⚠ ' : '') + esc(fmtDay(nd)) + '</span>';
   }
   function addAct(b, e) {
     if (!Array.isArray(b.activity)) b.activity = [];
@@ -209,7 +218,7 @@
   // ── Filter / view state ─────────────────────────────────────────────────────
   var F0 = { q:'', company:'', bank:'', status:'', country:'', currency:'', resp:'', life:'', next:'', from:'', to:'' };
   var F = Object.assign({}, F0);
-  var view = 'table', sortK = 'next', sortDir = 1, showMore = false, nextEdit = false;
+  var view = 'table', sortK = 'next', sortDir = 1, showMore = false;
   try { view = localStorage.getItem('fm_bk_view') || 'table'; } catch (e) {}
 
   function activeFilterCount(keys) { return (keys || Object.keys(F0)).filter(function (k) { return F[k]; }).length; }
@@ -217,7 +226,7 @@
   function matches(r) {
     var b = r.b, c = r.c, s = stOf(b);
     if (F.q) {
-      var hay = [c.name, b.bank, b.accountName, b.account, b.type, b.currency, b.country, b.responsible, b.notes, b.nextAction, b.lastAction, b.swift, stLabel(s)].join(' ').toLowerCase();
+      var hay = [c.name, b.bank, b.accountName, b.account, b.type, b.currency, b.country, b.responsible, b.notes, nx(b).text, b.lastAction, b.swift, stLabel(s)].join(' ').toLowerCase();
       var qq = F.q.toLowerCase().trim(), qn = normAcct(qq);
       if (hay.indexOf(qq) === -1 && !(qn.length >= 3 && normAcct(b.account).indexOf(qn) !== -1)) return false;
     }
@@ -231,7 +240,7 @@
     if (F.from && (!b.dateOpened || b.dateOpened < F.from)) return false;
     if (F.to && (!b.dateOpened || b.dateOpened > F.to)) return false;
     if (F.next) {
-      var ds = dueState(b), d = daysUntil(b.nextActionDate), has = !!(b.nextAction || b.nextActionDate) && !isDone(b);
+      var n0 = nx(b), ds = dueState(b), d = daysUntil(n0.date), has = n0.n > 0 && !isDone(b);
       if (F.next === 'overdue' && ds !== 'overdue') return false;
       if (F.next === 'soon' && ds !== 'soon') return false;
       if (F.next === 'attention' && ds !== 'overdue' && ds !== 'soon') return false;
@@ -253,7 +262,7 @@
         case 'status': return ST_BY[stOf(b)].order;
         case 'resp': return (b.responsible || '~').toLowerCase();
         case 'updated': return b.updatedAt || '';
-        default: return (isDone(b) || !b.nextActionDate) ? '9999' : b.nextActionDate; // next
+        default: var nd = nx(b).date; return (isDone(b) || !nd) ? '9999' : nd; // next
       }
     }
     return list.slice().sort(function (a, b) {
@@ -393,7 +402,8 @@
       h += '<td class="bk-c-cur">' + (b.currency ? '<span class="bk-cur">' + esc(b.currency.toUpperCase()) + '</span>' : '—') + '</td>';
       h += '<td>' + pill(stOf(b)) + '</td>';
       h += '<td class="bk-c-resp">' + (b.responsible ? esc(b.responsible) : '<span class="bk-muted">—</span>') + '</td>';
-      h += '<td class="bk-next-cell">' + (b.nextAction && !isDone(b) ? '<div class="bk-next-txt" title="' + esc(b.nextAction) + '">' + esc(trunc(b.nextAction, 48)) + '</div>' : '') + (isDone(b) ? '' : dueChip(b)) + ((!b.nextAction && !b.nextActionDate) || isDone(b) ? '<span class="bk-muted">—</span>' : '') + '</td>';
+      var n1 = nx(b);
+      h += '<td class="bk-next-cell">' + (n1.text && !isDone(b) ? '<div class="bk-next-txt" title="' + esc(n1.text) + '">' + esc(trunc(n1.text, 48)) + '</div>' : '') + (isDone(b) ? '' : dueChip(b) + (n1.n > 1 ? ' <span class="bk-muted" style="font-size:11px">+' + (n1.n - 1) + ' ' + bt('moreN') + '</span>' : '')) + (!n1.n || isDone(b) ? '<span class="bk-muted">—</span>' : '') + '</td>';
       h += '<td class="bk-c-upd bk-muted">' + (b.updatedAt ? fmtDay(b.updatedAt.slice(0, 10)) : '—') + '</td>';
       h += '</tr>';
     });
@@ -444,7 +454,7 @@
   var lastBid = null;
   function open(bid, fromCompany) {
     if (fromCompany !== undefined) ctxCompany = fromCompany || null;
-    if (bid !== lastBid) { nextEdit = false; lastBid = bid; }
+    lastBid = bid;
     var r = findRow(bid); if (!r) return;
     var b = r.b, c = r.c, s = stOf(b), adm = isAdmin();
     var h = '<div class="modal-header"><div style="min-width:0">';
@@ -457,23 +467,15 @@
 
     h += '<div class="modal-body"><div class="bk-detail-grid"><div class="bk-col">';
 
-    // Next action card
-    var ds = dueState(b);
-    h += '<div class="bk-nextcard bk-nc-' + (ds || 'none') + '"><div class="bk-nc-hd"><span>🎯 ' + bt('nextCard') + '</span>';
-    if (adm && !nextEdit) h += '<span style="display:flex;gap:6px">' + (b.nextAction ? '<button class="btn btn-teal btn-sm" onclick="bk.doneNext(\'' + b.id + '\')">' + bt('markDone') + '</button>' : '') + '<button class="btn btn-outline btn-sm" onclick="bk.editNext(\'' + b.id + '\')">' + bt('update') + '</button></span>';
+    // Follow-ups = open tasks linked to this account (shared with the Tasks tab)
+    var ds = dueState(b), fts = openTasks(b), canT = window.crm && crm.canEdit();
+    h += '<div class="bk-nextcard bk-nc-' + (ds === 'today' ? 'soon' : ds || 'none') + '"><div class="bk-nc-hd"><span>🎯 ' + bt('followups') + (fts.length ? ' (' + fts.length + ')' : '') + '</span>';
+    if (canT) h += '<button class="btn btn-primary btn-sm" onclick="crm.taskForm(null,{companyId:\'' + c.id + '\',ref:\'bank:' + b.id + '\',responsible:' + esc(JSON.stringify(b.responsible || '')).replace(/"/g, '&quot;') + '},function(){bk.open(\'' + b.id + '\')})">' + bt('addFollow') + '</button>';
     h += '</div>';
-    if (adm && nextEdit) {
-      h += '<div class="form-group" style="margin-top:8px"><label class="lbl">' + bt('nextAction') + '</label><input class="inp" id="bk-n-action" value="' + esc(b.nextAction || '') + '" placeholder="Follow up with bank regarding account approval"></div>';
-      h += '<div class="form-grid" style="margin-top:8px"><div class="form-group"><label class="lbl">' + bt('nextActionDate') + '</label><input type="date" class="inp" id="bk-n-date" value="' + esc(b.nextActionDate || '') + '"></div>';
-      h += '<div class="form-group"><label class="lbl">' + bt('responsible') + '</label><input class="inp" id="bk-n-resp" list="bk-dl-resp" value="' + esc(b.responsible || '') + '"></div></div>';
-      h += datalist('bk-dl-resp', uniqSorted(rows().map(function (x) { return x.b.responsible; }).concat([me()])));
-      h += '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px"><button class="btn btn-outline btn-sm" onclick="bk.cancelNext(\'' + b.id + '\')">' + bt('cancel') + '</button><button class="btn btn-primary btn-sm" onclick="bk.saveNext(\'' + b.id + '\')">' + bt('save') + '</button></div>';
-    } else if (b.nextAction || b.nextActionDate) {
-      h += '<div class="bk-nc-text">' + esc(b.nextAction || '—') + '</div>';
-      h += '<div class="bk-nc-meta">' + (b.nextActionDate ? '<span>📅 ' + bt('due') + ' <b>' + esc(fmtDay(b.nextActionDate)) + '</b>' + (ds ? ' <span class="bk-due bk-due-' + ds + '">' + esc(dueText(b)) + '</span>' : '') + '</span>' : '') + '<span>👤 ' + (b.responsible ? esc(b.responsible) : '<span class="bk-muted">' + bt('unassigned') + '</span>') + '</span></div>';
-    } else {
-      h += '<div class="bk-muted" style="margin-top:6px">' + bt('noNext') + '</div>' + (b.responsible ? '<div class="bk-nc-meta"><span>👤 ' + esc(b.responsible) + '</span></div>' : '');
-    }
+    if (fts.length) h += '<div class="bk-fu-list">' + fts.map(function (tk) { return crm.taskRow(tk, { noRef:true, noCompany:true }); }).join('') + '</div>';
+    else if (b.nextAction || b.nextActionDate) h += '<div class="bk-nc-text">' + esc(b.nextAction || '—') + '</div>' + (b.nextActionDate ? '<div class="bk-nc-meta"><span>📅 ' + bt('due') + ' <b>' + esc(fmtDay(b.nextActionDate)) + '</b></span></div>' : '');
+    else h += '<div class="bk-muted" style="margin-top:6px">' + bt('noNext') + '</div>';
+    h += '<div class="bk-nc-meta"><span>👤 ' + bt('responsible') + ': ' + (b.responsible ? esc(b.responsible) : '<span class="bk-muted">' + bt('unassigned') + '</span>') + '</span></div>';
     h += '</div>';
 
     // Log an update (optionally changes status)
@@ -499,7 +501,8 @@
     h += dr(bt('currency'), esc((b.currency || '').toUpperCase())) + dr(bt('country'), esc(b.country));
     h += dr(bt('status'), pill(s)) + dr(bt('dateOpened'), b.dateOpened ? esc(fmtDay(b.dateOpened)) : '') + dr(bt('dateClosed'), b.dateClosed ? esc(fmtDay(b.dateClosed)) : '');
     h += dr(bt('responsible'), esc(b.responsible));
-    h += dr(bt('lastAction'), b.lastAction ? esc(b.lastAction) + (b.lastActionDate ? ' <span class="bk-muted">(' + esc(fmtDay(b.lastActionDate)) + ')</span>' : '') : '');
+    var la = latestAction(b);
+    h += dr(bt('lastAction'), la.text ? esc(la.text) + (la.date ? ' <span class="bk-muted">(' + esc(fmtDay(la.date)) + ')</span>' : '') : '');
     h += dr(bt('routing'), b.routing ? '<span class="bank-sensitive" onclick="this.classList.toggle(\'revealed\')">' + esc(b.routing) + '</span>' : '');
     h += dr(bt('swift'), esc(b.swift)) + dr(bt('bankAddr'), esc(b.bankAddr));
     h += dr(bt('created'), b.createdAt ? esc(fmtDay(b.createdAt.slice(0, 10))) + (b.createdBy ? ' <span class="bk-muted">' + bt('by') + ' ' + esc(b.createdBy) + '</span>' : '') : '');
@@ -515,10 +518,18 @@
     if (adm) h += '<div style="text-align:right;margin-top:6px"><button class="bk-link bk-danger-link" onclick="bk.del(\'' + b.id + '\')">🗑 ' + bt('danger') + '</button></div>';
     h += '</div></div></div>';
     showModal(h, true);
+    if (window.crm) crm.setRefresher(function () { open(bid); });
+  }
+  function doneTasks(b) { return (window.crm && crm.isReady()) ? crm.tasksFor('bank', b.id, false).filter(function (t) { return t.status === 'done' && t.completedAt; }) : []; }
+  function latestAction(b) {
+    var best = { text:b.lastAction || '', date:b.lastActionDate || '' };
+    doneTasks(b).forEach(function (t) { var d = t.completedAt.slice(0, 10); if (d >= best.date) best = { text:bt('completedLog') + t.title, date:d }; });
+    return best;
   }
 
   function timelineHTML(b) {
-    var acts = (b.activity || []).slice().sort(function (x, y) { return (y.date || '').localeCompare(x.date || '') || (y.at || '').localeCompare(x.at || ''); });
+    var derived = doneTasks(b).map(function (t) { return { id:'t' + t.id, kind:'action', date:t.completedAt.slice(0, 10), at:t.completedAt, by:t.completedBy, text:bt('completedLog') + t.title, derived:true }; });
+    var acts = (b.activity || []).concat(derived).sort(function (x, y) { return (y.date || '').localeCompare(x.date || '') || (y.at || '').localeCompare(x.at || ''); });
     if (!acts.length) return '<div class="bk-muted" style="padding:6px 0">' + bt('noActivity') + '</div>';
     var h = '<div class="bk-timeline">', lastDate = null;
     acts.forEach(function (a) {
@@ -526,7 +537,7 @@
       var dotCls = a.kind === 'status' ? 'bk-st-' + (ST_BY[a.to] ? a.to : 'open') : 'bk-k-' + a.kind;
       h += '<div class="bk-tl-item"><span class="bk-tl-dot ' + dotCls + '"></span><div class="bk-tl-body">';
       h += '<div class="bk-tl-kind">' + esc(bt(ACT_LBL[a.kind] || 'kNote')) + (a.by ? ' · <span class="bk-muted">' + esc(a.by) + '</span>' : '');
-      if (isAdmin() && a.kind !== 'created') h += ' <button class="bk-tl-del" title="✕" onclick="bk.delAct(\'' + b.id + '\',\'' + a.id + '\')">✕</button>';
+      if (isAdmin() && a.kind !== 'created' && !a.derived) h += ' <button class="bk-tl-del" title="✕" onclick="bk.delAct(\'' + b.id + '\',\'' + a.id + '\')">✕</button>';
       h += '</div>';
       if (a.kind === 'status') h += '<div class="bk-tl-status">' + (a.from ? pill(a.from) + ' <span class="bk-muted">→</span> ' : '') + pill(a.to) + '</div>';
       if (a.text) h += '<div class="bk-tl-text">' + esc(a.text) + '</div>';
@@ -554,27 +565,6 @@
     else addAct(b, { kind:kind, date:date, text:text });
     if (text && (!b.lastActionDate || date >= b.lastActionDate)) { b.lastAction = text; b.lastActionDate = date; }
     touch(b); persist(); open(bid);
-  }
-  function editNext(bid) { nextEdit = true; open(bid); setTimeout(function () { var el = document.getElementById('bk-n-action'); if (el) el.focus(); }, 30); }
-  function cancelNext(bid) { nextEdit = false; open(bid); }
-  function saveNext(bid) {
-    var r = findRow(bid); if (!r || !isAdmin()) return;
-    var b = r.b, a = gv('bk-n-action').trim(), d = gv('bk-n-date'), rp = gv('bk-n-resp').trim();
-    if (a !== (b.nextAction || '') || d !== (b.nextActionDate || '')) {
-      addAct(b, { kind:'next', text:(a || d) ? bt('nextSetLog') + (a || '—') + (d ? ' (' + bt('dueWord') + ' ' + fmtDay(d) + ')' : '') : bt('nextClearedLog') });
-    }
-    if (rp !== (b.responsible || '')) addAct(b, { kind:'edit', text:bt('respLog') + (b.responsible || '—') + ' → ' + (rp || '—') });
-    b.nextAction = a; b.nextActionDate = d; b.responsible = rp;
-    nextEdit = false; touch(b); persist(); open(bid);
-  }
-  function doneNext(bid) {
-    var r = findRow(bid); if (!r || !isAdmin()) return;
-    var b = r.b; if (!b.nextAction) return;
-    var txt = bt('completedLog') + b.nextAction;
-    addAct(b, { kind:'action', text:txt });
-    b.lastAction = txt; b.lastActionDate = today();
-    b.nextAction = ''; b.nextActionDate = '';
-    touch(b); persist(); editNext(bid); // prompt for the next step right away
   }
   function delAct(bid, aid) {
     var r = findRow(bid); if (!r || !isAdmin()) return;
@@ -627,8 +617,10 @@
 
     h += '<div class="fsec"><div class="fsec-title">' + bt('secMgmt') + '</div><div class="form-grid">';
     h += inp('bk-e-resp', bt('responsible'), b.responsible || (bid ? '' : me()), 'list="bk-dl-resp"');
-    h += '<div class="form-group"><label class="lbl">' + bt('nextActionDate') + '</label><input type="date" class="inp" id="bk-e-ndate" value="' + esc(b.nextActionDate || '') + '"></div>';
-    h += inp('bk-e-next', bt('nextAction'), b.nextAction, 'placeholder="Follow up with bank regarding account approval"', true);
+    if (!bid) {
+      h += '<div class="form-group"><label class="lbl">' + bt('firstFollowDate') + '</label><input type="date" class="inp" id="bk-e-ndate"></div>';
+      h += inp('bk-e-next', bt('firstFollow'), '', 'placeholder="Follow up with bank regarding account approval"', true);
+    }
     h += '<div class="form-group full"><label class="lbl">' + bt('notes') + '</label><textarea class="inp" id="bk-e-notes" rows="3">' + esc(b.notes || '') + '</textarea></div>';
     h += '</div></div>';
 
@@ -701,7 +693,7 @@
       }
     }
 
-    var FIELDS = ['bank', 'accountName', 'account', 'type', 'currency', 'country', 'routing', 'swift', 'bankAddr', 'dateOpened', 'dateClosed', 'responsible', 'nextAction', 'nextActionDate', 'notes'];
+    var FIELDS = ['bank', 'accountName', 'account', 'type', 'currency', 'country', 'routing', 'swift', 'bankAddr', 'dateOpened', 'dateClosed', 'responsible', 'notes'];
     var b;
     if (fc.bid) {
       var r = findRow(fc.bid); if (!r) return;
@@ -712,12 +704,10 @@
         newCo.banking.push(b);
         addAct(b, { kind:'edit', text:tpl(bt('movedLog'), { a:r.c.name, b:newCo.name }) });
       }
-      var changed = FIELDS.filter(function (k) { return k !== 'nextAction' && k !== 'nextActionDate' && String(b[k] || '') !== String(v[k] || ''); });
-      var nextChanged = (b.nextAction || '') !== v.nextAction || (b.nextActionDate || '') !== v.nextActionDate;
+      var changed = FIELDS.filter(function (k) { return String(b[k] || '') !== String(v[k] || ''); });
       var statusFrom = stOf(b);
       FIELDS.forEach(function (k) { b[k] = v[k]; }); // merge — keeps activity & any future keys
       if (v.status !== statusFrom) applyStatus(b, v.status, today(), '');
-      if (nextChanged) addAct(b, { kind:'next', text:(v.nextAction || v.nextActionDate) ? bt('nextSetLog') + (v.nextAction || '—') + (v.nextActionDate ? ' (' + bt('dueWord') + ' ' + fmtDay(v.nextActionDate) + ')' : '') : bt('nextClearedLog') });
       if (changed.length) addAct(b, { kind:'edit', text:bt('updatedFields') + changed.map(function (k) { return fieldLabel(k); }).join(', ') });
     } else {
       b = { id:uid(), createdAt:nowISO(), createdBy:me(), activity:[] };
@@ -725,11 +715,14 @@
       b.status = v.status;
       addAct(b, { kind:'created', text:bt('createdLog') });
       addAct(b, { kind:'status', from:'', to:v.status });
-      if (v.nextAction) addAct(b, { kind:'next', text:bt('nextSetLog') + v.nextAction + (v.nextActionDate ? ' (' + bt('dueWord') + ' ' + fmtDay(v.nextActionDate) + ')' : '') });
       newCo.banking.push(b);
     }
     touch(b);
     persist();
+    if (!fc.bid && (v.nextAction || v.nextActionDate) && window.crm && crm.canEdit()) {
+      crm.addTask({ title:v.nextAction || bt('followups'), dueDate:v.nextActionDate, responsible:v.responsible, companyId:newCo.id, ref:{ type:'bank', id:b.id, label:b.bank } });
+      crm.persist('tasks');
+    }
     if (fc.fromCompany && !fc.bid) { ctxCompany = newCo.id; backToCompany(); }
     else open(b.id);
   }
@@ -747,7 +740,7 @@
       if (btn) btn.click(); else if (tries++ < 10) setTimeout(clickTab, 40);
     })();
   }
-  function backToCompany() { var cid = ctxCompany; ctxCompany = null; nextEdit = false; if (cid) openCompanyBankTab(cid); else closeModal(); }
+  function backToCompany() { var cid = ctxCompany; ctxCompany = null; if (cid) openCompanyBankTab(cid); else closeModal(); }
   function goCompany(cid) { ctxCompany = null; closeModal(); openCompany(cid); }
   function showForCompany(cid) { closeModal(); F = Object.assign({}, F0, { company:cid }); ctxCompany = null; go(PAGE); }
 
@@ -771,7 +764,7 @@
     var out = [['Company', 'Jurisdiction', 'Bank', 'Account Name', 'Account Type', 'Account #', 'Currency', 'Country', 'Status', 'Date Opened', 'Date Closed', 'Responsible', 'Next Action', 'Next Action Date', 'Latest Action', 'SWIFT', 'Routing', 'Notes', 'Last Updated']];
     sortRows(rows().filter(matches)).forEach(function (r) {
       var b = r.b;
-      out.push([r.c.name, r.c.jurisdiction, b.bank, b.accountName, b.type, b.account, (b.currency || '').toUpperCase(), b.country, stLabel(stOf(b)), b.dateOpened, b.dateClosed, b.responsible, b.nextAction, b.nextActionDate, b.lastAction, b.swift, b.routing, b.notes, (b.updatedAt || '').slice(0, 10)]);
+      out.push([r.c.name, r.c.jurisdiction, b.bank, b.accountName, b.type, b.account, (b.currency || '').toUpperCase(), b.country, stLabel(stOf(b)), b.dateOpened, b.dateClosed, b.responsible, nx(b).text, nx(b).date, latestAction(b).text, b.swift, b.routing, b.notes, (b.updatedAt || '').slice(0, 10)]);
     });
     dlCSV(out, 'famofi_bank_accounts.csv');
   }
@@ -795,7 +788,8 @@
       h += '<div class="bk-co-item' + (isDone(b) ? ' bk-done' : '') + '" onclick="bk.open(\'' + b.id + '\',\'' + id + '\')">';
       h += '<div class="bk-co-top"><div><div class="bk-bank">' + esc(b.bank || '—') + ' <span class="bk-muted" style="font-weight:400">· ' + esc(b.accountName || b.type || '') + '</span></div>';
       h += '<div class="bk-sub">' + (b.currency ? '<span class="bk-cur">' + esc(b.currency.toUpperCase()) + '</span> ' : '') + (b.account ? acctNum(b) : '') + (b.country ? ' · ' + esc(b.country) : '') + '</div></div>' + pill(stOf(b)) + '</div>';
-      if ((b.nextAction || b.nextActionDate) && !isDone(b)) h += '<div class="bk-co-next">🎯 ' + esc(trunc(b.nextAction || '', 70)) + ' ' + dueChip(b) + '</div>';
+      var n2 = nx(b);
+      if (n2.n && !isDone(b)) h += '<div class="bk-co-next">🎯 ' + esc(trunc(n2.text, 70)) + ' ' + dueChip(b) + (n2.n > 1 ? ' <span class="bk-muted" style="font-size:11px">+' + (n2.n - 1) + ' ' + bt('moreN') + '</span>' : '') + '</div>';
       if (b.notes) h += '<div class="bk-co-notes">' + esc(trunc(b.notes, 140)) + '</div>';
       h += '</div>';
     });
@@ -835,10 +829,29 @@
   window.bk = {
     statuses:BK_STATUSES, sections:[], rows:rows,
     open:open, form:form, saveForm:saveForm, cancelForm:cancelForm, formStatusChanged:formStatusChanged,
-    logUpdate:logUpdate, editNext:editNext, cancelNext:cancelNext, saveNext:saveNext, doneNext:doneNext, delAct:delAct, del:del,
+    logUpdate:logUpdate, delAct:delAct, del:del,
     set:set, quick:quick, reset:reset, toggleMore:toggleMore, setView:setView, sort:sortBy, reveal:reveal, exportCSV:exportCSV,
     goCompany:goCompany, backToCompany:backToCompany, showForCompany:showForCompany, pill:pill
   };
+
+  // One-time move of legacy per-account "next action" fields into the shared task list
+  function migrateNext() {
+    if (!window.crm || !crm.canEdit() || !isAdmin()) return;
+    var todo = rows().filter(function (r) { return r.b.nextAction || r.b.nextActionDate; });
+    if (!todo.length) return;
+    todo.forEach(function (r) {
+      var b = r.b;
+      if (!crm.tasksFor('bank', b.id, false).some(function (t) { return t.title === (b.nextAction || '') && (t.dueDate || '') === (b.nextActionDate || ''); }))
+        crm.addTask({ title:b.nextAction || bt('followups'), dueDate:b.nextActionDate || '', responsible:b.responsible || '', companyId:r.c.id, ref:{ type:'bank', id:b.id, label:b.bank } });
+    });
+    crm.persist('tasks', true).then(function () {
+      todo.forEach(function (r) { delete r.b.nextAction; delete r.b.nextActionDate; });
+      save();
+      if (page === PAGE) rerenderMain();
+      console.log('[bank] moved ' + todo.length + ' next actions into Tasks');
+    });
+  }
+  if (window.crm) crm.whenReady(migrateNext);
 
   // If the app is already visible (auth resolved first), refresh the nav
   var app = document.getElementById('app');

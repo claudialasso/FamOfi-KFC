@@ -112,7 +112,7 @@
     _origSaveInv=window.saveInv;
     window.saveInv=function(){
       var beforeIds=new Set((data.investments||[]).map(function(i){return i.id;}));
-      _origSaveInv();
+      _origSaveInv.apply(this, arguments); // FIX: pass the investment id through (was creating a copy on every edit)
       var newInv=(data.investments||[]).find(function(i){return!beforeIds.has(i.id);});
       if(!newInv)return;
       var similar=(data.investments||[]).filter(function(i){return i.id!==newInv.id&&_simScore(i.name,newInv.name)>=0.7;});
