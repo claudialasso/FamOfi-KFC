@@ -492,7 +492,7 @@
     root.innerHTML =
         '<div class="org-print-header">'
       +   '<div class="t1">'+headerName+' \u2014 '+(typeof t==='function'?t('orgChart'):'Org Chart')+'<\/div>'
-      +   '<div class="t2">'+headerJur+' \u2014 FamOfi Registry \u2014 '+new Date().toLocaleDateString()+'<\/div>'
+      +   '<div class="t2">'+headerJur+' \u2014 FamOfi Registry \u2014 '+new Date().toLocaleDateString()+'<\/div>'
       + '<\/div>'
       + '<div id="print-org-canvas" class="org-print-canvas">'+filteredHTML+'<\/div>';
 
