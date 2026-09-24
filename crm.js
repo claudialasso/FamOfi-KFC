@@ -183,7 +183,7 @@
   }
   function changed() {
     S.listeners.forEach(function (fn) { try { fn(); } catch (e) { console.warn(e); } });
-    if (typeof page !== 'undefined' && ['tasks', 'overview', 'companies', 'investments', 'bankaccounts'].indexOf(page) !== -1) render();
+    if (typeof page !== 'undefined' && ['tasks', 'companies', 'investments', 'bankaccounts'].indexOf(page) !== -1) render();
     else navBadge();
   }
   function parsePayload(snap) { try { return (snap.exists && snap.data().payload) ? JSON.parse(snap.data().payload) : []; } catch (e) { return []; } }
@@ -846,7 +846,7 @@
     _render.apply(this, arguments);
     var m = document.getElementById('main');
     if (m && page === PAGE) m.innerHTML = renderTab();
-    if (m && page === 'overview') m.insertAdjacentHTML('afterbegin', overviewCard());
+    // Tasks are intentionally not shown on the Overview tab (see Tasks tab).
     navBadge();
   };
   window.renderPage = function () {
