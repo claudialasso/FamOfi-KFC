@@ -154,7 +154,12 @@
   var DOCS = { tasks:'tasks', activity:'activity' };
   function T() { if (S.mode === 'docs') return S.tasks; if (!Array.isArray(data.tasks)) data.tasks = []; return data.tasks; }
   function A() { if (S.mode === 'docs') return S.activity; if (!Array.isArray(data.activity)) data.activity = []; return data.activity; }
-  function canEdit() { return S.ready && (isAdmin() || (S.mode === 'docs' && S.roleFlags.tasks === true)); }
+  // canEdit  = create / edit / complete tasks. Admins always; every Viewer too (needs 'docs'
+  //            storage, because Viewers can never write famofi/main). Opt a single viewer out
+  //            with { role:'viewer', tasks:false } in famofi/roles.
+  // canManage = delete tasks + company activity notes. Admins, or viewers flagged tasks:true.
+  function canEdit() { return S.ready && (isAdmin() || (S.mode === 'docs' && S.roleFlags.tasks !== false)); }
+  function canManage() { return S.ready && (isAdmin() || (S.mode === 'docs' && S.roleFlags.tasks === true)); }
 
   S.pend = { tasks:[], activity:[] };
   function writeDoc(which) {
@@ -273,7 +278,7 @@
     return next;
   }
   function reopenTask(id) { var t = findTask(id); if (!t || !canEdit()) return; t.status = 'open'; delete t.completedAt; delete t.completedBy; t.updatedAt = nowISO(); t.updatedBy = me(); persist('tasks'); }
-  function deleteTask(id) { if (!canEdit()) return; var arr = T(); var i = arr.findIndex(function (t) { return t.id === id; }); if (i > -1) arr.splice(i, 1); persist('tasks'); }
+  function deleteTask(id) { if (!canManage()) return; var arr = T(); var i = arr.findIndex(function (t) { return t.id === id; }); if (i > -1) arr.splice(i, 1); persist('tasks'); }
 
   // ── Activity API ────────────────────────────────────────────────────────────
   function log(e) {
@@ -402,7 +407,7 @@
     h += '<datalist id="tk-dl-resp">' + respNames().map(function (n) { return '<option value="' + esc(n) + '">'; }).join('') + '</datalist>';
     h += '<div id="tk-msg"></div>';
     h += '<div class="tk-form-actions">';
-    if (t && ed) h += '<button class="bk-link bk-danger-link" onclick="crm._del(' + jq(t.id) + ')">🗑 ' + lt('del') + '</button>';
+    if (t && canManage()) h += '<button class="bk-link bk-danger-link" onclick="crm._del(' + jq(t.id) + ')">🗑 ' + lt('del') + '</button>';
     h += '<span style="flex:1"></span><button class="btn btn-outline" onclick="crm.back()">' + lt('cancel') + '</button>';
     if (ed) {
       if (t && !isDone(t)) h += '<button class="btn btn-teal" onclick="crm._saveTask(' + jq(t.id) + ',true)">' + lt('complete') + '</button>';
@@ -641,7 +646,7 @@
     h += open.length ? open.map(function (t) { return taskRow(t, { noCompany:true }); }).join('') : '<div class="bk-muted" style="padding:4px 0">' + lt('caNoOpen') + '</div>';
     h += '</div>';
     if (ups.length) h += '<div class="bk-box"><div class="fsec-title">📌 ' + lt('upTitle') + '</div>' + upcomingHTML(ups, true) + '</div>';
-    if (ed) h += '<div class="bk-box"><div class="fsec-title">✍ ' + lt('caNote') + '</div><textarea class="inp" id="ca-note" rows="2" placeholder="' + esc(lt('caNotePh')) + '"></textarea><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><input type="date" class="inp" id="ca-note-date" value="' + today() + '" style="width:auto"><button class="btn btn-primary btn-sm" onclick="crm._addNote(' + jq(cid) + ')">' + lt('caAddNote') + '</button></div></div>';
+    if (canManage()) h += '<div class="bk-box"><div class="fsec-title">✍ ' + lt('caNote') + '</div><textarea class="inp" id="ca-note" rows="2" placeholder="' + esc(lt('caNotePh')) + '"></textarea><div style="display:flex;gap:8px;justify-content:flex-end;margin-top:8px"><input type="date" class="inp" id="ca-note-date" value="' + today() + '" style="width:auto"><button class="btn btn-primary btn-sm" onclick="crm._addNote(' + jq(cid) + ')">' + lt('caAddNote') + '</button></div></div>';
     h += '</div><div class="bk-col"><div class="bk-box"><div class="fsec-title">🕘 ' + lt('caTimeline') + '</div>';
     var fl = [['all', 'fAll'], ['notes', 'fNotes'], ['owner', 'fOwner'], ['bank', 'fBank'], ['tasks', 'fTasks'], ['inv', 'fInv'], ['status', 'fStatus']];
     h += '<div class="tk-tl-filters">' + fl.map(function (f) { return '<button class="bk-qchip' + (tlFilter === f[0] ? ' active' : '') + '" onclick="crm._tl(' + jq(cid) + ',' + jq(f[0]) + ')">' + lt(f[1]) + '</button>'; }).join('') + '</div>';
@@ -651,7 +656,7 @@
       h += '<div class="bk-timeline">'; var last = null;
       items.slice(0, 150).forEach(function (x) {
         if (x.date !== last) { h += '<div class="bk-tl-date">' + esc(fmtLong(x.date)) + '</div>'; last = x.date; }
-        h += '<div class="bk-tl-item"><span class="bk-tl-dot tk-g-' + x.grp + '"></span><div class="bk-tl-body"><div class="bk-tl-kind">' + x.icon + ' ' + esc(x.title) + (x.by ? ' · <span class="bk-muted">' + esc(x.by) + '</span>' : '') + (x.noteId && ed ? ' <button class="bk-tl-del" onclick="crm._delNote(' + jq(cid) + ',' + jq(x.noteId) + ')">✕</button>' : '') + '</div>';
+        h += '<div class="bk-tl-item"><span class="bk-tl-dot tk-g-' + x.grp + '"></span><div class="bk-tl-body"><div class="bk-tl-kind">' + x.icon + ' ' + esc(x.title) + (x.by ? ' · <span class="bk-muted">' + esc(x.by) + '</span>' : '') + (x.noteId && canManage() ? ' <button class="bk-tl-del" onclick="crm._delNote(' + jq(cid) + ',' + jq(x.noteId) + ')">✕</button>' : '') + '</div>';
         if (x.bankStatus && window.bk) h += '<div class="bk-tl-status">' + (x.from ? bk.pill(x.from) + ' <span class="bk-muted">→</span> ' : '') + bk.pill(x.to) + '</div>';
         else if (x.from || x.to) h += '<div class="bk-tl-status">' + (x.from ? '<span class="bk-muted">' + esc(x.from) + '</span> → ' : '') + '<b>' + esc(x.to || '') + '</b></div>';
         if (x.text) h += '<div class="bk-tl-text">' + esc(x.text) + '</div>';
@@ -671,12 +676,12 @@
     return '🎯 ' + lt('caTab') + (open.length ? ' <span class="tk-tabcount' + (over ? ' over' : '') + '">' + open.length + '</span>' : '');
   }
   function addNote(cid) {
-    var txt = gv('ca-note').trim(); if (!txt || !canEdit()) return;
+    var txt = gv('ca-note').trim(); if (!txt || !canManage()) return;
     log({ kind:'note', companyId:cid, text:txt, date:gv('ca-note-date') || today() });
     persist('activity'); refreshCompanyPanel(cid);
   }
   function delNote(cid, id) {
-    if (!canEdit() || !confirm(lt('delNote'))) return;
+    if (!canManage() || !confirm(lt('delNote'))) return;
     var arr = A(), i = arr.findIndex(function (e) { return e.id === id; }); if (i > -1) arr.splice(i, 1);
     persist('activity'); refreshCompanyPanel(cid);
   }
@@ -856,7 +861,7 @@
 
   // ── Public API ──────────────────────────────────────────────────────────────
   window.crm = {
-    whenReady:whenReady, canEdit:canEdit, isReady:function () { return S.ready; }, mode:function () { return S.mode; },
+    whenReady:whenReady, canEdit:canEdit, canManage:canManage, isReady:function () { return S.ready; }, mode:function () { return S.mode; },
     tasks:T, activity:A, findTask:findTask, tasksFor:tasksFor, tasksForCompany:tasksForCompany, addTask:addTask,
     completeTask:completeTask, log:log, persist:persist, onChange:function (fn) { S.listeners.push(fn); },
     dueState:dueState, dueChip:dueChip, dueText:dueText, taskRow:taskRow, pill:pill, isDone:isDone,
