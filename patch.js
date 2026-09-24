@@ -454,7 +454,7 @@
 
     var root = document.createElement('div');
     if (typeof buildFilteredOrgChart === 'function') {
-      root.innerHTML = buildFilteredOrgChart(cid, settings);
+      root.innerHTML = buildFilteredOrgChart(cid, settings, { print: true });
     } else {
       // Fallback: render via original and filter post-hoc
       if (typeof orgPrintFilteredHTML === 'function') root.innerHTML = window._origOrgPrintFilteredHTML ? window._origOrgPrintFilteredHTML() : '';
@@ -491,8 +491,8 @@
     var headerJur  = c ? esc(c.jurisdiction||'') : '';
     root.innerHTML =
         '<div class="org-print-header">'
-      +   '<div class="t1">'+headerName+' â '+(typeof t==='function'?t('orgChart'):'Org Chart')+'<\/div>'
-      +   '<div class="t2">'+headerJur+' â FamOfi Registry â '+new Date().toLocaleDateString()+'<\/div>'
+      +   '<div class="t1">'+headerName+' \u2014 '+(typeof t==='function'?t('orgChart'):'Org Chart')+'<\/div>'
+      +   '<div class="t2">'+headerJur+' \u2014 FamOfi Registry \u2014 '+new Date().toLocaleDateString()+'<\/div>'
       + '<\/div>'
       + '<div id="print-org-canvas" class="org-print-canvas">'+filteredHTML+'<\/div>';
 
@@ -500,12 +500,12 @@
     if (typeof drawOrgChartConnectors === 'function') drawOrgChartConnectors(canvas);
     if (typeof window._fixEdgeFan === 'function') window._fixEdgeFan(canvas);
 
-    var scroll = canvas.querySelector('.org-chart-scroll');
-    if (scroll) {
-      var pageW = 1040, pageH = 740;
-      var w = Math.max(scroll.scrollWidth, scroll.offsetWidth, 1);
-      var h = Math.max(scroll.scrollHeight, scroll.offsetHeight, 1);
-      root.style.zoom = Math.min(pageW / w, pageH / h, 2.5);
+    // Scale to the chart's own size: one standard page when it stays readable,
+    // otherwise a custom page sized to the chart (nothing is ever cut off).
+    if (typeof window.orgPrintSetup === 'function') window.orgPrintSetup(root);
+    else {
+      var scroll = canvas.querySelector('.org-chart-scroll');
+      if (scroll) root.style.zoom = Math.min(1040 / Math.max(scroll.scrollWidth, 1), 740 / Math.max(scroll.scrollHeight, 1), 2.5);
     }
 
     if (typeof closeModal === 'function') closeModal();
@@ -564,198 +564,4 @@
   }
 
 })();
-
-// ââ Patch #3: LLC org chart line separation âââââââââââââââââââââââââââââââ
-// Fixes overlapping connector lines when multiple shareholders/owners share
-// the same x-column in the org chart (common with LLC structures).
-(function () {
-  'use strict';
-
-  /**
-   * Fan out SVG paths that converge at the same card entry/exit point.
-   *
-   * orgEdgePath draws L-shaped paths: M x1 y1 â L x1 midY â L x2 midY â L x2 y2
-   * When multiple paths share the same x2 (bottom endpoint), they overlap and
-   * look like a single line.  This post-processor offsets them left/right so
-   * each connection is visually distinct.
-   *
-   * @param {Element} container  â DOM element that contains the org chart
-   *                               (an .org-chart-scroll or its parent)
-   */
-  function fixEdgeFan(container) {
-    var svg = container.querySelector('svg');
-    if (!svg) return;
-    var pathEls = Array.prototype.slice.call(svg.querySelectorAll('path[d]'));
-    if (!pathEls.length) return;
-
-    var re = /M\s*([\-\d.]+)\s+([\-\d.]+)\s+L\s*([\-\d.]+)\s+([\-\d.]+)\s+L\s*([\-\d.]+)\s+([\-\d.]+)\s+L\s*([\-\d.]+)\s+([\-\d.]+)/;
-
-    // ââ Collect node bounding boxes from inline-styled .org-card-abs elements â
-    var nodeBBoxes = [];
-    var cards = container.querySelectorAll('.org-card-abs');
-    Array.prototype.forEach.call(cards, function (card) {
-      var cs = card.style;
-      var l = parseFloat(cs.left) || 0, t = parseFloat(cs.top) || 0;
-      var w = parseFloat(cs.width) || 0, h = parseFloat(cs.height) || 0;
-      if (w > 0 && h > 0) nodeBBoxes.push({ l: l, t: t, r: l + w, b: t + h });
-    });
-
-    // Returns true if the horizontal segment at y=midY from xMin to xMax
-    // passes through any node bounding box.
-    function hitsNode(xMin, xMax, midY) {
-      var PAD = 3;
-      for (var i = 0; i < nodeBBoxes.length; i++) {
-        var n = nodeBBoxes[i];
-        if (midY > n.t + PAD && midY < n.b - PAD &&
-            xMin < n.r - PAD && xMax > n.l + PAD) return true;
-      }
-      return false;
-    }
-
-    // Find a midY near `desired` between lo and hi that avoids node boxes.
-    function clearMidY(xMin, xMax, desired, lo, hi) {
-      if (!hitsNode(xMin, xMax, desired)) return desired;
-      var STEP = 12, MAX_TRY = 25;
-      for (var k = 1; k <= MAX_TRY; k++) {
-        var up = desired - k * STEP;
-        if (up > lo + 4 && !hitsNode(xMin, xMax, up)) return up;
-        var dn = desired + k * STEP;
-        if (dn < hi - 4 && !hitsNode(xMin, xMax, dn)) return dn;
-      }
-      return desired;
-    }
-
-    // Parse all paths â only the true start (x1,y1) and end (x2,y2) points matter.
-    var parsed = [];
-    pathEls.forEach(function (el) {
-      var m = (el.getAttribute('d') || '').match(re);
-      if (!m) return;
-      parsed.push({ el: el, x1: +m[1], y1: +m[2], x2: +m[7], y2: +m[8] });
-    });
-    if (!parsed.length) return;
-
-    function rnd(v) { return Math.round(v); }
-
-    // ââ Group paths by their departure point and arrival point ââââââââââââââââ
-    var bySrc = {}, byDest = {};
-    parsed.forEach(function (p) {
-      var sk = rnd(p.x1) + ',' + rnd(p.y1);
-      var dk = rnd(p.x2) + ',' + rnd(p.y2);
-      p._sk = sk; p._dk = dk;
-      (bySrc[sk]  = bySrc[sk]  || []).push(p);
-      (byDest[dk] = byDest[dk] || []).push(p);
-    });
-
-    // Spacing between staggered horizontal branches when multiple sources
-    // converge on the same destination (px).
-    var BRANCH_STEP = 18;
-
-    // ââ Same-source groups: one shared midY â clean single trunk departure ââââ
-    // When the same parent has multiple children, all paths from that parent
-    // use IDENTICAL midY so the downward segment from parent looks like one trunk,
-    // with horizontal branches fanning out at the midY level.
-    Object.keys(bySrc).forEach(function (sk) {
-      var g = bySrc[sk];
-      if (g.length < 2) return;
-      var x1 = g[0].x1, y1 = g[0].y1;
-      // Anchor the shared midY between y1 and the median child y2.
-      var y2vals = g.map(function (p) { return p.y2; }).sort(function (a, b) { return a - b; });
-      var medY2  = y2vals[Math.floor(y2vals.length / 2)];
-      var lo = Math.min(y1, medY2) + 4, hi = Math.max(y1, medY2) - 4;
-      if (lo >= hi) { g._sharedMidY = (y1 + medY2) / 2; return; }
-      // Check clearance over the full x-span that encompasses all children.
-      var xMin = x1, xMax = x1;
-      g.forEach(function (p) { xMin = Math.min(xMin, p.x2); xMax = Math.max(xMax, p.x2); });
-      g._sharedMidY = clearMidY(xMin, xMax, (y1 + medY2) / 2, lo, hi);
-    });
-
-    // ââ Same-destination groups: staggered midY â branches merge into one trunk
-    // When multiple shareholders own the same company their horizontal segments
-    // arrive at the destination column at slightly different heights.  Because
-    // every path ends at the same (x2, y2), the overlapping final vertical
-    // segment at x2 appears as a single shared trunk leading into the company.
-    Object.keys(byDest).forEach(function (dk) {
-      var g = byDest[dk];
-      if (g.length < 2) return;
-      // Sort by source x then y for a stable, non-crossing branch order.
-      g.sort(function (a, b) { return a.x1 !== b.x1 ? a.x1 - b.x1 : a.y1 - b.y1; });
-      // Compute a single group-wide center so all branches are spaced consistently.
-      var sumY1 = 0;
-      g.forEach(function (p) { sumY1 += p.y1; });
-      g._center = (sumY1 / g.length + g[0].y2) / 2;
-      g._n = g.length;
-      g.forEach(function (p, i) { p._destIdx = i; });
-    });
-
-    // ââ Route and rewrite every path ââââââââââââââââââââââââââââââââââââââââââ
-    parsed.forEach(function (p) {
-      var x1 = p.x1, y1 = p.y1, x2 = p.x2, y2 = p.y2;
-      var xMin = Math.min(x1, x2), xMax = Math.max(x1, x2);
-      var lo = Math.min(y1, y2) + 4, hi = Math.max(y1, y2) - 4;
-
-      var midY;
-      var srcGroup  = bySrc[p._sk];
-      var destGroup = byDest[p._dk];
-
-      if (lo >= hi) {
-        // Degenerate (very short) path â keep the centre point as-is.
-        midY = (y1 + y2) / 2;
-
-      } else if (srcGroup.length > 1 && srcGroup._sharedMidY != null) {
-        // One-parent-many-children: shared midY creates a visible departure trunk.
-        midY = Math.min(hi, Math.max(lo, srcGroup._sharedMidY));
-        if (nodeBBoxes.length > 0) midY = clearMidY(xMin, xMax, midY, lo, hi);
-
-      } else if (destGroup.length > 1) {
-        // Many-shareholders-one-company: stagger branches so they arrive at
-        // different heights at x2, making the shared trunk clearly visible.
-        var n   = destGroup._n;
-        var idx = p._destIdx;
-        var ctr = destGroup._center;
-        var off = (idx - (n - 1) / 2) * BRANCH_STEP;
-        midY = Math.min(hi, Math.max(lo, ctr + off));
-        if (nodeBBoxes.length > 0) midY = clearMidY(xMin, xMax, midY, lo, hi);
-
-      } else {
-        // Single relationship â find a clear midY near the midpoint.
-        midY = clearMidY(xMin, xMax, (y1 + y2) / 2, lo, hi);
-      }
-
-      p.el.setAttribute('d',
-        'M ' + x1  + ' ' + y1   +
-        ' L ' + x1  + ' ' + midY +
-        ' L ' + x2  + ' ' + midY +
-        ' L ' + x2  + ' ' + y2);
-    });
-  }
-
-  // Expose globally so runOrgChartPrint (Patch #2) can call it after
-  // drawOrgChartConnectors adds any extra paths.
-  window._fixEdgeFan = fixEdgeFan;
-
-  // Hook orgRenderGraphHTML so the fix applies automatically in the normal
-  // org chart view (and transitively in orgPrintFilteredHTML, which calls it).
-  function hookRenderGraph() {
-    if (typeof window.orgRenderGraphHTML !== 'function') {
-      setTimeout(hookRenderGraph, 100);
-      return;
-    }
-    var _orig = window.orgRenderGraphHTML;
-    window.orgRenderGraphHTML = function (nodes, edges, focalKey) {
-      var html = _orig.apply(this, arguments);
-      // Post-process in a detached element so we can manipulate SVG paths
-      // before the HTML is inserted into the live DOM.
-      var tmp = document.createElement('div');
-      tmp.innerHTML = html;
-      fixEdgeFan(tmp);
-      return tmp.innerHTML;
-    };
-  }
-
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', hookRenderGraph);
-  } else {
-    hookRenderGraph();
-  }
-
-})()
+// Patch #3 (LLC line separation) removed: org chart lines are now routed by orgchart.js.
