@@ -32,9 +32,11 @@
     STEM_ZONE: 30, TRUNK_ZONE: 20, ZONE_TOP: 6, LBL_H: 16, TAG_H: 16, ZONE_BOTTOM: 12, MIN_ZONE: 24,
     TXT_MAX: 230, TXT_MIN: 70,
     // investments
-    INV_OFF: 24, INV_W: 150, INV_H: 24, INV_GAP: 6, INV_HEAD: 18, INV_MAX_SCREEN: 4, RAIL: 13,
+    // investments: a strip of separate boxes BELOW the company, inside the company's own level
+    INV_W: 150, INV_H: 24, INV_GAP: 10, INV_VGAP: 16, INV_TOP: 24, INV_RAIL: 9, INV_GUTTER: 44, INV_FEED: 12, INV_PER_ROW: 4, INV_MAX_SCREEN: 3,
     // many subsidiaries with nothing below: wrapped grid around a central spine
-    WRAP_MIN: 4, GUTTER: 40, SUBROW_GAP: 14,
+    // same parent = same level: subsidiaries are never stacked (grid layout disabled)
+    WRAP_MIN: Infinity, GUTTER: 40, SUBROW_GAP: 14,
     AUTO_MAX_CARDS: 40, MIN_READ_SCALE: 0.5
   };
 
@@ -275,14 +277,6 @@
       var n = nodes[k], ind = n.etype === 'individual';
       var v = V[k] = { key: k, n: n, rank: n.depth, w: ind ? C.IND_W : C.W, h: (ind ? C.IND_H : C.H) + ((n.status === 'liquidation' || n.status === 'liquidated') ? C.STATUS_H : 0) };
       v.fl = v.w / 2; v.fr = v.w / 2; v.fh = v.h;
-      if (n.invs.length) {
-        var open = print || (INVX[g.rootId] && INVX[g.rootId][k]);
-        v.invShown = open ? n.invs.length : Math.min(n.invs.length, C.INV_MAX_SCREEN);
-        v.invMore = !print && n.invs.length > C.INV_MAX_SCREEN;
-        var rows = v.invShown + (v.invMore ? 1 : 0);
-        v.fr = v.w / 2 + C.INV_OFF + C.INV_W;
-        v.fh = Math.max(v.h, C.INV_HEAD + rows * (C.INV_H + C.INV_GAP) - C.INV_GAP);
-      }
       v.lbl = (n.role === 'down' || !!n.clusterOwner) && pctIn[k] && pctIn[k].pct != null; // % shown just above the entity (fan-out)
       v.zone = Math.max(C.MIN_ZONE, C.ZONE_TOP + (v.lbl ? C.LBL_H : 0) + n.also.length * C.TAG_H + C.ZONE_BOTTOM);
     });
@@ -290,6 +284,33 @@
     g.edges.forEach(function (e) {
       if (nodes[e.to].role === 'down') (dch[e.from] = dch[e.from] || []).push(e.to);
       else if (!(nodes[e.to].clusterOwner === e.from)) (uch[e.to] = uch[e.to] || []).push(e.from);
+    });
+    // investments: strip of boxes under the company (row-major, up to INV_PER_ROW per row).
+    // When the company also has subsidiaries the strip splits around its ownership line.
+    keys.forEach(function (k) {
+      var v = V[k], n = v.n; if (!n.invs.length) return;
+      var open = print || (INVX[g.rootId] && INVX[g.rootId][k]);
+      var shown = open ? n.invs.length : Math.min(n.invs.length, C.INV_MAX_SCREEN);
+      var items = n.invs.slice(0, shown).map(function (iv) { return { inv: iv }; });
+      if (!print && n.invs.length > C.INV_MAX_SCREEN) items.push({ more: true });
+      var hasSubs = !!(dch[k] || []).length, rows = [];
+      for (var i = 0; i < items.length; i += C.INV_PER_ROW) rows.push(items.slice(i, i + C.INV_PER_ROW));
+      var split = hasSubs || rows.length > 1, gut = split ? C.INV_GUTTER : 0, maxW = 0, step = C.INV_W + C.INV_GAP;
+      rows.forEach(function (row, ri) {
+        var nl = split ? Math.ceil(row.length / 2) : 0;
+        row.forEach(function (it, j) {
+          it.yRel = v.h + C.INV_TOP + ri * (C.INV_H + C.INV_VGAP);
+          if (!split) it.xRel = -(row.length * step - C.INV_GAP) / 2 + j * step;
+          else if (j < nl) it.xRel = -gut / 2 - (nl - j) * step + C.INV_GAP;
+          else it.xRel = gut / 2 + (j - nl) * step;
+          it.side = !split ? 0 : (j < nl ? -1 : 1);
+        });
+        var rw = split ? 2 * Math.max(nl, row.length - nl) * step - 2 * C.INV_GAP + gut : row.length * step - C.INV_GAP;
+        maxW = Math.max(maxW, rw);
+      });
+      v.inv = { items: items, rows: rows, split: split, hasSubs: hasSubs, total: n.invs.length };
+      v.fl = Math.max(v.fl, maxW / 2); v.fr = Math.max(v.fr, maxW / 2);
+      v.fh = v.h + C.INV_TOP + rows.length * (C.INV_H + C.INV_VGAP) - C.INV_VGAP;
     });
 
     // ---- compact tree placement (Reingold–Tilford contours per level) ----
@@ -527,15 +548,24 @@
       }
       n.also.forEach(function (a) { tags.push({ x: v.x, y: yy + 8, a: a, k: K([a.key, k]) }); yy += C.TAG_H; });
     });
-    // investments beside the holder (dashed, orange)
+    // investments below the holder (dashed, orange; never part of the ownership lines)
     keys.forEach(function (k) {
-      var v = V[k], n = v.n; if (!n.invs.length) return;
-      var x0 = v.x + v.w / 2 + C.INV_OFF, items = [];
-      for (var i = 0; i < v.invShown; i++) items.push({ inv: n.invs[i] });
-      if (v.invMore) items.push({ more: true });
-      items.forEach(function (it, i) { it.x = x0; it.y = v.top + C.INV_HEAD + i * (C.INV_H + C.INV_GAP); });
-      inv.push({ holder: k, x0: x0, rail: x0 - C.RAIL, top: v.top, items: items, cardRight: v.x + v.w / 2,
-        cy0: items[0].y + C.INV_H / 2, cy1: items[items.length - 1].y + C.INV_H / 2, total: n.invs.length });
+      var v = V[k], I = v.inv; if (!I) return;
+      var bottom = v.top + v.h, paths = [];
+      I.items.forEach(function (it) { it.x = v.x + it.xRel; it.y = v.top + it.yRel; });
+      (I.split ? [-1, 1] : [0]).forEach(function (sd) {
+        if (!I.items.some(function (it) { return it.side === sd; })) return;
+        var fx = (sd !== 0 && I.hasSubs) ? v.x + sd * C.INV_FEED : v.x, lastY = null;
+        I.rows.forEach(function (row) {
+          var ri = row.filter(function (it) { return it.side === sd; }); if (!ri.length) return;
+          var ry = ri[0].y - C.INV_RAIL, xs = ri.map(function (it) { return it.x + C.INV_W / 2; }).concat([fx]);
+          paths.push([Math.min.apply(null, xs), ry, Math.max.apply(null, xs), ry]);
+          ri.forEach(function (it) { paths.push([it.x + C.INV_W / 2, ry, it.x + C.INV_W / 2, it.y]); });
+          lastY = ry;
+        });
+        paths.push([fx, bottom, fx, lastY]);
+      });
+      inv.push({ holder: k, items: I.items, paths: paths, total: I.total });
     });
 
     // ---- text widths: never run into the next line or box to the right ----
@@ -560,7 +590,7 @@
     labels.forEach(function (t) { t.x += sx; });
     tags.forEach(function (t) { t.x += sx; });
     dots.forEach(function (d) { d.x += sx; });
-    inv.forEach(function (s) { s.x0 += sx; s.rail += sx; s.cardRight += sx; s.items.forEach(function (it) { it.x += sx; }); });
+    inv.forEach(function (s) { s.items.forEach(function (it) { it.x += sx; }); s.paths.forEach(function (p) { p[0] += sx; p[2] += sx; }); });
     blocks.forEach(function (b) { b.x += sx; });
     return { V: V, segs: segs, labels: labels, tags: tags, dots: dots, inv: inv, blocks: blocks,
       width: Math.ceil(maxX - minX + 2 * C.MARGIN), height: Math.ceil(maxY + C.MARGIN), minR: minR, maxR: maxR };
@@ -586,9 +616,7 @@
     });
     Lo.inv.forEach(function (s) {
       var k = '|' + s.holder + '|';
-      invs.push('<path class="org2-inv-line" data-k="' + E(k) + '" d="M' + r1(s.cardRight) + ' ' + r1(s.cy0) + 'H' + r1(s.rail) + (s.cy1 > s.cy0 ? 'V' + r1(s.cy1) : '') + '"/>');
-      s.items.forEach(function (it) { var cy = it.y + C.INV_H / 2; invs.push('<path class="org2-inv-line" data-k="' + E(k) + '" d="M' + r1(s.rail) + ' ' + r1(cy) + 'H' + r1(it.x) + '"/>'); });
-      invs.push('<text class="org2-inv-head" data-k="' + E(k) + '" x="' + r1(s.x0 + 2) + '" y="' + r1(s.top + 11) + '">' + E(L('investments').toUpperCase()) + ' (' + s.total + ')</text>');
+      s.paths.forEach(function (p) { invs.push('<path class="org2-inv-line" data-k="' + E(k) + '" d="M' + r1(p[0]) + ' ' + r1(p[1]) + 'L' + r1(p[2]) + ' ' + r1(p[3]) + '"/>'); });
     });
     return '<svg class="org-static-edges org2-svg" width="' + Lo.width + '" height="' + Lo.height + '" style="position:absolute;left:0;top:0;overflow:visible;pointer-events:none">'
       + '<defs><marker id="org2-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 1L10 5L0 9z" class="org2-arrowhead"/></marker></defs>'
@@ -886,10 +914,13 @@ window.__orgValidate = function (cid, print) {
   for (var i = 0; i < boxes.length; i++) for (var j = i + 1; j < boxes.length; j++) if (inter(boxes[i], boxes[j], 0.5)) issues.push('box-overlap ' + boxes[i].k + ' ' + boxes[j].k);
   // lines: ownership segments + investment connectors
   var lines = L.segs.map(function (s) { return { x1: Math.min(s.x1, s.x2), x2: Math.max(s.x1, s.x2), y1: Math.min(s.y1, s.y2), y2: Math.max(s.y1, s.y2), k: s.k, own: true }; });
-  L.inv.forEach(function (s) {
-    lines.push({ x1: s.cardRight, x2: s.rail, y1: s.cy0, y2: s.cy0, k: '|' + s.holder + '|', inv: s.holder });
-    if (s.cy1 > s.cy0) lines.push({ x1: s.rail, x2: s.rail, y1: s.cy0, y2: s.cy1, k: '|' + s.holder + '|', inv: s.holder });
-    s.items.forEach(function (it) { lines.push({ x1: s.rail, x2: it.x, y1: it.y + 12, y2: it.y + 12, k: '|' + s.holder + '|', inv: s.holder }); });
+  L.inv.forEach(function (s) { s.paths.forEach(function (p) { lines.push({ x1: Math.min(p[0], p[2]), x2: Math.max(p[0], p[2]), y1: Math.min(p[1], p[3]), y2: Math.max(p[1], p[3]), k: '|' + s.holder + '|', inv: s.holder }); }); });
+  // hierarchy rules: subsidiary exactly one level under its parent; same parent = same level
+  var tops = {};
+  g.edges.forEach(function (e) {
+    var p = V[e.from], c = V[e.to];
+    if (Math.abs(c.rank - p.rank) !== 1) issues.push('level-skip ' + e.from + '->' + e.to);
+    if (g.nodes[e.to].role === 'down') { if (tops[e.from] == null) tops[e.from] = c.top; else if (Math.abs(tops[e.from] - c.top) > 0.5) issues.push('siblings-not-level ' + e.from); }
   });
   lines.forEach(function (ln) {
     var lb = { l: ln.x1, r: ln.x2 + 0.01, t: ln.y1, b: ln.y2 + 0.01 };
